@@ -51,7 +51,7 @@ Agents receive different local observations according to their sensors and roles
 
 ## Installation
 
-To install HeMAC in a fresh Python environment, run:
+To install HeMAC in a fresh Python environment, python3.11 is recommended. Then run:
 
 ```bash
 pip install .
@@ -92,7 +92,7 @@ If you use HeMAC in your research, please cite our latest paper:
 
 ## Contributing
 
-Contributions are welcome! Please open an issue or pull request for new agents, scenarios, bug fixes, or suggestions.
+Contributions are welcome! Please open an issue or pull request for new agents, scenarios, bug fixes, or suggestions. see our contributing guide.
 version 1.0.0 test coverage: 72.12 %
 
 ---
