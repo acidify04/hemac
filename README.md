@@ -1,44 +1,102 @@
-# Thales Open Source Template Project
+# HeMAC - The Heterogeneous Multi-Agent Challenge
 
-Template for creating a new project in the [Thales GitHub organization](https://github.com/ThalesGroup).
+**HeMAC** is a standardized, PettingZoo-based benchmark environment for Heterogeneous Multi-Agent Reinforcement Learning (HeMARL). It proposes multiple scenarios where agents with diverse sensors, resources, or capabilities must cooperate to solve complex tasks under partial observability.
 
-Each Thales OSS project repository **MUST** contain the following files at the root:
+---
 
-- a `LICENSE` which has been chosen in accordance with legal department depending on your needs
+## Key Features
 
-- a `README.md` outlining the project goals, sponsoring sig, and community contact information, [GitHub tips about README.md](https://docs.github.com/en/github/creating-cloning-and-archiving-repositories/about-readmes)
+- **Rich Heterogeneity:** Multiple distinct agent types (Quadcopters, Observers, Provisioners) with unique observation and action spaces, capabilities, and roles.
+- **Multi-Stage Benchmarking:** Three challenges (“Simple Fleet”, “Fleet”, “Complex Fleet”) with increasing difficulty and heterogeneity.
+- **Scenario Variety:** Each challenge contains several scenarios for fine control over agent compositions and environmental complexity.
+- **Partial Observability:** Agents perceive the world through unique, limited sensors and information, increasing coordination complexity.
+- **Flexible Spaces:** Both discrete and continuous action spaces are supported for all agent types.
+- **Extensibility:** Easily add new agent types, capabilities, and scenarios.
 
-- a `CONTRIBUTING.md` outlining how to contribute to the project, how to submit a pull request and an issue
+---
 
-- a `SECURITY.md` outlining how the security concerns are handled, [GitHub tips about SECURITY.md](https://docs.github.com/en/github/managing-security-vulnerabilities/adding-a-security-policy-to-your-repository)
+## Why HeMAC?
 
-Below is an example of the common structure and information expected in a README.
+Traditional MARL benchmarks focus on homogeneous teams, falling short when representing real-world, heterogeneous agent systems. HeMAC provides:
 
-**Please keep this structure as is and only fill the content for each section according to your project.**
+- A controlled environment where agents must specialize and cooperate based on their unique abilities.
+- Standardized tasks to facilitate reproducible, comparable HeMARL research.
+- Rich partial observability and coordination challenges.
 
-If you need assistance or have question, please contact oss@thalesgroup.com
+Our latest paper shows that while state-of-the-art methods (like MAPPO) excel at simpler tasks, their performance degrades with increased heterogeneity—with simpler algorithms (like IPPO) sometimes outperforming them under these conditions.
 
-## Get started
+---
 
-XXX project purpose it to ...
+## Environment Overview
 
-**Please also add the description into the About section (Description field)**
+In **HeMAC**, a team of autonomous agents works together to find and reach moving targets in a randomly generated map featuring obstacles and special structures.
 
-## Documentation
+### Available Agents
 
-Documentation is available at [xxx/docs](https://xxx/docs/).
+- **Quadcopter:** Low-altitude, agile agents that can reach targets but have limited energy and capacity.
+- **Observer:** High-altitude, fast agents with broad forward-facing views; guide Quadcopters but cannot directly reach targets.
+- **Provisioner:** Ground vehicles navigating a road network to recharge/support aerial agents and assist with target retrieval.
 
-You can use [GitHub pages](https://guides.github.com/features/pages/) to create your documentation.
+### Challenges and Scenarios
 
-See an example here : https://github.com/ThalesGroup/ThalesGroup.github.io
+| Name          | Agents                                | Description                                                                                     | Sample Scenarios    |
+|---------------|---------------------------------------|-------------------------------------------------------------------------------------------------|---------------------|
+| **Simple Fleet**  | Quadcopters, Observers                | Reach as many moving targets as possible. Observers must guide Quadcopters.                      | 1q1o, 3q1o, 5q2o    |
+| **Fleet**         | Quadcopters, Observers                | Multi-target, energy constraints, obstacles, limited communication range.                        | 3q1o, 10q3o, 20q5o  |
+| **Complex Fleet** | Quadcopters, Observers, Provisioners  | High heterogeneity: energy/capacity limits, provisioners restricted to roads, complex cooperation.| 3q1o1p, 5q2o1p, etc.|
 
-**Please also add the documentation URL into the About section (Website field)**
+Agents receive different local observations according to their sensors and roles.
+
+---
+
+## Installation
+
+To install HeMAC in a fresh Python environment, python3.11 is recommended. Then run:
+
+```bash
+pip install .
+```
+
+---
+
+## Getting Started
+
+Example of usage (with the PettingZoo's AEC API):
+
+```python
+from hemarl.hemac import HeMAC_v0
+
+env = HeMAC_v0.env(render_mode="human")
+env.reset(seed=0)
+
+for agent in env.agent_iter():
+    observation, reward, termination, truncation, info = env.last()
+    if termination or truncation:
+        action = None
+    else:
+        # this is where you would insert your policy
+        action = env.action_space(agent).sample()
+    env.step(action)
+env.close()
+```
+
+---
+
+## Citation
+
+If you use HeMAC in your research, please cite our latest paper:
+
+> (Citation pending)
+
+---
 
 ## Contributing
 
-If you are interested in contributing to the XXX project, start by reading the [Contributing guide](/CONTRIBUTING.md).
+Contributions are welcome! Please open an issue or pull request for new agents, scenarios, bug fixes, or suggestions. see our contributing guide.
+version 1.0.0 test coverage: 72.12 %
 
-## License
+---
 
-The chosen license in accordance with legal department must be defined into an explicit [LICENSE](https://github.com/ThalesGroup/template-project/blob/master/LICENSE) file at the root of the repository
-You can also link this file in this README section.
+**Note:** HeMAC is under active development. Feedback is highly appreciated to help shape this benchmark for the community.
+
+---

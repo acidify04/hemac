@@ -15,25 +15,21 @@ Use this section to tell people about which versions of your project are current
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+| main    | :white_check_mark: |
+| others  | :x:                |
 
+Only the main branch is supported for academic/research use under the Thales Non-Production License Agreement. No production or commercial usage is permitted.
 ## Reporting a Vulnerability
-
-Use this section to tell people how to report a vulnerability.
-Tell them where to go, how often they can expect to get an update on a reported vulnerability, what to expect if the vulnerability is accepted or declined, etc.
 
 You can ask for support by contacting oss@thalesgroup.com
 
 ## Disclosure policy
 
-Define the procedure for what a reporter who finds a security issue needs to do in order to fully disclose the problem safely, including who to contact and how.
+Please describe the security issue to oss@thalesgroup.com
 
 ## Security Update policy
 
-Define how you intend to update users about new security vulnerabilities as they are found.
+Updates about security vulnerabilities found will be done here.
 
 ## Security related configuration
 
@@ -41,5 +37,6 @@ Settings users should consider that would impact the security posture of deployi
 
 ## Known security gaps & future enhancements
 
-Security improvements you haven’t gotten to yet.
-Inform users those security controls aren’t in place, and perhaps suggest they contribute an implementation
+Security improvements we haven’t gotten to yet:
+None
+If you know how to implement one of the securitys control listed above, we welcome any contribution!
