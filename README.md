@@ -64,7 +64,7 @@ pip install .
 Example of usage (with the PettingZoo's AEC API):
 
 ```python
-from hemarl.hemac import HeMAC_v0
+from hemac import HeMAC_v0
 
 env = HeMAC_v0.env(render_mode="human")
 env.reset(seed=0)
