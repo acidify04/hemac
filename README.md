@@ -85,7 +85,7 @@ env.close()
 ## Citation
 
 If you use HeMAC in your research, please cite our [paper](https://arxiv.org/abs/2509.19512):
-'''
+```
 @article{dansereau2025hemac,
     title={The Heterogeneous Multi-Agent Challenge}, 
     author={Dansereau, Charles and Lopez-Yepez, Junior-Samuel and Soma, Karthik and Fagette, Antoine},
@@ -93,7 +93,7 @@ If you use HeMAC in your research, please cite our [paper](https://arxiv.org/abs
     year={2025},
     url={https://arxiv.org/abs/2509.19512}, 
 }
-'''
+```
 
 ---
 
