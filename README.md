@@ -86,12 +86,16 @@ env.close()
 
 If you use HeMAC in your research, please cite our [paper](https://arxiv.org/abs/2509.19512):
 ```
-@article{dansereau2025hemac,
-    title={The Heterogeneous Multi-Agent Challenge}, 
-    author={Dansereau, Charles and Lopez-Yepez, Junior-Samuel and Soma, Karthik and Fagette, Antoine},
-    journal={arXiv preprint arXiv:2509.19512},
-    year={2025},
-    url={https://arxiv.org/abs/2509.19512}, 
+@inproceedings{dansereau2025hemac,
+  title     = {The Heterogeneous Multi-Agent Challenge},
+  author    = {Dansereau, Charles and Lopez Yepez, Junior Samuel and Soma, Karthik and Fagette, Antoine},
+  booktitle = {Proceedings of the 27th European Conference on Artificial Intelligence (ECAI 2025)},
+  series    = {Frontiers in Artificial Intelligence and Applications},
+  volume    = {413},
+  pages     = {3290--3296},
+  year      = {2025},
+  publisher = {IOS Press},
+  doi       = {10.3233/FAIA251197}
 }
 ```
 
