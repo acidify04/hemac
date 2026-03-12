@@ -1,0 +1,6 @@
+(move_quad quad_0 c3_8 c3_7)
+(move_quad quad_0 c3_7 c3_6)
+(move_quad quad_0 c3_6 c3_5)
+(move_quad quad_0 c3_5 c3_4)
+(move_quad quad_0 c3_4 c4_4)
+; cost = 5 (unit cost)
