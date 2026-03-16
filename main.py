@@ -2,56 +2,44 @@ import subprocess
 import numpy as np
 from src.hemac.environment.simple_fleet_env import SimpleFleetEnv
 import os
+import time
 
-GRID_SIZE = 50
-MAX_SPEED = 16
-
+try:
+    import pygame
+except ImportError:
+    pygame = None
 
 # -----------------------------
 # 좌표 → grid
 # -----------------------------
 
-def pos_to_loc(x, y):
-    gx = int(x // GRID_SIZE)
-    gy = int(y // GRID_SIZE)
-    return f"loc_{gx}_{gy}"
-
-
 def loc_to_grid(loc):
-    _, x, y = loc.split("_")
-    return int(x), int(y)
-
-
-def grid_to_center(gx, gy):
-    x = gx * GRID_SIZE + GRID_SIZE / 2
-    y = gy * GRID_SIZE + GRID_SIZE / 2
-    return x, y
+    # loc 형태: "loc_X_Y"
+    parts = loc.split("_")
+    return int(parts[1]), int(parts[2])
 
 
 # -----------------------------
-# grid → velocity
+# grid → discrete action (0~4)
 # -----------------------------
 
-def grid_to_velocity(current_x, current_y, target_loc):
+def grid_to_discrete_action(current_x, current_y, target_loc):
+    tx, ty = loc_to_grid(target_loc)
+    
+    dx = tx - current_x
+    dy = ty - current_y
 
-    gx, gy = loc_to_grid(target_loc)
-    tx, ty = grid_to_center(gx, gy)
-
-    vx = tx - current_x
-    vy = ty - current_y
-
-    norm = np.linalg.norm([vx, vy])
-
-    if norm > MAX_SPEED:
-        vx = vx / norm * MAX_SPEED
-        vy = vy / norm * MAX_SPEED
-
-    return np.array([vx, vy, 0], dtype=np.float32)
+    if dx > 0: return 1
+    elif dx < 0: return 2
+    elif dy > 0: return 3
+    elif dy < 0: return 4
+    else: return 0
 
 
 # -----------------------------
 # PDDL problem 생성
 # -----------------------------
+
 def generate_problem(quad0_pos, obs_pos, target, grid):
 
     with open("./pddl/problem.pddl", "w") as f:
@@ -61,13 +49,12 @@ def generate_problem(quad0_pos, obs_pos, target, grid):
 
         # objects
         f.write("(:objects\n")
-
         f.write("quad_0 - quad\n")
         f.write("obs_0 - observer\n")
 
         for i in range(grid):
             for j in range(grid):
-                f.write(f"c{i}_{j} ")
+                f.write(f"loc_{i}_{j} ")
 
         f.write("- location\n")
         f.write(")\n")
@@ -75,36 +62,33 @@ def generate_problem(quad0_pos, obs_pos, target, grid):
         # init
         f.write("(:init\n")
 
-        x, y = quad0_pos
-        f.write(f"(at_quad quad_0 c{x}_{y})\n")
+        x, y = int(quad0_pos[0]), int(quad0_pos[1])
+        f.write(f"(at_quad quad_0 loc_{x}_{y})\n")
 
-        x, y = obs_pos
-        f.write(f"(at_obs obs_0 c{x}_{y})\n")
+        x, y = int(obs_pos[0]), int(obs_pos[1])
+        f.write(f"(at_obs obs_0 loc_{x}_{y})\n")
 
-        tx, ty = target
-        f.write(f"(target c{tx}_{ty})\n")
+        tx, ty = int(target[0]), int(target[1])
+        f.write(f"(target loc_{tx}_{ty})\n")
 
         # grid adjacency
         for i in range(grid):
             for j in range(grid):
 
                 if i > 0:
-                    f.write(f"(adjacent c{i}_{j} c{i-1}_{j})\n")
-
+                    f.write(f"(adjacent loc_{i}_{j} loc_{i-1}_{j})\n")
                 if i < grid - 1:
-                    f.write(f"(adjacent c{i}_{j} c{i+1}_{j})\n")
-
+                    f.write(f"(adjacent loc_{i}_{j} loc_{i+1}_{j})\n")
                 if j > 0:
-                    f.write(f"(adjacent c{i}_{j} c{i}_{j-1})\n")
-
+                    f.write(f"(adjacent loc_{i}_{j} loc_{i}_{j-1})\n")
                 if j < grid - 1:
-                    f.write(f"(adjacent c{i}_{j} c{i}_{j+1})\n")
+                    f.write(f"(adjacent loc_{i}_{j} loc_{i}_{j+1})\n")
 
         f.write(")\n")
 
         # goal
         f.write("(:goal\n")
-        f.write(f"(at_quad quad_0 c{tx}_{ty})\n")
+        f.write(f"(at_quad quad_0 loc_{tx}_{ty})\n")
         f.write(")\n")
 
         f.write(")")
@@ -124,9 +108,10 @@ def run_planner():
         "astar(lmcut())"
     ]
 
-    result = subprocess.run(cmd)
+    result = subprocess.run(cmd, capture_output=True, text=True)
     print(result.stdout)
-    print(result.stderr)
+    if result.stderr:
+        print(result.stderr)
 
 
 # -----------------------------
@@ -134,14 +119,19 @@ def run_planner():
 # -----------------------------
 
 def parse_plan():
-
     plan = []
+    
+    if not os.path.exists("sas_plan"):
+        print("Warning: sas_plan 파일을 찾을 수 없습니다.")
+        return plan
 
     with open("sas_plan") as f:
         for line in f:
             if "move" in line:
-                action = line.split("(")[1].split()[0]
-                plan.append(action)
+                parts = line.strip().strip("()").split()
+                if len(parts) >= 4:
+                    target_loc = parts[-1] 
+                    plan.append(target_loc)
 
     return plan
 
@@ -154,59 +144,82 @@ def execute_plan(env, path):
 
     step_idx = 0
 
+    if not path:
+        print("경로(path)가 비어 있어 실행할 수 없습니다.")
+        return
+
     for agent in env.agent_iter():
+
+        # 매 턴마다 화면 렌더링 호출
+        env.render()
 
         obs, reward, term, trunc, info = env.last()
 
         if term or trunc:
             action = None
-
         else:
-
-            if "drone" in agent:
-
-                x = obs[0]
-                y = obs[1]
+            if agent == "quad_0":
+                x = int(obs[0])
+                y = int(obs[1])
 
                 if step_idx < len(path):
+                    target_loc = path[step_idx]
+                    tx, ty = loc_to_grid(target_loc)
 
-                    action = grid_to_velocity(x, y, path[step_idx])
-
+                    # 에이전트가 목표 위치에 도달했다면 다음 경로(step)로 인덱스 증가
+                    if x == tx and y == ty:
+                        step_idx += 1
+                        
+                    if step_idx < len(path):
+                        action = grid_to_discrete_action(x, y, path[step_idx])
+                    else:
+                        action = 0 # 경로 끝남 (대기)
                 else:
-
-                    action = np.array([0, 0, 0], dtype=np.float32)
-
+                    action = 0 # 대기
             else:
-
                 action = env.action_space(agent).sample()
 
         env.step(action)
-
-        if agent == env.agents[-1]:
-
-            step_idx += 1
-
-            if step_idx >= len(path):
-                break
 
 
 # -----------------------------
 # MAIN
 # -----------------------------
 
+if __name__ == "__main__":
+    # render_mode="human" 설정, render_fps로 속도 조절
+    env = SimpleFleetEnv(render_mode="human", render_fps=2)
 
-env = SimpleFleetEnv()
+    env.reset()
 
-env.reset()
+    quad0_pos = env.agent_positions["quad_0"]
+    obs_pos = env.agent_positions["obs_0"]
+    target = env.target
 
-quad0_pos = env.agent_positions["quad_0"]
-obs_pos = env.agent_positions['obs_0']
-target = env.target
+    print("초기 quad_0 위치:", quad0_pos)
+    print("초기 obs_0 위치:", obs_pos)
+    print("타겟 위치:", target)
 
-generate_problem(quad0_pos, obs_pos, target, env.grid_size)
+    generate_problem(quad0_pos, obs_pos, target, env.grid_size)
 
-run_planner()
+    run_planner()
 
-plan = parse_plan()
+    plan = parse_plan()
 
-print("PLAN:", plan)
+    print("PLAN:", plan)
+
+    execute_plan(env, plan)
+
+    # 시뮬레이션 종료 후 창을 닫을 때까지 유지하는 루프
+    print("시뮬레이션 종료. 창을 닫으려면 게임 창의 X 버튼을 누르세요.")
+    
+    if pygame is not None:
+        running = True
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+            # 화면이 응답 없음에 빠지지 않도록 프레임 업데이트 유지
+            env.clock.tick(10)
+            
+    env.close()
