@@ -17,7 +17,7 @@ class SimpleFleetEnv(AECEnv):
         "render_modes": ["human", "rgb_array"],
     }
 
-    def __init__(self, grid_size=10, max_steps=200, render_mode=None, render_fps=8):
+    def __init__(self, grid_size=30, max_steps=2000, render_mode=None, render_fps=10):
         super().__init__()
 
         self.grid_size = grid_size
@@ -122,12 +122,16 @@ class SimpleFleetEnv(AECEnv):
             self.agent_positions[agent] = np.clip(
                 self.agent_positions[agent], 0, self.grid_size - 1
             )
+        all_quads_arrived = True
+        for agent in self.agents:
+            if self.agent_types[agent]  == "quad":
+                if not np.array_equal(self.agent_positions[agent], self.target):
+                    all_quads_arrived = False
 
-        if self.agent_types[agent] == "quad":
-            if np.array_equal(self.agent_positions[agent], self.target):
-                for a in self.agents:
-                    self.rewards[a] = 1
-                    self.terminations[a] = True
+        if all_quads_arrived:
+            for a in self.agents:
+                self.rewards[a] = 1
+                self.terminations[a] = True
 
         if self._agent_selector.is_last():
             self.steps += 1
