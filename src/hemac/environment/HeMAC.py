@@ -435,7 +435,6 @@ class HeMAC:
         if active_agent == self.agents[0]:
             self.global_reward = 0
         found_goal = False
-        delivered_goal = False
         reward = 0
 
         agent = self.agents_list[self.agent_name_mapping[active_agent]]
@@ -445,104 +444,89 @@ class HeMAC:
         for goal in self.goals:
             goal.move(self.world.obstacles, self.search_area)
 
-        # Specific actions for UAVs
+        # ---------------------------------------------------------
+        # [수정] 무인기(Drone) 로직: 정찰 및 위험 회피
+        # ---------------------------------------------------------
         if "drone" in active_agent:
-            # Collision check and map limits
+            # 맵 이탈 및 장애물 충돌 시 드론 개별 페널티 (에피소드 종료 안함)
+            if agent.out_of_bound:
+                reward -= 20 
+            elif not self.search_area.covers(Point((agent.x, agent.y))):
+                reward -= 10
+            else:
+                for obstacle in self.world.obstacles:
+                    if agent.process_collision(obstacle, 0):
+                        reward -= 20
+
+            # 정찰 로직: 무인기가 목표를 시야에 넣었을 때
+            for goal in self.goals[:]:
+                if dist(goal.x, goal.y, agent.x, agent.y) < agent.sensing_range:
+                    # 무한 보상 획득(Hovering 꼼수) 방지: 한 번 정찰한 목표는 보상 제외
+                    if not getattr(goal, "detected_by_drone", False):
+                        found_goal = True
+                        self.global_reward += 10 # 정찰 성공 공동 보상
+                        goal.detected_by_drone = True # 상태 깃발 추가 (기존 리셋 로직 제거)
+
+        # ---------------------------------------------------------
+        # [수정] 유인기(Observer) 로직: 안전한 목적지 도달
+        # ---------------------------------------------------------
+        elif "observer" in active_agent:
             if agent.out_of_bound:
                 self.collided = True
-                reward -= 20  # Penalty for leaving the map
-                if self.render_mode == "human":
-                    LOGGER.info(f"drone went out of bounds! pos: {(agent.x, agent.y)}")
-            elif not self.search_area.covers(Point((agent.x, agent.y))):
-                self.collided = True
-                reward -= 10  # going outside of search area
-                if self.render_mode == "human" or self.render_mode == "rgb_array":
-                    LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
+                reward -= 100
             else:
                 for obstacle in self.world.obstacles:
                     if agent.process_collision(obstacle, 0):
                         self.collided = True
-                        reward -= 20  # Penalty for collision with an obstacle
-                        if self.render_mode == "human" or self.render_mode == "rgb_array":
-                            LOGGER.info(
-                                f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
-                            )
-            # POI tracking reward calculation
-            for goal in self.goals[:]:
-                if dist(goal.x, goal.y, agent.x, agent.y) < agent.sensing_range:
-                    if agent.carried_targets < agent.carrying_capacity:
+                        reward -= 100
+                        break
+                
+                # ---------------------------------------------------------
+                # [추가] 거리 기반 셰이핑 보상 (Reward Shaping)
+                # ---------------------------------------------------------
+                for goal in self.goals[:]:
+                    current_dist = dist(goal.x, goal.y, agent.x, agent.y)
+                    
+                    # 목적지에 가까워질수록 보상 부여 (멀어지면 페널티)
+                    # 이전 스텝과의 거리 차이를 이용해 전진할 때마다 보상을 줍니다.
+                    if hasattr(self, "old_dist_to_goal"):
+                        if current_dist < self.old_dist_to_goal:
+                            reward += 0.5  # 가깝게 잘 다가가면 칭찬
+                        else:
+                            reward -= 0.2  # 멀어지면 페널티
+                    
+                    self.old_dist_to_goal = current_dist # 거리 갱신
+
+                    # 유인기 목표 도달 시 에피소드 성공 종료 (기존 코드)
+                    if current_dist < 50: 
                         found_goal = True
-                        goal.spawn_poi(self.search_area)
-                        goal.reset()
-                        if self.rescuing_targets:
-                            agent.carried_targets += 1
+                        self.terminate = True 
+                        self.global_reward += 200 
+                        break
 
-            if self.rescuing_targets and agent.carried_targets:
-                closest_point_to_base = closest_point_in_rect(self.world.base, agent.rect.center)
-                if (
-                    dist(closest_point_to_base[0], closest_point_to_base[1], agent.rect.x, agent.rect.y)
-                    < agent.sensing_range
-                ):
-                    delivered_goal = 1 * agent.carried_targets
-                    agent.carried_targets = 0
-                else:
-                    for friend in self.agents:
-                        if "provisioner" in friend:
-                            provisioner = self.agents_list[self.agent_name_mapping[friend]]
-                            if dist(provisioner.x, provisioner.y, agent.x, agent.y) < agent.sensing_range:
-                                delivered_goal = 1 * agent.carried_targets
-                                print(f"agent dropped {agent.carried_targets} targets!")
-                                agent.carried_targets = 0
-                                break
-            # global reward
-            if self.rescuing_targets:
-                self.global_reward += 10 * found_goal + 25 * delivered_goal
-            else:
-                self.global_reward += 10 * found_goal
-
-        elif "observer" in active_agent:
-            if agent.out_of_bound:
-                self.collided = True
-                reward -= 20  # Penalty for leaving the map
-                if self.render_mode == "human":
-                    LOGGER.info(f"observer went out of bounds! pos: {(agent.x, agent.y)}")
-            elif agent.goal_in_view:
-                reward = 0
-
-        # individual reward
+        # 개별 보상 부여
         self.rewards[active_agent] = reward
 
-        # Update environment and check end of episode
+        # ---------------------------------------------------------
+        # 에피소드 종료 조건 판별
+        # ---------------------------------------------------------
         if agent == self.agents_list[-1]:
+            # 유인기가 충돌했거나 맵을 벗어나면 실패 종료
             if self.collided:
                 self.terminate = True
-                if self.render_mode == "human":
-                    LOGGER.info(f"BOOM! episode length: {self.num_frames + 1}")
-                    self.render()
-                    time.sleep(2)
 
             self.world.update(self.area)
 
-            # Termination or continuation of the episode
             if not self.terminate:
                 self.num_frames += 1
                 self.truncate = self.num_frames >= self.max_cycles
 
-            if self.terminate or self.truncate:
-                pass
-
-            # Distribution of awards and information to agents
+            # 에이전트들에게 보상 분배 및 종료 신호 전송
             for i, ag in enumerate(self.agents):
                 self.rewards[ag] += self.global_reward
                 self.terminations[ag] = self.terminate
                 self.truncations[ag] = self.truncate
-                self.infos[ag] = {"success": found_goal}
-
-            if self.render_mode is not None:
-                self.render()
-                if self.render_mode == "human":
-                    # input()  # Toggle: slow down simulation to make prints more readable
-                    pass
+                self.infos[ag] = {"success": found_goal, "fatal_crash": self.collided}
 
 
 def env(**kwargs):
