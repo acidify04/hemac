@@ -1,0 +1,1 @@
+{"_timestamp":1.7802942010155282e+09,"iteration":216,"_wandb":{"runtime":461},"metrics/min_obs_dist":0,"reward/mean_reward":1.9,"_step":215,"metrics/min_drone_dist":0,"reward/drone_policy":-0.1,"reward/observer_policy":2.2,"_runtime":461,"metrics/success_rate":0,"metrics/crash_rate":0,"metrics/explored_area":0}

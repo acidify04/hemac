@@ -1,0 +1,1503 @@
+학습 루프 시작...
+2026-06-01 14:01:58,749	WARNING sgd.py:55 -- DeprecationWarning: `_get_slice_indices` has been deprecated. This will raise an error in the future!
+--- Iteration 1 ---
+Mean Reward: -7.06
+--- Iteration 2 ---
+Mean Reward: -8.00
+--- Iteration 3 ---
+Mean Reward: -8.38
+--- Iteration 4 ---
+Mean Reward: -8.35
+--- Iteration 5 ---
+Mean Reward: -7.70
+--- Iteration 6 ---
+Mean Reward: -7.60
+--- Iteration 7 ---
+Mean Reward: -6.50
+--- Iteration 8 ---
+Mean Reward: -7.10
+--- Iteration 9 ---
+Mean Reward: -6.00
+--- Iteration 10 ---
+Mean Reward: -4.90
+--- Iteration 11 ---
+Mean Reward: -4.20
+--- Iteration 12 ---
+Mean Reward: -3.10
+--- Iteration 13 ---
+Mean Reward: -0.10
+--- Iteration 14 ---
+Mean Reward: -1.40
+--- Iteration 15 ---
+Mean Reward: -0.80
+--- Iteration 16 ---
+Mean Reward: 0.00
+--- Iteration 17 ---
+Mean Reward: 2.00
+--- Iteration 18 ---
+Mean Reward: 1.80
+--- Iteration 19 ---
+Mean Reward: 2.40
+--- Iteration 20 ---
+Mean Reward: 4.00
+--- Iteration 21 ---
+Mean Reward: 2.90
+--- Iteration 22 ---
+Mean Reward: 2.40
+--- Iteration 23 ---
+Mean Reward: 1.60
+--- Iteration 24 ---
+Mean Reward: 1.30
+--- Iteration 25 ---
+Mean Reward: -1.50
+--- Iteration 26 ---
+Mean Reward: -1.00
+--- Iteration 27 ---
+Mean Reward: -1.60
+--- Iteration 28 ---
+Mean Reward: -2.50
+--- Iteration 29 ---
+Mean Reward: -2.90
+--- Iteration 30 ---
+Mean Reward: -0.80
+--- Iteration 31 ---
+Mean Reward: 1.40
+--- Iteration 32 ---
+Mean Reward: 1.30
+--- Iteration 33 ---
+Mean Reward: 1.30
+--- Iteration 34 ---
+Mean Reward: 2.40
+--- Iteration 35 ---
+Mean Reward: 2.40
+--- Iteration 36 ---
+Mean Reward: 3.10
+--- Iteration 37 ---
+Mean Reward: 2.40
+--- Iteration 38 ---
+Mean Reward: 4.30
+--- Iteration 39 ---
+Mean Reward: 4.60
+--- Iteration 40 ---
+Mean Reward: 5.00
+--- Iteration 41 ---
+Mean Reward: 7.20
+--- Iteration 42 ---
+Mean Reward: 2.60
+--- Iteration 43 ---
+Mean Reward: 2.90
+--- Iteration 44 ---
+Mean Reward: 1.40
+--- Iteration 45 ---
+Mean Reward: 1.50
+--- Iteration 46 ---
+Mean Reward: 0.10
+--- Iteration 47 ---
+Mean Reward: -0.10
+--- Iteration 48 ---
+Mean Reward: -3.80
+--- Iteration 49 ---
+Mean Reward: -4.80
+--- Iteration 50 ---
+Mean Reward: -5.20
+--- Iteration 51 ---
+Mean Reward: -5.60
+--- Iteration 52 ---
+Mean Reward: -4.90
+--- Iteration 53 ---
+Mean Reward: -5.20
+--- Iteration 54 ---
+Mean Reward: -4.70
+--- Iteration 55 ---
+Mean Reward: -2.80
+--- Iteration 56 ---
+Mean Reward: -2.20
+--- Iteration 57 ---
+Mean Reward: -0.80
+--- Iteration 58 ---
+Mean Reward: -1.80
+--- Iteration 59 ---
+Mean Reward: -1.70
+--- Iteration 60 ---
+Mean Reward: 0.70
+--- Iteration 61 ---
+Mean Reward: 0.90
+--- Iteration 62 ---
+Mean Reward: 0.80
+--- Iteration 63 ---
+Mean Reward: -0.40
+--- Iteration 64 ---
+Mean Reward: 0.00
+--- Iteration 65 ---
+Mean Reward: -0.80
+--- Iteration 66 ---
+Mean Reward: -1.40
+--- Iteration 67 ---
+Mean Reward: -0.80
+--- Iteration 68 ---
+Mean Reward: 0.60
+--- Iteration 69 ---
+Mean Reward: 2.60
+--- Iteration 70 ---
+Mean Reward: 3.40
+--- Iteration 71 ---
+Mean Reward: 1.80
+--- Iteration 72 ---
+Mean Reward: 2.30
+--- Iteration 73 ---
+Mean Reward: 1.30
+--- Iteration 74 ---
+Mean Reward: 2.30
+--- Iteration 75 ---
+Mean Reward: 2.50
+--- Iteration 76 ---
+Mean Reward: 4.10
+--- Iteration 77 ---
+Mean Reward: 3.40
+--- Iteration 78 ---
+Mean Reward: 3.00
+--- Iteration 79 ---
+Mean Reward: 1.40
+--- Iteration 80 ---
+Mean Reward: -0.10
+--- Iteration 81 ---
+Mean Reward: -0.90
+--- Iteration 82 ---
+Mean Reward: -1.80
+--- Iteration 83 ---
+Mean Reward: -1.70
+--- Iteration 84 ---
+Mean Reward: -1.80
+--- Iteration 85 ---
+Mean Reward: -0.90
+--- Iteration 86 ---
+Mean Reward: -1.70
+--- Iteration 87 ---
+Mean Reward: -2.40
+--- Iteration 88 ---
+Mean Reward: 0.00
+--- Iteration 89 ---
+Mean Reward: 0.00
+--- Iteration 90 ---
+Mean Reward: 0.40
+--- Iteration 91 ---
+Mean Reward: 1.80
+--- Iteration 92 ---
+Mean Reward: 0.90
+--- Iteration 93 ---
+Mean Reward: -1.20
+--- Iteration 94 ---
+Mean Reward: 0.30
+--- Iteration 95 ---
+Mean Reward: -1.70
+--- Iteration 96 ---
+Mean Reward: -0.80
+--- Iteration 97 ---
+Mean Reward: 1.40
+--- Iteration 98 ---
+Mean Reward: 0.80
+--- Iteration 99 ---
+Mean Reward: -1.20
+--- Iteration 100 ---
+Mean Reward: -0.40
+--- Iteration 101 ---
+Mean Reward: -0.30
+--- Iteration 102 ---
+Mean Reward: 0.70
+--- Iteration 103 ---
+Mean Reward: -0.70
+--- Iteration 104 ---
+Mean Reward: -0.20
+--- Iteration 105 ---
+Mean Reward: 0.20
+--- Iteration 106 ---
+Mean Reward: -0.10
+--- Iteration 107 ---
+Mean Reward: 0.40
+--- Iteration 108 ---
+Mean Reward: -0.90
+--- Iteration 109 ---
+Mean Reward: -2.10
+--- Iteration 110 ---
+Mean Reward: -2.60
+--- Iteration 111 ---
+Mean Reward: -2.60
+--- Iteration 112 ---
+Mean Reward: -2.20
+--- Iteration 113 ---
+Mean Reward: -3.40
+--- Iteration 114 ---
+Mean Reward: -2.30
+--- Iteration 115 ---
+Mean Reward: -2.40
+--- Iteration 116 ---
+Mean Reward: -3.00
+--- Iteration 117 ---
+Mean Reward: -2.10
+--- Iteration 118 ---
+Mean Reward: -2.00
+--- Iteration 119 ---
+Mean Reward: -3.50
+--- Iteration 120 ---
+Mean Reward: -4.10
+--- Iteration 121 ---
+Mean Reward: -4.20
+--- Iteration 122 ---
+Mean Reward: -4.60
+--- Iteration 123 ---
+Mean Reward: -3.40
+--- Iteration 124 ---
+Mean Reward: -3.40
+--- Iteration 125 ---
+Mean Reward: -2.80
+--- Iteration 126 ---
+Mean Reward: -2.30
+--- Iteration 127 ---
+Mean Reward: -0.90
+--- Iteration 128 ---
+Mean Reward: 0.90
+--- Iteration 129 ---
+Mean Reward: 1.20
+--- Iteration 130 ---
+Mean Reward: -0.90
+--- Iteration 131 ---
+Mean Reward: -1.40
+--- Iteration 132 ---
+Mean Reward: 0.40
+--- Iteration 133 ---
+Mean Reward: 1.30
+--- Iteration 134 ---
+Mean Reward: 1.50
+--- Iteration 135 ---
+Mean Reward: 1.10
+--- Iteration 136 ---
+Mean Reward: 1.60
+--- Iteration 137 ---
+Mean Reward: 2.30
+--- Iteration 138 ---
+Mean Reward: 2.70
+--- Iteration 139 ---
+Mean Reward: 2.70
+--- Iteration 140 ---
+Mean Reward: 1.90
+--- Iteration 141 ---
+Mean Reward: 1.40
+--- Iteration 142 ---
+Mean Reward: 2.70
+--- Iteration 143 ---
+Mean Reward: 3.70
+--- Iteration 144 ---
+Mean Reward: 1.10
+--- Iteration 145 ---
+Mean Reward: 1.40
+--- Iteration 146 ---
+Mean Reward: 2.30
+--- Iteration 147 ---
+Mean Reward: 2.50
+--- Iteration 148 ---
+Mean Reward: 1.00
+--- Iteration 149 ---
+Mean Reward: 1.40
+--- Iteration 150 ---
+Mean Reward: 0.00
+--- Iteration 151 ---
+Mean Reward: -0.60
+--- Iteration 152 ---
+Mean Reward: -0.10
+--- Iteration 153 ---
+Mean Reward: -1.00
+--- Iteration 154 ---
+Mean Reward: -1.60
+--- Iteration 155 ---
+Mean Reward: -1.40
+--- Iteration 156 ---
+Mean Reward: -1.90
+--- Iteration 157 ---
+Mean Reward: -2.50
+--- Iteration 158 ---
+Mean Reward: -4.10
+--- Iteration 159 ---
+Mean Reward: -4.30
+--- Iteration 160 ---
+Mean Reward: -4.50
+--- Iteration 161 ---
+Mean Reward: -5.50
+--- Iteration 162 ---
+Mean Reward: -3.40
+--- Iteration 163 ---
+Mean Reward: -3.30
+--- Iteration 164 ---
+Mean Reward: -3.80
+--- Iteration 165 ---
+Mean Reward: -4.00
+--- Iteration 166 ---
+Mean Reward: -3.30
+--- Iteration 167 ---
+Mean Reward: -3.00
+--- Iteration 168 ---
+Mean Reward: -0.60
+--- Iteration 169 ---
+Mean Reward: 0.30
+--- Iteration 170 ---
+Mean Reward: -0.10
+--- Iteration 171 ---
+Mean Reward: 0.00
+--- Iteration 172 ---
+Mean Reward: 0.60
+--- Iteration 173 ---
+Mean Reward: 0.80
+--- Iteration 174 ---
+Mean Reward: 1.60
+--- Iteration 175 ---
+Mean Reward: 2.00
+--- Iteration 176 ---
+Mean Reward: 3.90
+--- Iteration 177 ---
+Mean Reward: 4.90
+--- Iteration 178 ---
+Mean Reward: 3.00
+--- Iteration 179 ---
+Mean Reward: 4.00
+--- Iteration 180 ---
+Mean Reward: 3.90
+--- Iteration 181 ---
+Mean Reward: 5.70
+--- Iteration 182 ---
+Mean Reward: 6.80
+--- Iteration 183 ---
+Mean Reward: 6.60
+--- Iteration 184 ---
+Mean Reward: 4.00
+--- Iteration 185 ---
+Mean Reward: 3.40
+--- Iteration 186 ---
+Mean Reward: 2.50
+--- Iteration 187 ---
+Mean Reward: 0.40
+--- Iteration 188 ---
+Mean Reward: 0.80
+--- Iteration 189 ---
+Mean Reward: 0.40
+--- Iteration 190 ---
+Mean Reward: -0.50
+--- Iteration 191 ---
+Mean Reward: -1.60
+--- Iteration 192 ---
+Mean Reward: -3.80
+--- Iteration 193 ---
+Mean Reward: -4.00
+--- Iteration 194 ---
+Mean Reward: -1.70
+--- Iteration 195 ---
+Mean Reward: -1.90
+--- Iteration 196 ---
+Mean Reward: -1.00
+--- Iteration 197 ---
+Mean Reward: -0.70
+--- Iteration 198 ---
+Mean Reward: 0.60
+--- Iteration 199 ---
+Mean Reward: 1.10
+--- Iteration 200 ---
+Mean Reward: 0.80
+--- Iteration 201 ---
+Mean Reward: 1.70
+--- Iteration 202 ---
+Mean Reward: 0.50
+--- Iteration 203 ---
+Mean Reward: 0.80
+--- Iteration 204 ---
+Mean Reward: 2.40
+--- Iteration 205 ---
+Mean Reward: 3.40
+--- Iteration 206 ---
+Mean Reward: 2.40
+--- Iteration 207 ---
+Mean Reward: 0.60
+--- Iteration 208 ---
+Mean Reward: 0.90
+--- Iteration 209 ---
+Mean Reward: 1.60
+--- Iteration 210 ---
+Mean Reward: 0.30
+--- Iteration 211 ---
+Mean Reward: 0.30
+--- Iteration 212 ---
+Mean Reward: 0.80
+--- Iteration 213 ---
+Mean Reward: 1.80
+--- Iteration 214 ---
+Mean Reward: 0.50
+--- Iteration 215 ---
+Mean Reward: -0.90
+--- Iteration 216 ---
+Mean Reward: -0.10
+--- Iteration 217 ---
+Mean Reward: 0.60
+--- Iteration 218 ---
+Mean Reward: 2.40
+--- Iteration 219 ---
+Mean Reward: 2.70
+--- Iteration 220 ---
+Mean Reward: 0.90
+--- Iteration 221 ---
+Mean Reward: 0.70
+--- Iteration 222 ---
+Mean Reward: 1.10
+--- Iteration 223 ---
+Mean Reward: 2.90
+--- Iteration 224 ---
+Mean Reward: 1.90
+--- Iteration 225 ---
+Mean Reward: 0.70
+--- Iteration 226 ---
+Mean Reward: 1.70
+--- Iteration 227 ---
+Mean Reward: 4.30
+--- Iteration 228 ---
+Mean Reward: 4.80
+--- Iteration 229 ---
+Mean Reward: 2.50
+--- Iteration 230 ---
+Mean Reward: 0.80
+--- Iteration 231 ---
+Mean Reward: 1.30
+--- Iteration 232 ---
+Mean Reward: 1.20
+--- Iteration 233 ---
+Mean Reward: -0.40
+--- Iteration 234 ---
+Mean Reward: -0.40
+--- Iteration 235 ---
+Mean Reward: -2.20
+--- Iteration 236 ---
+Mean Reward: -1.80
+--- Iteration 237 ---
+Mean Reward: -2.00
+--- Iteration 238 ---
+Mean Reward: -3.10
+--- Iteration 239 ---
+Mean Reward: -3.50
+--- Iteration 240 ---
+Mean Reward: -3.90
+--- Iteration 241 ---
+Mean Reward: -3.30
+--- Iteration 242 ---
+Mean Reward: -4.70
+--- Iteration 243 ---
+Mean Reward: -4.30
+--- Iteration 244 ---
+Mean Reward: -3.80
+--- Iteration 245 ---
+Mean Reward: -3.10
+--- Iteration 246 ---
+Mean Reward: -4.20
+--- Iteration 247 ---
+Mean Reward: -3.90
+--- Iteration 248 ---
+Mean Reward: -3.40
+--- Iteration 249 ---
+Mean Reward: -4.50
+--- Iteration 250 ---
+Mean Reward: -3.80
+--- Iteration 251 ---
+Mean Reward: -1.90
+--- Iteration 252 ---
+Mean Reward: -1.30
+--- Iteration 253 ---
+Mean Reward: -0.70
+--- Iteration 254 ---
+Mean Reward: 1.10
+--- Iteration 255 ---
+Mean Reward: 1.90
+--- Iteration 256 ---
+Mean Reward: 1.90
+--- Iteration 257 ---
+Mean Reward: 1.40
+--- Iteration 258 ---
+Mean Reward: 0.10
+--- Iteration 259 ---
+Mean Reward: 0.20
+--- Iteration 260 ---
+Mean Reward: 1.50
+--- Iteration 261 ---
+Mean Reward: 2.70
+--- Iteration 262 ---
+Mean Reward: 2.70
+--- Iteration 263 ---
+Mean Reward: 1.20
+--- Iteration 264 ---
+Mean Reward: 1.50
+--- Iteration 265 ---
+Mean Reward: 1.60
+--- Iteration 266 ---
+Mean Reward: 0.80
+--- Iteration 267 ---
+Mean Reward: 0.30
+--- Iteration 268 ---
+Mean Reward: 1.80
+--- Iteration 269 ---
+Mean Reward: 3.40
+--- Iteration 270 ---
+Mean Reward: 3.00
+--- Iteration 271 ---
+Mean Reward: 2.80
+--- Iteration 272 ---
+Mean Reward: 1.90
+--- Iteration 273 ---
+Mean Reward: 1.00
+--- Iteration 274 ---
+Mean Reward: 0.50
+--- Iteration 275 ---
+Mean Reward: 2.00
+--- Iteration 276 ---
+Mean Reward: 2.20
+--- Iteration 277 ---
+Mean Reward: 1.10
+--- Iteration 278 ---
+Mean Reward: 1.50
+--- Iteration 279 ---
+Mean Reward: 1.50
+--- Iteration 280 ---
+Mean Reward: 1.30
+--- Iteration 281 ---
+Mean Reward: 0.40
+--- Iteration 282 ---
+Mean Reward: -1.50
+--- Iteration 283 ---
+Mean Reward: -2.00
+--- Iteration 284 ---
+Mean Reward: -0.70
+--- Iteration 285 ---
+Mean Reward: -1.40
+--- Iteration 286 ---
+Mean Reward: 1.00
+--- Iteration 287 ---
+Mean Reward: -0.90
+--- Iteration 288 ---
+Mean Reward: 0.20
+--- Iteration 289 ---
+Mean Reward: 2.50
+--- Iteration 290 ---
+Mean Reward: 1.80
+--- Iteration 291 ---
+Mean Reward: 2.20
+--- Iteration 292 ---
+Mean Reward: 2.40
+--- Iteration 293 ---
+Mean Reward: 2.80
+--- Iteration 294 ---
+Mean Reward: 4.80
+--- Iteration 295 ---
+Mean Reward: 6.00
+--- Iteration 296 ---
+Mean Reward: 3.20
+--- Iteration 297 ---
+Mean Reward: 2.60
+--- Iteration 298 ---
+Mean Reward: 1.70
+--- Iteration 299 ---
+Mean Reward: 1.50
+--- Iteration 300 ---
+Mean Reward: 1.40
+--- Iteration 301 ---
+Mean Reward: 2.40
+--- Iteration 302 ---
+Mean Reward: 2.50
+--- Iteration 303 ---
+Mean Reward: 3.70
+--- Iteration 304 ---
+Mean Reward: 3.50
+--- Iteration 305 ---
+Mean Reward: 4.60
+--- Iteration 306 ---
+Mean Reward: 4.60
+--- Iteration 307 ---
+Mean Reward: 3.90
+--- Iteration 308 ---
+Mean Reward: 3.60
+--- Iteration 309 ---
+Mean Reward: 4.70
+--- Iteration 310 ---
+Mean Reward: 5.40
+--- Iteration 311 ---
+Mean Reward: 6.50
+--- Iteration 312 ---
+Mean Reward: 6.20
+--- Iteration 313 ---
+Mean Reward: 6.10
+--- Iteration 314 ---
+Mean Reward: 5.60
+--- Iteration 315 ---
+Mean Reward: 4.70
+--- Iteration 316 ---
+Mean Reward: 3.60
+--- Iteration 317 ---
+Mean Reward: 1.50
+--- Iteration 318 ---
+Mean Reward: 2.10
+--- Iteration 319 ---
+Mean Reward: 1.20
+--- Iteration 320 ---
+Mean Reward: 1.60
+--- Iteration 321 ---
+Mean Reward: 2.40
+--- Iteration 322 ---
+Mean Reward: -1.20
+--- Iteration 323 ---
+Mean Reward: -1.10
+--- Iteration 324 ---
+Mean Reward: -1.80
+--- Iteration 325 ---
+Mean Reward: -3.10
+--- Iteration 326 ---
+Mean Reward: -3.40
+--- Iteration 327 ---
+Mean Reward: -3.30
+--- Iteration 328 ---
+Mean Reward: -3.20
+--- Iteration 329 ---
+Mean Reward: -3.40
+--- Iteration 330 ---
+Mean Reward: -1.60
+--- Iteration 331 ---
+Mean Reward: -2.10
+--- Iteration 332 ---
+Mean Reward: -1.80
+--- Iteration 333 ---
+Mean Reward: -0.80
+--- Iteration 334 ---
+Mean Reward: -0.40
+--- Iteration 335 ---
+Mean Reward: 0.30
+--- Iteration 336 ---
+Mean Reward: 0.50
+--- Iteration 337 ---
+Mean Reward: 2.10
+--- Iteration 338 ---
+Mean Reward: 1.90
+--- Iteration 339 ---
+Mean Reward: 2.00
+--- Iteration 340 ---
+Mean Reward: 2.10
+--- Iteration 341 ---
+Mean Reward: 2.20
+--- Iteration 342 ---
+Mean Reward: 3.90
+--- Iteration 343 ---
+Mean Reward: 2.90
+--- Iteration 344 ---
+Mean Reward: 2.50
+--- Iteration 345 ---
+Mean Reward: 2.40
+--- Iteration 346 ---
+Mean Reward: 4.50
+--- Iteration 347 ---
+Mean Reward: 4.60
+--- Iteration 348 ---
+Mean Reward: 4.00
+--- Iteration 349 ---
+Mean Reward: 4.50
+--- Iteration 350 ---
+Mean Reward: 5.80
+--- Iteration 351 ---
+Mean Reward: 4.80
+--- Iteration 352 ---
+Mean Reward: 4.10
+--- Iteration 353 ---
+Mean Reward: 3.40
+--- Iteration 354 ---
+Mean Reward: 2.00
+--- Iteration 355 ---
+Mean Reward: -1.60
+--- Iteration 356 ---
+Mean Reward: -0.30
+--- Iteration 357 ---
+Mean Reward: -0.60
+--- Iteration 358 ---
+Mean Reward: 0.20
+--- Iteration 359 ---
+Mean Reward: 0.00
+--- Iteration 360 ---
+Mean Reward: 0.40
+--- Iteration 361 ---
+Mean Reward: -0.40
+--- Iteration 362 ---
+Mean Reward: -0.40
+--- Iteration 363 ---
+Mean Reward: 0.00
+--- Iteration 364 ---
+Mean Reward: -0.90
+--- Iteration 365 ---
+Mean Reward: -0.90
+--- Iteration 366 ---
+Mean Reward: 0.00
+--- Iteration 367 ---
+Mean Reward: 1.30
+--- Iteration 368 ---
+Mean Reward: 2.40
+--- Iteration 369 ---
+Mean Reward: 1.70
+--- Iteration 370 ---
+Mean Reward: 1.70
+--- Iteration 371 ---
+Mean Reward: 2.50
+--- Iteration 372 ---
+Mean Reward: 1.10
+--- Iteration 373 ---
+Mean Reward: 0.80
+--- Iteration 374 ---
+Mean Reward: 0.10
+--- Iteration 375 ---
+Mean Reward: 2.20
+--- Iteration 376 ---
+Mean Reward: 2.70
+--- Iteration 377 ---
+Mean Reward: 5.30
+--- Iteration 378 ---
+Mean Reward: 3.90
+--- Iteration 379 ---
+Mean Reward: 3.90
+--- Iteration 380 ---
+Mean Reward: 3.90
+--- Iteration 381 ---
+Mean Reward: 1.40
+--- Iteration 382 ---
+Mean Reward: 0.60
+--- Iteration 383 ---
+Mean Reward: 1.40
+--- Iteration 384 ---
+Mean Reward: 0.90
+--- Iteration 385 ---
+Mean Reward: 1.80
+--- Iteration 386 ---
+Mean Reward: 0.60
+--- Iteration 387 ---
+Mean Reward: -0.70
+--- Iteration 388 ---
+Mean Reward: -1.70
+--- Iteration 389 ---
+Mean Reward: -1.90
+--- Iteration 390 ---
+Mean Reward: -1.90
+--- Iteration 391 ---
+Mean Reward: -0.60
+--- Iteration 392 ---
+Mean Reward: 0.10
+--- Iteration 393 ---
+Mean Reward: 0.30
+--- Iteration 394 ---
+Mean Reward: 2.00
+--- Iteration 395 ---
+Mean Reward: 0.60
+--- Iteration 396 ---
+Mean Reward: -0.20
+--- Iteration 397 ---
+Mean Reward: -0.10
+--- Iteration 398 ---
+Mean Reward: 1.30
+--- Iteration 399 ---
+Mean Reward: -3.00
+--- Iteration 400 ---
+Mean Reward: -3.20
+--- Iteration 401 ---
+Mean Reward: -1.30
+--- Iteration 402 ---
+Mean Reward: 1.00
+--- Iteration 403 ---
+Mean Reward: 2.00
+--- Iteration 404 ---
+Mean Reward: -0.60
+--- Iteration 405 ---
+Mean Reward: 1.00
+--- Iteration 406 ---
+Mean Reward: 1.30
+--- Iteration 407 ---
+Mean Reward: 1.30
+--- Iteration 408 ---
+Mean Reward: 1.20
+--- Iteration 409 ---
+Mean Reward: 1.70
+--- Iteration 410 ---
+Mean Reward: 2.40
+--- Iteration 411 ---
+Mean Reward: 3.30
+--- Iteration 412 ---
+Mean Reward: 3.50
+--- Iteration 413 ---
+Mean Reward: 0.10
+--- Iteration 414 ---
+Mean Reward: -0.30
+--- Iteration 415 ---
+Mean Reward: 0.30
+--- Iteration 416 ---
+Mean Reward: 0.90
+--- Iteration 417 ---
+Mean Reward: 1.90
+--- Iteration 418 ---
+Mean Reward: 0.40
+--- Iteration 419 ---
+Mean Reward: -0.10
+--- Iteration 420 ---
+Mean Reward: 0.60
+--- Iteration 421 ---
+Mean Reward: 0.60
+--- Iteration 422 ---
+Mean Reward: 0.50
+--- Iteration 423 ---
+Mean Reward: 3.60
+--- Iteration 424 ---
+Mean Reward: 3.00
+--- Iteration 425 ---
+Mean Reward: 3.50
+--- Iteration 426 ---
+Mean Reward: 2.70
+--- Iteration 427 ---
+Mean Reward: 1.60
+--- Iteration 428 ---
+Mean Reward: 0.70
+--- Iteration 429 ---
+Mean Reward: -0.20
+--- Iteration 430 ---
+Mean Reward: -1.00
+--- Iteration 431 ---
+Mean Reward: -0.70
+--- Iteration 432 ---
+Mean Reward: 1.10
+--- Iteration 433 ---
+Mean Reward: 0.50
+--- Iteration 434 ---
+Mean Reward: 2.10
+--- Iteration 435 ---
+Mean Reward: 1.20
+--- Iteration 436 ---
+Mean Reward: -0.40
+--- Iteration 437 ---
+Mean Reward: -0.80
+--- Iteration 438 ---
+Mean Reward: -0.80
+--- Iteration 439 ---
+Mean Reward: 0.00
+--- Iteration 440 ---
+Mean Reward: 0.20
+--- Iteration 441 ---
+Mean Reward: 0.50
+--- Iteration 442 ---
+Mean Reward: 1.80
+--- Iteration 443 ---
+Mean Reward: 2.50
+--- Iteration 444 ---
+Mean Reward: 3.20
+--- Iteration 445 ---
+Mean Reward: 2.40
+--- Iteration 446 ---
+Mean Reward: 1.80
+--- Iteration 447 ---
+Mean Reward: 1.80
+--- Iteration 448 ---
+Mean Reward: 0.90
+--- Iteration 449 ---
+Mean Reward: 1.00
+--- Iteration 450 ---
+Mean Reward: 0.20
+--- Iteration 451 ---
+Mean Reward: 1.00
+--- Iteration 452 ---
+Mean Reward: -0.30
+--- Iteration 453 ---
+Mean Reward: 0.40
+--- Iteration 454 ---
+Mean Reward: 0.00
+--- Iteration 455 ---
+Mean Reward: 0.40
+--- Iteration 456 ---
+Mean Reward: -0.30
+--- Iteration 457 ---
+Mean Reward: -1.30
+--- Iteration 458 ---
+Mean Reward: -3.50
+--- Iteration 459 ---
+Mean Reward: -4.20
+--- Iteration 460 ---
+Mean Reward: -3.90
+--- Iteration 461 ---
+Mean Reward: -4.10
+--- Iteration 462 ---
+Mean Reward: -3.60
+--- Iteration 463 ---
+Mean Reward: -2.30
+--- Iteration 464 ---
+Mean Reward: -2.40
+--- Iteration 465 ---
+Mean Reward: -1.70
+--- Iteration 466 ---
+Mean Reward: -1.50
+--- Iteration 467 ---
+Mean Reward: -0.60
+--- Iteration 468 ---
+Mean Reward: 0.40
+--- Iteration 469 ---
+Mean Reward: -0.60
+--- Iteration 470 ---
+Mean Reward: 1.40
+--- Iteration 471 ---
+Mean Reward: 2.10
+--- Iteration 472 ---
+Mean Reward: 3.80
+--- Iteration 473 ---
+Mean Reward: 3.50
+--- Iteration 474 ---
+Mean Reward: 2.50
+--- Iteration 475 ---
+Mean Reward: 3.10
+--- Iteration 476 ---
+Mean Reward: 3.30
+--- Iteration 477 ---
+Mean Reward: 4.20
+--- Iteration 478 ---
+Mean Reward: 4.00
+--- Iteration 479 ---
+Mean Reward: 3.30
+--- Iteration 480 ---
+Mean Reward: 3.50
+--- Iteration 481 ---
+Mean Reward: 4.10
+--- Iteration 482 ---
+Mean Reward: 3.40
+--- Iteration 483 ---
+Mean Reward: 3.40
+--- Iteration 484 ---
+Mean Reward: 4.90
+--- Iteration 485 ---
+Mean Reward: 4.90
+--- Iteration 486 ---
+Mean Reward: 3.30
+--- Iteration 487 ---
+Mean Reward: 2.00
+--- Iteration 488 ---
+Mean Reward: 3.80
+--- Iteration 489 ---
+Mean Reward: 4.30
+--- Iteration 490 ---
+Mean Reward: 4.40
+--- Iteration 491 ---
+Mean Reward: 4.20
+--- Iteration 492 ---
+Mean Reward: 3.50
+--- Iteration 493 ---
+Mean Reward: 1.80
+--- Iteration 494 ---
+Mean Reward: 3.00
+--- Iteration 495 ---
+Mean Reward: 1.40
+--- Iteration 496 ---
+Mean Reward: 0.40
+--- Iteration 497 ---
+Mean Reward: -0.40
+--- Iteration 498 ---
+Mean Reward: 0.20
+--- Iteration 499 ---
+Mean Reward: 0.40
+--- Iteration 500 ---
+Mean Reward: -0.10
+==> Checkpoint saved at: TrainingResult(checkpoint=Checkpoint(filesystem=local, path=./hemac_checkpoints), metrics={'custom_metrics': {}, 'episode_media': {}, 'info': {'learner': {'drone_policy': {'learner_stats': {'allreduce_latency': 0.0, 'grad_gnorm': 6.9743445561991795, 'cur_kl_coeff': 1.731904546916485, 'cur_lr': 5.0000000000000016e-05, 'total_loss': 0.5653271358705954, 'policy_loss': -0.06284261684445988, 'vf_loss': 0.6109349004820817, 'vf_explained_var': 0.0020784690148300594, 'kl': 0.00995138690641565, 'entropy': 5.154852444595761, 'entropy_coeff': 0.0}, 'model': {}, 'custom_metrics': {}, 'num_agent_steps_trained': 125.0, 'num_grad_updates_lifetime': 359640.5, 'diff_num_grad_updates_vs_sampler_policy': 359.5}, 'observer_policy': {'learner_stats': {'allreduce_latency': 0.0, 'grad_gnorm': 5.8430872033039725, 'cur_kl_coeff': 0.3298505616148996, 'cur_lr': 5.0000000000000016e-05, 'total_loss': -0.0018834866787074134, 'policy_loss': -0.0037975298041904655, 'vf_loss': 0.0008447989112028154, 'vf_explained_var': 0.4297352502743403, 'kl': 0.003241599860710219, 'entropy': 0.15909522399306297, 'entropy_coeff': 0.0}, 'model': {}, 'custom_metrics': {}, 'num_agent_steps_trained': 125.0, 'num_grad_updates_lifetime': 119880.5, 'diff_num_grad_updates_vs_sampler_policy': 119.5}}, 'num_env_steps_sampled': 2000000, 'num_env_steps_trained': 2000000, 'num_agent_steps_sampled': 1999988, 'num_agent_steps_trained': 1999988}, 'env_runners': {'episode_reward_max': 80.0, 'episode_reward_min': -20.0, 'episode_reward_mean': -0.1, 'episode_len_mean': 566.92, 'episode_media': {}, 'episodes_timesteps_total': 56692, 'policy_reward_min': {'observer_policy': -20.0, 'drone_policy': -20.0}, 'policy_reward_max': {'observer_policy': 20.0, 'drone_policy': 20.0}, 'policy_reward_mean': {'observer_policy': 2.5, 'drone_policy': -0.8666666666666667}, 'custom_metrics': {'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}, 'hist_stats': {'episode_reward': [0.0, 0.0, -10.0, 0.0, -10.0, -20.0, -20.0, 20.0, 80.0, 80.0, 0.0, -10.0, -20.0, 40.0, 40.0, 0.0, -10.0, -20.0, 20.0, 0.0, 0.0, 0.0, -20.0, -10.0, -10.0, -10.0, 20.0, 20.0, 0.0, 20.0, -10.0, -20.0, 0.0, 40.0, -20.0, 0.0, 0.0, -20.0, -20.0, 20.0, -20.0, -20.0, -10.0, -10.0, -20.0, 20.0, -20.0, 20.0, -10.0, -10.0, 20.0, -20.0, -20.0, 20.0, 40.0, 0.0, 30.0, -10.0, 30.0, -20.0, -20.0, 0.0, -20.0, -20.0, -20.0, -20.0, -10.0, -20.0, -20.0, 0.0, -10.0, 0.0, 0.0, 0.0, -20.0, 0.0, -20.0, -20.0, -20.0, 0.0, 0.0, -10.0, -20.0, -10.0, 80.0, 60.0, -10.0, 0.0, -10.0, 30.0, 0.0, 0.0, -20.0, -10.0, 0.0, 80.0, -20.0, -20.0, -20.0, 0.0], 'episode_lengths': [1200, 1200, 56, 1200, 8, 840, 36, 768, 1200, 1200, 1200, 156, 292, 1200, 1200, 1200, 20, 152, 72, 1200, 1200, 1200, 152, 12, 4, 132, 44, 904, 1200, 248, 24, 812, 1200, 1200, 172, 1200, 1200, 8, 108, 504, 16, 16, 116, 36, 336, 968, 472, 1124, 4, 48, 736, 280, 36, 72, 1200, 1200, 956, 4, 92, 152, 96, 1200, 296, 56, 4, 168, 76, 4, 120, 1200, 16, 1200, 1200, 1200, 192, 1200, 532, 60, 188, 1200, 1200, 4, 40, 36, 1200, 64, 152, 1200, 300, 700, 1200, 1200, 640, 8, 1200, 1200, 1096, 24, 32, 1200], 'policy_observer_policy_reward': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 20.0, 20.0, 0.0, 0.0, 0.0, 10.0, 10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 10.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 10.0, 10.0, 0.0, 10.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -20.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 20.0, 20.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 20.0, 0.0, 0.0, 0.0, 0.0], 'policy_drone_policy_reward': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -10.0, 0.0, 0.0, 0.0, -10.0, 0.0, 0.0, 0.0, -20.0, 0.0, 0.0, -20.0, 0.0, -10.0, 10.0, 10.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 0.0, 0.0, 0.0, -10.0, 0.0, 0.0, 0.0, -20.0, 0.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0, -10.0, 0.0, -20.0, 0.0, 0.0, 10.0, -10.0, 10.0
+--- Iteration 501 ---
+Mean Reward: -2.30
+--- Iteration 502 ---
+Mean Reward: -3.80
+--- Iteration 503 ---
+Mean Reward: -4.00
+--- Iteration 504 ---
+Mean Reward: -3.80
+--- Iteration 505 ---
+Mean Reward: -4.00
+--- Iteration 506 ---
+Mean Reward: -4.70
+--- Iteration 507 ---
+Mean Reward: -3.20
+--- Iteration 508 ---
+Mean Reward: -1.60
+--- Iteration 509 ---
+Mean Reward: -1.60
+--- Iteration 510 ---
+Mean Reward: -2.80
+--- Iteration 511 ---
+Mean Reward: -2.50
+--- Iteration 512 ---
+Mean Reward: -1.40
+--- Iteration 513 ---
+Mean Reward: 0.50
+--- Iteration 514 ---
+Mean Reward: 1.00
+--- Iteration 515 ---
+Mean Reward: 1.30
+--- Iteration 516 ---
+Mean Reward: 1.20
+--- Iteration 517 ---
+Mean Reward: 1.90
+--- Iteration 518 ---
+Mean Reward: 3.70
+--- Iteration 519 ---
+Mean Reward: 3.10
+--- Iteration 520 ---
+Mean Reward: 3.90
+--- Iteration 521 ---
+Mean Reward: 4.40
+--- Iteration 522 ---
+Mean Reward: 3.30
+--- Iteration 523 ---
+Mean Reward: 3.50
+--- Iteration 524 ---
+Mean Reward: 2.50
+--- Iteration 525 ---
+Mean Reward: 3.00
+--- Iteration 526 ---
+Mean Reward: 0.60
+--- Iteration 527 ---
+Mean Reward: 0.40
+--- Iteration 528 ---
+Mean Reward: 0.50
+--- Iteration 529 ---
+Mean Reward: -0.70
+--- Iteration 530 ---
+Mean Reward: -1.30
+--- Iteration 531 ---
+Mean Reward: -1.40
+--- Iteration 532 ---
+Mean Reward: -2.50
+--- Iteration 533 ---
+Mean Reward: -3.40
+--- Iteration 534 ---
+Mean Reward: -2.50
+--- Iteration 535 ---
+Mean Reward: -2.20
+--- Iteration 536 ---
+Mean Reward: -0.70
+--- Iteration 537 ---
+Mean Reward: -0.60
+--- Iteration 538 ---
+Mean Reward: -0.60
+--- Iteration 539 ---
+Mean Reward: 0.20
+--- Iteration 540 ---
+Mean Reward: 0.50
+--- Iteration 541 ---
+Mean Reward: -1.20
+--- Iteration 542 ---
+Mean Reward: -0.60
+--- Iteration 543 ---
+Mean Reward: 0.90
+--- Iteration 544 ---
+Mean Reward: 1.60
+--- Iteration 545 ---
+Mean Reward: 1.40
+--- Iteration 546 ---
+Mean Reward: 3.60
+--- Iteration 547 ---
+Mean Reward: 4.60
+--- Iteration 548 ---
+Mean Reward: 3.50
+--- Iteration 549 ---
+Mean Reward: 4.40
+--- Iteration 550 ---
+Mean Reward: 4.40
+--- Iteration 551 ---
+Mean Reward: 5.00
+--- Iteration 552 ---
+Mean Reward: 5.70
+--- Iteration 553 ---
+Mean Reward: 5.00
+--- Iteration 554 ---
+Mean Reward: 5.40
+--- Iteration 555 ---
+Mean Reward: 4.00
+--- Iteration 556 ---
+Mean Reward: 3.90
+--- Iteration 557 ---
+Mean Reward: 1.50
+--- Iteration 558 ---
+Mean Reward: -0.60
+--- Iteration 559 ---
+Mean Reward: -1.40
+--- Iteration 560 ---
+Mean Reward: -1.70
+--- Iteration 561 ---
+Mean Reward: -2.30
+--- Iteration 562 ---
+Mean Reward: -2.20
+--- Iteration 563 ---
+Mean Reward: -1.80
+--- Iteration 564 ---
+Mean Reward: -2.20
+--- Iteration 565 ---
+Mean Reward: -3.30
+--- Iteration 566 ---
+Mean Reward: -2.60
+--- Iteration 567 ---
+Mean Reward: -2.20
+--- Iteration 568 ---
+Mean Reward: -2.30
+--- Iteration 569 ---
+Mean Reward: -1.70
+--- Iteration 570 ---
+Mean Reward: -2.70
+--- Iteration 571 ---
+Mean Reward: -1.60
+--- Iteration 572 ---
+Mean Reward: -2.30
+--- Iteration 573 ---
+Mean Reward: -2.20
+--- Iteration 574 ---
+Mean Reward: -2.60
+--- Iteration 575 ---
+Mean Reward: -2.90
+--- Iteration 576 ---
+Mean Reward: -1.40
+--- Iteration 577 ---
+Mean Reward: -1.10
+--- Iteration 578 ---
+Mean Reward: -0.50
+--- Iteration 579 ---
+Mean Reward: 0.50
+--- Iteration 580 ---
+Mean Reward: 1.20
+--- Iteration 581 ---
+Mean Reward: 1.60
+--- Iteration 582 ---
+Mean Reward: 0.80
+--- Iteration 583 ---
+Mean Reward: 1.40
+--- Iteration 584 ---
+Mean Reward: 1.70
+--- Iteration 585 ---
+Mean Reward: 1.90
+--- Iteration 586 ---
+Mean Reward: 0.80
+--- Iteration 587 ---
+Mean Reward: 1.80
+--- Iteration 588 ---
+Mean Reward: 0.70
+--- Iteration 589 ---
+Mean Reward: -0.30
+--- Iteration 590 ---
+Mean Reward: -1.50
+--- Iteration 591 ---
+Mean Reward: -1.60
+--- Iteration 592 ---
+Mean Reward: -1.60
+--- Iteration 593 ---
+Mean Reward: -1.90
+--- Iteration 594 ---
+Mean Reward: -1.30
+--- Iteration 595 ---
+Mean Reward: 0.20
+--- Iteration 596 ---
+Mean Reward: 0.60
+--- Iteration 597 ---
+Mean Reward: 1.80
+--- Iteration 598 ---
+Mean Reward: 1.50
+--- Iteration 599 ---
+Mean Reward: 2.70
+--- Iteration 600 ---
+Mean Reward: 2.40
+--- Iteration 601 ---
+Mean Reward: 2.80
+--- Iteration 602 ---
+Mean Reward: 3.60
+--- Iteration 603 ---
+Mean Reward: 3.80
+--- Iteration 604 ---
+Mean Reward: 3.20
+--- Iteration 605 ---
+Mean Reward: 1.70
+--- Iteration 606 ---
+Mean Reward: 0.40
+--- Iteration 607 ---
+Mean Reward: -0.70
+--- Iteration 608 ---
+Mean Reward: -2.90
+--- Iteration 609 ---
+Mean Reward: -3.90
+--- Iteration 610 ---
+Mean Reward: -2.00
+--- Iteration 611 ---
+Mean Reward: -2.20
+--- Iteration 612 ---
+Mean Reward: -1.70
+--- Iteration 613 ---
+Mean Reward: -3.30
+--- Iteration 614 ---
+Mean Reward: -3.70
+--- Iteration 615 ---
+Mean Reward: -4.00
+--- Iteration 616 ---
+Mean Reward: -2.60
+--- Iteration 617 ---
+Mean Reward: -4.00
+--- Iteration 618 ---
+Mean Reward: -3.90
+--- Iteration 619 ---
+Mean Reward: -2.50
+--- Iteration 620 ---
+Mean Reward: -1.30
+--- Iteration 621 ---
+Mean Reward: -0.20
+--- Iteration 622 ---
+Mean Reward: 0.00
+--- Iteration 623 ---
+Mean Reward: 2.10
+--- Iteration 624 ---
+Mean Reward: 2.80
+--- Iteration 625 ---
+Mean Reward: 4.50
+--- Iteration 626 ---
+Mean Reward: 4.00
+--- Iteration 627 ---
+Mean Reward: 5.00
+--- Iteration 628 ---
+Mean Reward: 5.30
+--- Iteration 629 ---
+Mean Reward: 6.30
+--- Iteration 630 ---
+Mean Reward: 6.60
+--- Iteration 631 ---
+Mean Reward: 6.90
+--- Iteration 632 ---
+Mean Reward: 6.40
+--- Iteration 633 ---
+Mean Reward: 5.60
+--- Iteration 634 ---
+Mean Reward: 4.20
+--- Iteration 635 ---
+Mean Reward: 2.50
+--- Iteration 636 ---
+Mean Reward: 1.80
+--- Iteration 637 ---
+Mean Reward: 0.40
+--- Iteration 638 ---
+Mean Reward: -0.10
+--- Iteration 639 ---
+Mean Reward: -0.30
+--- Iteration 640 ---
+Mean Reward: -1.80
+--- Iteration 641 ---
+Mean Reward: -2.00
+--- Iteration 642 ---
+Mean Reward: -2.60
+--- Iteration 643 ---
+Mean Reward: -2.60
+--- Iteration 644 ---
+Mean Reward: -5.30
+--- Iteration 645 ---
+Mean Reward: -4.10
+--- Iteration 646 ---
+Mean Reward: -5.60
+--- Iteration 647 ---
+Mean Reward: -4.50
+--- Iteration 648 ---
+Mean Reward: -2.50
+--- Iteration 649 ---
+Mean Reward: -1.10
+--- Iteration 650 ---
+Mean Reward: -2.40
+--- Iteration 651 ---
+Mean Reward: -1.40
+--- Iteration 652 ---
+Mean Reward: 0.40
+--- Iteration 653 ---
+Mean Reward: 0.90
+--- Iteration 654 ---
+Mean Reward: 2.90
+--- Iteration 655 ---
+Mean Reward: 1.60
+--- Iteration 656 ---
+Mean Reward: 0.90
+--- Iteration 657 ---
+Mean Reward: 2.80
+--- Iteration 658 ---
+Mean Reward: 3.80
+--- Iteration 659 ---
+Mean Reward: 1.20
+--- Iteration 660 ---
+Mean Reward: 1.00
+--- Iteration 661 ---
+Mean Reward: -0.40
+--- Iteration 662 ---
+Mean Reward: 0.40
+--- Iteration 663 ---
+Mean Reward: -2.30
+--- Iteration 664 ---
+Mean Reward: -3.00
+--- Iteration 665 ---
+Mean Reward: -2.00
+--- Iteration 666 ---
+Mean Reward: -1.40
+--- Iteration 667 ---
+Mean Reward: -0.40
+--- Iteration 668 ---
+Mean Reward: -0.90
+--- Iteration 669 ---
+Mean Reward: -0.30
+--- Iteration 670 ---
+Mean Reward: -0.50
+--- Iteration 671 ---
+Mean Reward: -0.10
+--- Iteration 672 ---
+Mean Reward: 0.60
+--- Iteration 673 ---
+Mean Reward: 1.90
+--- Iteration 674 ---
+Mean Reward: 1.30
+--- Iteration 675 ---
+Mean Reward: 0.00
+--- Iteration 676 ---
+Mean Reward: -1.60
+--- Iteration 677 ---
+Mean Reward: -1.20
+--- Iteration 678 ---
+Mean Reward: -0.80
+--- Iteration 679 ---
+Mean Reward: -0.70
+--- Iteration 680 ---
+Mean Reward: -3.20
+--- Iteration 681 ---
+Mean Reward: -1.70
+--- Iteration 682 ---
+Mean Reward: -0.80
+--- Iteration 683 ---
+Mean Reward: -0.90
+--- Iteration 684 ---
+Mean Reward: -0.70
+--- Iteration 685 ---
+Mean Reward: -0.20
+--- Iteration 686 ---
+Mean Reward: -1.70
+--- Iteration 687 ---
+Mean Reward: -0.60
+--- Iteration 688 ---
+Mean Reward: 0.40
+--- Iteration 689 ---
+Mean Reward: 0.40
+--- Iteration 690 ---
+Mean Reward: 2.20
+--- Iteration 691 ---
+Mean Reward: 3.60
+--- Iteration 692 ---
+Mean Reward: 2.70
+--- Iteration 693 ---
+Mean Reward: 2.60
+--- Iteration 694 ---
+Mean Reward: 2.70
+--- Iteration 695 ---
+Mean Reward: 2.70
+--- Iteration 696 ---
+Mean Reward: 2.60
+--- Iteration 697 ---
+Mean Reward: 2.10
+--- Iteration 698 ---
+Mean Reward: 2.60
+--- Iteration 699 ---
+Mean Reward: 5.00
+--- Iteration 700 ---
+Mean Reward: 5.10
+--- Iteration 701 ---
+Mean Reward: 6.90
+--- Iteration 702 ---
+Mean Reward: 5.30
+--- Iteration 703 ---
+Mean Reward: 5.40
+--- Iteration 704 ---
+Mean Reward: 2.70
+--- Iteration 705 ---
+Mean Reward: 2.30
+--- Iteration 706 ---
+Mean Reward: 3.20
+--- Iteration 707 ---
+Mean Reward: 3.90
+Traceback (most recent call last):
+  File "/home/cau/Documents/hemac/src/train/train.py", line 169, in <module>
+    checkpoint_dir = "./hemac_checkpoints"
+    ^^^^^^
+  File "/home/cau/Documents/hemac/src/train/train.py", line 136, in main
+    # 4. 에이전트 ID에 따라 어떤 정책을 사용할지 매핑하는 함수
+               ^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 321, in train
+    result = self.step()
+             ^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 1224, in step
+    ) = self._run_one_training_iteration_old_api_stack()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 4359, in _run_one_training_iteration_old_api_stack
+    training_step_results = self.training_step()
+                            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 394, in training_step
+    return self._training_step_old_api_stack()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 498, in _training_step_old_api_stack
+    train_results = train_one_step(self, train_batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/train_ops.py", line 59, in train_one_step
+    info = do_minibatch_sgd(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/sgd.py", line 136, in do_minibatch_sgd
+    learner_info = learner_info_builder.finalize()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/metrics/learner_info.py", line 87, in finalize
+    info[policy_id] = tree.map_structure_with_path(
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/tree/__init__.py", line 467, in map_structure_with_path
+    return map_structure_with_path_up_to(structures[0], func, *structures,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/tree/__init__.py", line 770, in map_structure_with_path_up_to
+    for path_and_values in _multiyield_flat_up_to(shallow_structure, *structures):
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/tree/__init__.py", line 509, in _multiyield_flat_up_to
+    for paths_and_values in zipped_iterators:
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/tree/__init__.py", line 498, in _yield_flat_up_to
+    for leaf_path, leaf_value in _yield_flat_up_to(shallow_subtree,
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/tree/__init__.py", line 498, in _yield_flat_up_to
+    for leaf_path, leaf_value in _yield_flat_up_to(shallow_subtree,
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/cau/Documents/hemac/src/train/train.py", line 169, in <module>
+    checkpoint_dir = "./hemac_checkpoints"
+    ^^^^^^
+  File "/home/cau/Documents/hemac/src/train/train.py", line 136, in main
+    # 4. 에이전트 ID에 따라 어떤 정책을 사용할지 매핑하는 함수
+               ^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 321, in train
+    result = self.step()
+             ^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 1224, in step
+    ) = self._run_one_training_iteration_old_api_stack()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 4359, in _run_one_training_iteration_old_api_stack
+    training_step_results = self.training_step()
+                            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 394, in training_step
+    return self._training_step_old_api_stack()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 498, in _training_step_old_api_stack
+    train_results = train_one_step(self, train_batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/train_ops.py", line 59, in train_one_step
+    info = do_minibatch_sgd(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/sgd.py", line 136, in do_minibatch_sgd
+    learner_info = learner_info_builder.finalize()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/metrics/learner_info.py", line 87, in finalize
+    info[policy_id] = tree.map_structure_with_path(
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/tree/__init__.py", line 467, in map_structure_with_path
+    return map_structure_with_path_up_to(structures[0], func, *structures,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/tree/__init__.py", line 770, in map_structure_with_path_up_to
+    for path_and_values in _multiyield_flat_up_to(shallow_structure, *structures):
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/tree/__init__.py", line 509, in _multiyield_flat_up_to
+    for paths_and_values in zipped_iterators:
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/tree/__init__.py", line 498, in _yield_flat_up_to
+    for leaf_path, leaf_value in _yield_flat_up_to(shallow_subtree,
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/tree/__init__.py", line 498, in _yield_flat_up_to
+    for leaf_path, leaf_value in _yield_flat_up_to(shallow_subtree,
+KeyboardInterrupt

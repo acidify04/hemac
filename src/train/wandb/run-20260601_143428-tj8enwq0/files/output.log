@@ -1,0 +1,123 @@
+학습 루프 시작...
+[36m(RolloutWorker pid=1735822)[0m 2026-06-01 14:34:29,261	ERROR actor_manager.py:186 -- Worker exception caught during `apply()`: 'str' object has no attribute 'x'
+[36m(RolloutWorker pid=1735822)[0m Traceback (most recent call last):
+[36m(RolloutWorker pid=1735822)[0m   File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/actor_manager.py", line 182, in apply
+[36m(RolloutWorker pid=1735822)[0m     return func(self, *args, **kwargs)
+[36m(RolloutWorker pid=1735822)[0m            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[36m(RolloutWorker pid=1735822)[0m   File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/rollout_ops.py", line 109, in <lambda>
+[36m(RolloutWorker pid=1735822)[0m     (lambda w: w.sample(**random_action_kwargs))
+[36m(RolloutWorker pid=1735822)[0m                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[36m(RolloutWorker pid=1735822)[0m   File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/util/tracing/tracing_helper.py", line 461, in _resume_span
+[36m(RolloutWorker pid=1735822)[0m     return method(self, *_args, **_kwargs)
+[36m(RolloutWorker pid=1735822)[0m            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[36m(RolloutWorker pid=1735822)[0m   File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/rollout_worker.py", line 661, in sample
+[36m(RolloutWorker pid=1735822)[0m     batches = [self.input_reader.next()]
+[36m(RolloutWorker pid=1735822)[0m                ^^^^^^^^^^^^^^^^^^^^^^^^
+[36m(RolloutWorker pid=1735822)[0m   File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/sampler.py", line 59, in next
+[36m(RolloutWorker pid=1735822)[0m     batches = [self.get_data()]
+[36m(RolloutWorker pid=1735822)[0m                ^^^^^^^^^^^^^^^
+[36m(RolloutWorker pid=1735822)[0m   File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/sampler.py", line 225, in get_data
+[36m(RolloutWorker pid=1735822)[0m     item = next(self._env_runner)
+[36m(RolloutWorker pid=1735822)[0m            ^^^^^^^^^^^^^^^^^^^^^^
+[36m(RolloutWorker pid=1735822)[0m   File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/env_runner_v2.py", line 330, in run
+[36m(RolloutWorker pid=1735822)[0m     outputs = self.step()
+[36m(RolloutWorker pid=1735822)[0m               ^^^^^^^^^^^
+[36m(RolloutWorker pid=1735822)[0m   File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/env_runner_v2.py", line 356, in step
+[36m(RolloutWorker pid=1735822)[0m     active_envs, to_eval, outputs = self._process_observations(
+[36m(RolloutWorker pid=1735822)[0m                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[36m(RolloutWorker pid=1735822)[0m   File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/env_runner_v2.py", line 660, in _process_observations
+[36m(RolloutWorker pid=1735822)[0m     self._callbacks.on_episode_step(
+[36m(RolloutWorker pid=1735822)[0m   File "/home/cau/Documents/hemac/src/train/train.py", line 53, in on_episode_step
+[36m(RolloutWorker pid=1735822)[0m     dist_to_goal = math.hypot(agent.x - goal.x, agent.y - goal.y)
+[36m(RolloutWorker pid=1735822)[0m                               ^^^^^^^
+[36m(RolloutWorker pid=1735822)[0m AttributeError: 'str' object has no attribute 'x'
+Traceback (most recent call last):
+  File "/home/cau/Documents/hemac/src/train/train.py", line 227, in <module>
+    main()
+  File "/home/cau/Documents/hemac/src/train/train.py", line 191, in main
+    result = algo.train()
+             ^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 321, in train
+    result = self.step()
+             ^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 1224, in step
+    ) = self._run_one_training_iteration_old_api_stack()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 4359, in _run_one_training_iteration_old_api_stack
+    training_step_results = self.training_step()
+                            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 394, in training_step
+    return self._training_step_old_api_stack()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 483, in _training_step_old_api_stack
+    train_batch = synchronous_parallel_sample(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/rollout_ops.py", line 107, in synchronous_parallel_sample
+    sampled_data = worker_set.foreach_env_runner(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/env/env_runner_group.py", line 876, in foreach_env_runner
+    remote_results = self._worker_manager.foreach_actor(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/actor_manager.py", line 484, in foreach_actor
+    _, remote_results = self._fetch_result(
+                        ^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/actor_manager.py", line 939, in _fetch_result
+    readies, _ = ray.wait(
+                 ^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/_private/auto_init_hook.py", line 22, in auto_init_wrapper
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/_private/client_mode_hook.py", line 107, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/_private/worker.py", line 3223, in wait
+    ready_ids, remaining_ids = worker.core_worker.wait(
+                               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "python/ray/_raylet.pyx", line 3307, in ray._raylet.CoreWorker.wait
+  File "python/ray/includes/common.pxi", line 104, in ray._raylet.check_status
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/cau/Documents/hemac/src/train/train.py", line 227, in <module>
+    main()
+  File "/home/cau/Documents/hemac/src/train/train.py", line 191, in main
+    result = algo.train()
+             ^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 321, in train
+    result = self.step()
+             ^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 1224, in step
+    ) = self._run_one_training_iteration_old_api_stack()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 4359, in _run_one_training_iteration_old_api_stack
+    training_step_results = self.training_step()
+                            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 394, in training_step
+    return self._training_step_old_api_stack()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 483, in _training_step_old_api_stack
+    train_batch = synchronous_parallel_sample(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/rollout_ops.py", line 107, in synchronous_parallel_sample
+    sampled_data = worker_set.foreach_env_runner(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/env/env_runner_group.py", line 876, in foreach_env_runner
+    remote_results = self._worker_manager.foreach_actor(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/actor_manager.py", line 484, in foreach_actor
+    _, remote_results = self._fetch_result(
+                        ^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/actor_manager.py", line 939, in _fetch_result
+    readies, _ = ray.wait(
+                 ^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/_private/auto_init_hook.py", line 22, in auto_init_wrapper
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/_private/client_mode_hook.py", line 107, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/_private/worker.py", line 3223, in wait
+    ready_ids, remaining_ids = worker.core_worker.wait(
+                               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "python/ray/_raylet.pyx", line 3307, in ray._raylet.CoreWorker.wait
+  File "python/ray/includes/common.pxi", line 104, in ray._raylet.check_status
+KeyboardInterrupt
