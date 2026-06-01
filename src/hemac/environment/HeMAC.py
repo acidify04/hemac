@@ -467,9 +467,14 @@ class HeMAC:
                         self.global_reward += 10 # 정찰 성공 공동 보상
                         goal.detected_by_drone = True # 상태 깃발 추가 (기존 리셋 로직 제거)
 
+            # 목표에 가까워지는 보상 추가 ()
+            # 무인기끼리 붙어있지 않도록 (조금만)
+
         # ---------------------------------------------------------
         # [수정] 유인기(Observer) 로직: 안전한 목적지 도달
         # ---------------------------------------------------------
+
+        # 이미 밝혀진 경로로 이동하기.
         elif "observer" in active_agent:
             if agent.out_of_bound:
                 self.collided = True
