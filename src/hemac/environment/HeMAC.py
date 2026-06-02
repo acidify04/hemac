@@ -81,7 +81,7 @@ class HeMAC:
         n_provisioners=1,
         provisioner_config: dict = None,
         provisioner_sensor: dict = None,  # TODO: move sensors in agent configs
-        min_obstacles=2,
+        min_obstacles=1,
         max_obstacles=3,
         rescuing_targets=False,
         known_goals=False,
@@ -384,6 +384,10 @@ class HeMAC:
             self.screen = pygame.Surface((self.s_width, self.s_height))
         if self.render_mode is not None:
             self.render()
+        
+        self.min_drone_dist = 99999.0
+        self.min_obs_dist = 99999.0
+        self.explored_grids = set()
 
     def close(self):
         """Close the environment."""
@@ -467,8 +471,42 @@ class HeMAC:
                         self.global_reward += 10 # 정찰 성공 공동 보상
                         goal.detected_by_drone = True # 상태 깃발 추가 (기존 리셋 로직 제거)
 
-            # 목표에 가까워지는 보상 추가 ()
-            # 무인기끼리 붙어있지 않도록 (조금만)
+            # ---------------------------------------------------------
+            # [추가 1] 분산 (Dispersion) 페널티: 드론끼리 넓게 퍼지도록 유도
+            # ---------------------------------------------------------
+            # 가정: 모든 에이전트 객체를 self.world.agents(또는 self.agents.values())로 순회 가능
+            for other_name, other in zip(self.agents, self.agents_list):
+                if other != agent and "drone" in other_name:
+                    dist_to_other = dist(agent.x, agent.y, other.x, other.y)
+                    if dist_to_other < agent.sensing_range:
+                        # 0.5는 매 스텝 적용되기엔 너무 큽니다. 확 줄여줍니다.
+                        reward -= 0.05
+
+            # ---------------------------------------------------------
+            # [추가 2] 목표 접근 셰이핑 보상 & 기존 정찰 로직
+            # ---------------------------------------------------------
+            for goal in self.goals[:]:
+                current_dist = dist(goal.x, goal.y, agent.x, agent.y)
+
+                self.min_drone_dist = min(self.min_drone_dist, current_dist)
+                self.explored_grids.add((int(agent.x // 20), int(agent.y // 20)))
+
+                if hasattr(agent, "old_dist_to_goal"):
+                    if current_dist < agent.old_dist_to_goal:
+                        reward += 0.1  # 전진 시 칭찬
+                    else:
+                        # 멀어질 때의 페널티는 아예 없애거나 아주 작게(0.01) 설정합니다.
+                        # 제자리 맴돌기를 방지하려면 Time Penalty (매 스텝 -0.01) 정도만 주는 것이 낫습니다.
+                        reward -= 0.01 
+                
+                agent.old_dist_to_goal = current_dist
+
+                # (기존 로직) 정찰 로직: 무인기가 목표를 시야에 넣었을 때
+                if current_dist < agent.sensing_range:
+                    if not getattr(goal, "detected_by_drone", False):
+                        found_goal = True
+                        self.global_reward += 10 # 정찰 성공 공동 보상
+                        goal.detected_by_drone = True # 상태 깃발 추가
 
         # ---------------------------------------------------------
         # [수정] 유인기(Observer) 로직: 안전한 목적지 도달
@@ -478,12 +516,12 @@ class HeMAC:
         elif "observer" in active_agent:
             if agent.out_of_bound:
                 self.collided = True
-                reward -= 100
+                reward -= 10
             else:
                 for obstacle in self.world.obstacles:
                     if agent.process_collision(obstacle, 0):
                         self.collided = True
-                        reward -= 100
+                        reward -= 20
                         break
                 
                 # ---------------------------------------------------------
@@ -491,6 +529,8 @@ class HeMAC:
                 # ---------------------------------------------------------
                 for goal in self.goals[:]:
                     current_dist = dist(goal.x, goal.y, agent.x, agent.y)
+
+                    self.min_obs_dist = min(self.min_obs_dist, current_dist)
                     
                     # 목적지에 가까워질수록 보상 부여 (멀어지면 페널티)
                     # 이전 스텝과의 거리 차이를 이용해 전진할 때마다 보상을 줍니다.
@@ -498,7 +538,7 @@ class HeMAC:
                         if current_dist < self.old_dist_to_goal:
                             reward += 0.5  # 가깝게 잘 다가가면 칭찬
                         else:
-                            reward -= 0.2  # 멀어지면 페널티
+                            reward -= 0.01  # 멀어지면 페널티
                     
                     self.old_dist_to_goal = current_dist # 거리 갱신
 
@@ -506,7 +546,7 @@ class HeMAC:
                     if current_dist < 50: 
                         found_goal = True
                         self.terminate = True 
-                        self.global_reward += 200 
+                        self.global_reward += 50 
                         break
 
         # 개별 보상 부여
@@ -532,6 +572,15 @@ class HeMAC:
                 self.terminations[ag] = self.terminate
                 self.truncations[ag] = self.truncate
                 self.infos[ag] = {"success": found_goal, "fatal_crash": self.collided}
+            
+            for a in self.agents:
+                if a in self.infos:
+                    self.infos[a]["min_obs_dist"] = float(self.min_obs_dist)
+                    self.infos[a]["min_drone_dist"] = float(self.min_drone_dist)
+                    self.infos[a]["explored_area"] = float(len(self.explored_grids) * 400)
+                    print(f'float(self.min_obs_dist): {float(self.min_obs_dist)}')
+                    print(f'float(self.min_drone_dist): {float(self.min_drone_dist)}')
+                    print(f'float(len(self.explored_grids) * 400): {float(len(self.explored_grids) * 400)}')
 
 
 def env(**kwargs):

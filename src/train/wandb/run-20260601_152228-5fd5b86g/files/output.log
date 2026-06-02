@@ -1,0 +1,432 @@
+학습 루프 시작...
+2026-06-01 15:22:30,592	WARNING sgd.py:55 -- DeprecationWarning: `_get_slice_indices` has been deprecated. This will raise an error in the future!
+
+--- Iteration 1 ---
+Mean Reward: -5.00
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.038461538461538464, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 2 ---
+Mean Reward: -3.51
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.013513513513513514, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 3 ---
+Mean Reward: -2.65
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.01020408163265306, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 4 ---
+Mean Reward: -2.80
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 5 ---
+Mean Reward: -0.90
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 6 ---
+Mean Reward: -2.80
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 7 ---
+Mean Reward: -2.70
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 8 ---
+Mean Reward: -1.30
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 9 ---
+Mean Reward: -0.50
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 10 ---
+Mean Reward: -1.80
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 11 ---
+Mean Reward: -1.20
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 12 ---
+Mean Reward: -2.90
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 13 ---
+Mean Reward: -2.90
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 14 ---
+Mean Reward: -4.50
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 15 ---
+Mean Reward: -5.20
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 16 ---
+Mean Reward: -7.00
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 17 ---
+Mean Reward: -7.10
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 18 ---
+Mean Reward: -7.20
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 19 ---
+Mean Reward: -3.40
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 20 ---
+Mean Reward: -2.70
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 21 ---
+Mean Reward: -0.80
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 22 ---
+Mean Reward: -0.60
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 23 ---
+Mean Reward: 0.10
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 24 ---
+Mean Reward: 2.20
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 25 ---
+Mean Reward: 2.10
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 26 ---
+Mean Reward: 1.30
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 27 ---
+Mean Reward: -0.50
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 28 ---
+Mean Reward: -3.50
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 29 ---
+Mean Reward: -2.60
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 30 ---
+Mean Reward: -1.30
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 31 ---
+Mean Reward: -2.90
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 32 ---
+Mean Reward: -2.00
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 33 ---
+Mean Reward: -1.30
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 34 ---
+Mean Reward: 0.50
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 35 ---
+Mean Reward: 0.00
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 36 ---
+Mean Reward: 0.90
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 37 ---
+Mean Reward: 3.10
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 38 ---
+Mean Reward: 2.60
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 39 ---
+Mean Reward: 2.30
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 40 ---
+Mean Reward: 4.60
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 41 ---
+Mean Reward: 3.80
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 42 ---
+Mean Reward: 3.10
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 43 ---
+Mean Reward: 1.60
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 44 ---
+Mean Reward: 1.30
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 45 ---
+Mean Reward: 1.50
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 46 ---
+Mean Reward: 1.30
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 47 ---
+Mean Reward: -2.90
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 48 ---
+Mean Reward: -1.30
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 49 ---
+Mean Reward: -2.90
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 50 ---
+Mean Reward: -2.50
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 51 ---
+Mean Reward: -1.30
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 52 ---
+Mean Reward: -2.30
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 53 ---
+Mean Reward: -2.40
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 54 ---
+Mean Reward: -2.10
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 55 ---
+Mean Reward: -3.00
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 56 ---
+Mean Reward: -0.40
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 57 ---
+Mean Reward: -1.60
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 58 ---
+Mean Reward: -1.70
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 59 ---
+Mean Reward: -1.60
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 60 ---
+Mean Reward: -0.40
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 61 ---
+Mean Reward: -1.40
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 62 ---
+Mean Reward: -1.10
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 63 ---
+Mean Reward: -1.40
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 64 ---
+Mean Reward: 0.10
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 65 ---
+Mean Reward: 0.50
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 66 ---
+Mean Reward: -1.70
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 67 ---
+Mean Reward: -2.30
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 68 ---
+Mean Reward: -2.40
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 69 ---
+Mean Reward: -5.20
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 70 ---
+Mean Reward: -5.10
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 71 ---
+Mean Reward: -5.60
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 72 ---
+Mean Reward: -5.30
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 73 ---
+Mean Reward: -6.30
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 74 ---
+Mean Reward: -7.20
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 75 ---
+Mean Reward: -6.20
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 76 ---
+Mean Reward: -5.20
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 77 ---
+Mean Reward: -5.10
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 78 ---
+Mean Reward: -3.30
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 79 ---
+Mean Reward: -2.40
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 80 ---
+Mean Reward: -2.30
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 81 ---
+Mean Reward: 0.80
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 82 ---
+Mean Reward: 0.10
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 83 ---
+Mean Reward: -0.80
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 84 ---
+Mean Reward: -1.10
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 85 ---
+Mean Reward: 0.10
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 86 ---
+Mean Reward: 1.40
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+Traceback (most recent call last):
+  File "/home/cau/Documents/hemac/src/train/train.py", line 143, in <module>
+  File "/home/cau/Documents/hemac/src/train/train.py", line 108, in main
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 321, in train
+    result = self.step()
+             ^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 1224, in step
+    ) = self._run_one_training_iteration_old_api_stack()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 4359, in _run_one_training_iteration_old_api_stack
+    training_step_results = self.training_step()
+                            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 394, in training_step
+    return self._training_step_old_api_stack()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 483, in _training_step_old_api_stack
+    train_batch = synchronous_parallel_sample(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/rollout_ops.py", line 107, in synchronous_parallel_sample
+    sampled_data = worker_set.foreach_env_runner(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/env/env_runner_group.py", line 876, in foreach_env_runner
+    remote_results = self._worker_manager.foreach_actor(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/actor_manager.py", line 484, in foreach_actor
+    _, remote_results = self._fetch_result(
+                        ^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/actor_manager.py", line 939, in _fetch_result
+    readies, _ = ray.wait(
+                 ^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/_private/auto_init_hook.py", line 22, in auto_init_wrapper
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/_private/client_mode_hook.py", line 107, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/_private/worker.py", line 3223, in wait
+    ready_ids, remaining_ids = worker.core_worker.wait(
+                               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "python/ray/_raylet.pyx", line 3307, in ray._raylet.CoreWorker.wait
+  File "python/ray/includes/common.pxi", line 104, in ray._raylet.check_status
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/cau/Documents/hemac/src/train/train.py", line 143, in <module>
+
+  File "/home/cau/Documents/hemac/src/train/train.py", line 108, in main
+
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 321, in train
+    result = self.step()
+             ^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 1224, in step
+    ) = self._run_one_training_iteration_old_api_stack()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 4359, in _run_one_training_iteration_old_api_stack
+    training_step_results = self.training_step()
+                            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 394, in training_step
+    return self._training_step_old_api_stack()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 483, in _training_step_old_api_stack
+    train_batch = synchronous_parallel_sample(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/rollout_ops.py", line 107, in synchronous_parallel_sample
+    sampled_data = worker_set.foreach_env_runner(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/env/env_runner_group.py", line 876, in foreach_env_runner
+    remote_results = self._worker_manager.foreach_actor(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/actor_manager.py", line 484, in foreach_actor
+    _, remote_results = self._fetch_result(
+                        ^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/actor_manager.py", line 939, in _fetch_result
+    readies, _ = ray.wait(
+                 ^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/_private/auto_init_hook.py", line 22, in auto_init_wrapper
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/_private/client_mode_hook.py", line 107, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/_private/worker.py", line 3223, in wait
+    ready_ids, remaining_ids = worker.core_worker.wait(
+                               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "python/ray/_raylet.pyx", line 3307, in ray._raylet.CoreWorker.wait
+  File "python/ray/includes/common.pxi", line 104, in ray._raylet.check_status
+KeyboardInterrupt

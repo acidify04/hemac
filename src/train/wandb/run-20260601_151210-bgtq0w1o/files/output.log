@@ -1,0 +1,208 @@
+학습 루프 시작...
+2026-06-01 15:12:12,449	WARNING sgd.py:55 -- DeprecationWarning: `_get_slice_indices` has been deprecated. This will raise an error in the future!
+--- Iteration 1 ---
+Mean Reward: -8.87
+>>> [디버깅] custom_metrics 딕셔너리 내용: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+--- Iteration 2 ---
+Mean Reward: -8.42
+>>> [디버깅] custom_metrics 딕셔너리 내용: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+--- Iteration 3 ---
+Mean Reward: -8.18
+>>> [디버깅] custom_metrics 딕셔너리 내용: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+--- Iteration 4 ---
+Mean Reward: -7.60
+>>> [디버깅] custom_metrics 딕셔너리 내용: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+--- Iteration 5 ---
+Mean Reward: -8.70
+>>> [디버깅] custom_metrics 딕셔너리 내용: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+--- Iteration 6 ---
+Mean Reward: -7.70
+>>> [디버깅] custom_metrics 딕셔너리 내용: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+--- Iteration 7 ---
+Mean Reward: -7.90
+>>> [디버깅] custom_metrics 딕셔너리 내용: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+--- Iteration 8 ---
+Mean Reward: -4.40
+>>> [디버깅] custom_metrics 딕셔너리 내용: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+Traceback (most recent call last):
+  File "/home/cau/Documents/hemac/src/train/train.py", line 220, in <module>
+    main()
+  File "/home/cau/Documents/hemac/src/train/train.py", line 176, in main
+    result = algo.train()
+             ^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 321, in train
+    result = self.step()
+             ^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 1224, in step
+    ) = self._run_one_training_iteration_old_api_stack()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 4359, in _run_one_training_iteration_old_api_stack
+    training_step_results = self.training_step()
+                            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 394, in training_step
+    return self._training_step_old_api_stack()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 498, in _training_step_old_api_stack
+    train_results = train_one_step(self, train_batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/train_ops.py", line 59, in train_one_step
+    info = do_minibatch_sgd(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/sgd.py", line 130, in do_minibatch_sgd
+    local_worker.learn_on_batch(
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/rollout_worker.py", line 798, in learn_on_batch
+    info_out[pid] = policy.learn_on_batch(batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/threading.py", line 24, in wrapper
+    return func(self, *a, **k)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 626, in learn_on_batch
+    grads, fetches = self.compute_gradients(postprocessed_batch)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/threading.py", line 24, in wrapper
+    return func(self, *a, **k)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 834, in compute_gradients
+    tower_outputs = self._multi_gpu_parallel_grad_calc([postprocessed_batch])
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 1231, in _multi_gpu_parallel_grad_calc
+    _worker(shard_idx, model, sample_batch, device)
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 1150, in _worker
+    self.loss(model, self.dist_class, sample_batch)
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo_torch_policy.py", line 84, in loss
+    logits, state = model(train_batch)
+                    ^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/models/modelv2.py", line 257, in __call__
+    res = self.forward(restored, state or [], seq_lens)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/models/torch/fcnet.py", line 146, in forward
+    self._features = self._hidden_layers(self._last_flat_in)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/container.py", line 253, in forward
+    input = module(input)
+            ^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/models/torch/misc.py", line 298, in forward
+    return self._model(x)
+           ^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/container.py", line 253, in forward
+    input = module(input)
+            ^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/activation.py", line 429, in forward
+    return torch.tanh(input)
+           ^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/cau/Documents/hemac/src/train/train.py", line 220, in <module>
+    main()
+  File "/home/cau/Documents/hemac/src/train/train.py", line 176, in main
+    result = algo.train()
+             ^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 321, in train
+    result = self.step()
+             ^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 1224, in step
+    ) = self._run_one_training_iteration_old_api_stack()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 4359, in _run_one_training_iteration_old_api_stack
+    training_step_results = self.training_step()
+                            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 394, in training_step
+    return self._training_step_old_api_stack()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 498, in _training_step_old_api_stack
+    train_results = train_one_step(self, train_batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/train_ops.py", line 59, in train_one_step
+    info = do_minibatch_sgd(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/sgd.py", line 130, in do_minibatch_sgd
+    local_worker.learn_on_batch(
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/rollout_worker.py", line 798, in learn_on_batch
+    info_out[pid] = policy.learn_on_batch(batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/threading.py", line 24, in wrapper
+    return func(self, *a, **k)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 626, in learn_on_batch
+    grads, fetches = self.compute_gradients(postprocessed_batch)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/threading.py", line 24, in wrapper
+    return func(self, *a, **k)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 834, in compute_gradients
+    tower_outputs = self._multi_gpu_parallel_grad_calc([postprocessed_batch])
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 1231, in _multi_gpu_parallel_grad_calc
+    _worker(shard_idx, model, sample_batch, device)
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 1150, in _worker
+    self.loss(model, self.dist_class, sample_batch)
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo_torch_policy.py", line 84, in loss
+    logits, state = model(train_batch)
+                    ^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/models/modelv2.py", line 257, in __call__
+    res = self.forward(restored, state or [], seq_lens)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/models/torch/fcnet.py", line 146, in forward
+    self._features = self._hidden_layers(self._last_flat_in)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/container.py", line 253, in forward
+    input = module(input)
+            ^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/models/torch/misc.py", line 298, in forward
+    return self._model(x)
+           ^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/container.py", line 253, in forward
+    input = module(input)
+            ^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/nn/modules/activation.py", line 429, in forward
+    return torch.tanh(input)
+           ^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

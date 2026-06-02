@@ -1,5 +1,4 @@
 import os
-import math
 import ray
 from ray.tune.registry import register_env
 from ray.rllib.env.wrappers.pettingzoo_env import PettingZooEnv
@@ -7,67 +6,70 @@ from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 import wandb
 
-# 수정한 HeMAC 환경 임포트
 from hemac import HeMAC_v0
 
 class HeMACCallbacks(DefaultCallbacks):
-    # RLlib은 콜백 에러를 숨기므로 try-except로 안전망을 구축합니다.
-    def on_episode_start(self, *, worker, base_env, policies, episode, env_index, **kwargs):
-        try:
-            episode.user_data["min_drone_dist"] = float('inf')
-            episode.user_data["min_obs_dist"] = float('inf')
-            episode.user_data["explored_grids"] = set()
-        except Exception as e:
-            print(f"[Callback Error Start] {e}")
-
-    def on_episode_step(self, *, worker, base_env, policies, episode, env_index, **kwargs):
-        try:
-            env = base_env.get_sub_environments()[env_index]
-            if hasattr(env, "unwrapped"): env = env.unwrapped
-            while hasattr(env, "env") or hasattr(env, "par_env"):
-                env = getattr(env, "env", getattr(env, "par_env", env))
-
-            if not hasattr(env, 'goals') or len(env.goals) == 0: return
-            goal = env.goals[0]
-
-            agents = getattr(env, 'world', env).agents if hasattr(getattr(env, 'world', env), 'agents') else getattr(env, 'agents', [])
-            if type(agents) is dict: agents = list(agents.values())
-
-            for agent in agents:
-                if isinstance(agent, str) or not hasattr(agent, 'x') or not hasattr(agent, 'y'): continue
-                dist_to_goal = math.hypot(agent.x - goal.x, agent.y - goal.y)
-                agent_name = getattr(agent, "name", getattr(agent, "id", ""))
-
-                if "observer" in agent_name:
-                    if dist_to_goal < episode.user_data["min_obs_dist"]:
-                        episode.user_data["min_obs_dist"] = dist_to_goal
-                elif "drone" in agent_name:
-                    if dist_to_goal < episode.user_data["min_drone_dist"]:
-                        episode.user_data["min_drone_dist"] = dist_to_goal
-                    episode.user_data["explored_grids"].add((int(agent.x // 20), int(agent.y // 20)))
-        except Exception:
-            pass # 스텝마다 에러 출력 시 터미널이 마비되므로 패스
-
     def on_episode_end(self, *, worker, base_env, policies, episode, env_index, **kwargs):
-        try:
-            # 1. 무조건 계산되는 거리 및 탐색 지표
-            min_drone = episode.user_data.get("min_drone_dist", 0)
-            min_obs = episode.user_data.get("min_obs_dist", 0)
+        final_info = {}
+        
+        # [방법 1] 정석적인 RLlib 데이터 추출
+        # AEC 환경에서는 마지막 턴을 수행한 에이전트(예: drone_2)의 info에 값이 들어갑니다.
+        # 따라서 현재 에피소드에 참여한 모든 에이전트의 info를 뒤져서 값을 찾습니다.
+        agents = []
+        if hasattr(episode, "get_agents"):
+            agents = episode.get_agents()
+        elif hasattr(episode, "agent_rewards"):
+            agents = [key[0] for key in episode.agent_rewards.keys()]
+
+        for agent_id in agents:
+            info = episode.last_info_for(agent_id) or {}
+            if "min_drone_dist" in info:
+                final_info = info
+                break
+        print(f'final_info1: {final_info}')
+        
+        # [방법 2] 만약 위 방법으로 못 찾았다면, 래퍼를 완전히 뜯어보는 BFS 탐색을 수행합니다.
+        if not final_info:
+            print(final_info)
+            env = base_env.get_sub_environments()[env_index]
+            envs_to_check = [env]
             
-            if min_drone == float('inf'): min_drone = 0
-            if min_obs == float('inf'): min_obs = 0
-            area = len(episode.user_data.get("explored_grids", set())) * 400
+            while envs_to_check:
+                curr = envs_to_check.pop(0)
+                
+                # 우리가 찾는 원본 HeMAC 클래스인지 확인
+                if hasattr(curr, "min_drone_dist"):
+                    final_info = {
+                        "min_drone_dist": float(curr.min_drone_dist),
+                        "min_obs_dist": float(curr.min_obs_dist),
+                        "explored_area": float(len(curr.explored_grids) * 400),
+                        "success": (float(curr.min_obs_dist) < 50),
+                        "fatal_crash": curr.collided
+                    }
+                    print(f'final_info2: {final_info}')
+                    break
+                
+                # 하위 래퍼 탐색 대기열 추가
+                if hasattr(curr, "env") and curr.env is not None:
+                    envs_to_check.append(curr.env)
+                if hasattr(curr, "unwrapped") and curr.unwrapped is not curr:
+                    envs_to_check.append(curr.unwrapped)
 
-            episode.custom_metrics["min_drone_dist"] = min_drone
-            episode.custom_metrics["min_obs_dist"] = min_obs
-            episode.custom_metrics["explored_area"] = area
+        # 최종 값 추출 (어느 방법으로든 찾지 못한 경우 99999.0 등 기본값)
+        min_drone = final_info.get("min_drone_dist", 99999.0)
+        min_obs = final_info.get("min_obs_dist", 99999.0)
+        area = final_info.get("explored_area", 0.0)
+        
+        # 초기값 보정
+        if min_drone == 99999.0: min_drone = 0.0
+        if min_obs == 99999.0: min_obs = 0.0
 
-            # 2. 안전한 Info 딕셔너리 추출
-            info = episode.last_info_for("observer_0") or {}
-            episode.custom_metrics["success_rate"] = 1.0 if info.get("success", False) else 0.0
-            episode.custom_metrics["crash_rate"] = 1.0 if info.get("fatal_crash", False) else 0.0
-        except Exception as e:
-            print(f"[Callback Error End] {e}")
+        # wandb 및 터미널 출력용 custom_metrics 할당
+        episode.custom_metrics["min_drone_dist"] = float(min_drone)
+        episode.custom_metrics["min_obs_dist"] = float(min_obs)
+        episode.custom_metrics["explored_area"] = float(area)
+        episode.custom_metrics["success_rate"] = 1.0 if final_info.get("success", False) else 0.0
+        episode.custom_metrics["crash_rate"] = 1.0 if final_info.get("fatal_crash", False) else 0.0
 
 
 def env_creator(config):
@@ -81,11 +83,10 @@ def env_creator(config):
             "drone_max_thrust": 8,
             "drones_starting_pos": [],
         },
-        "max_obstacles": 5,
+        "max_obstacles": 2,
         "poi_config": [{"speed": 0}] 
     }
-    env = HeMAC_v0.env(**env_config)
-    return PettingZooEnv(env)
+    return PettingZooEnv(HeMAC_v0.env(**env_config))
 
 
 def main():
@@ -104,29 +105,17 @@ def main():
     }
 
     def policy_mapping_fn(agent_id, episode, **kwargs):
-        if "observer" in agent_id:
-            return "observer_policy"
-        elif "drone" in agent_id:
-            return "drone_policy"
+        if "observer" in agent_id: return "observer_policy"
+        elif "drone" in agent_id: return "drone_policy"
 
     config = (
         PPOConfig()
-        .api_stack(
-            enable_rl_module_and_learner=False,
-            enable_env_runner_and_connector_v2=False,
-        )
+        .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
         .callbacks(HeMACCallbacks)
         .environment(env=env_name)
         .env_runners(num_env_runners=4) 
-        .multi_agent(
-            policies=policies,
-            policy_mapping_fn=policy_mapping_fn,
-        )
-        .training(
-            train_batch_size=4000,
-            lr=5e-5,
-            gamma=0.99, 
-        )
+        .multi_agent(policies=policies, policy_mapping_fn=policy_mapping_fn)
+        .training(train_batch_size=4000, lr=5e-5, gamma=0.99, grad_clip=1.0, clip_param=0.2)
         .debugging(log_level="WARN")
     )
 
@@ -136,39 +125,27 @@ def main():
     checkpoint_dir = "./hemac_checkpoints"
     os.makedirs(checkpoint_dir, exist_ok=True)
 
-    wandb.init(
-        project="HeMAC-RL",               
-        name="PPO-Asymmetric-Training",   
-        config=config.to_dict()           
-    )
+    wandb.init(project="HeMAC-RL", name="PPO-Asymmetric-Training", config=config.to_dict())
 
     print("학습 루프 시작...")
     num_iterations = 10000 
     
     for i in range(num_iterations):
         result = algo.train()
-        
         mean_reward = result.get('env_runners', {}).get('episode_reward_mean', result.get('episode_reward_mean', 0))
         
-        print(f"--- Iteration {i+1} ---")
+        print(f"\n--- Iteration {i+1} ---")
         print(f"Mean Reward: {mean_reward:.2f}")
-        
-        def get_metrics_anywhere(d, target_key="custom_metrics"):
-            if target_key in d and d[target_key]: return d[target_key]
-            for k, v in d.items():
-                if isinstance(v, dict):
-                    found = get_metrics_anywhere(v, target_key)
-                    if found: return found
-            return {}
 
-        custom_metrics = get_metrics_anywhere(result, "custom_metrics")
-        policy_rewards = get_metrics_anywhere(result, "policy_reward_mean")
-        
-        # 만약 policy_rewards가 비어있다면, 기존 방식으로 안전하게 가져옵니다.
+        custom_metrics = result.get('custom_metrics', {})
+        if not custom_metrics:
+            custom_metrics = result.get('env_runners', {}).get('custom_metrics', {})
+            
+        policy_rewards = result.get('policy_reward_mean', {})
         if not policy_rewards:
             policy_rewards = result.get('env_runners', {}).get('policy_reward_mean', {})
 
-        print(f">>> [디버깅] custom_metrics 딕셔너리 내용: {custom_metrics}")
+        print(f">>> [디버깅] custom_metrics: {custom_metrics}")
 
         wandb.log({
             "iteration": i + 1,
@@ -183,8 +160,7 @@ def main():
         })
         
         if (i + 1) % 500 == 0:
-            checkpoint_path = algo.save(checkpoint_dir)
-            print(f"==> Checkpoint saved at: {checkpoint_path}")
+            algo.save(checkpoint_dir)
 
     wandb.finish()
     ray.shutdown()

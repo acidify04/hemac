@@ -1,0 +1,619 @@
+학습 루프 시작...
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 1200.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 1200.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 1200.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 1200.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 2000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 2000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 2000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 2000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 2000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 2000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 2000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 2000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 2400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 2400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 2400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 2400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 3200.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 3200.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 3200.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 3200.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 3200.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 3200.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 3200.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 3200.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 4000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 4000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 4000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 4000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 4800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 4800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 4800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 4800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 5200.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 5200.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 5200.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 5200.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 5600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 5600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 5600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 5600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 6000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 6000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 6000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 6000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 6800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 6800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 6800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 176.5306682820381
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 6800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 166.14444212139028
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 7600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 166.14444212139028
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 7600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 166.14444212139028
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 7600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 166.14444212139028
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 7600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 160.43439775091022
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 8000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 160.43439775091022
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 8000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 160.43439775091022
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 8000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 160.43439775091022
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 8000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 157.69385529483458
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 8400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 157.69385529483458
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 8400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 157.69385529483458
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 8400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 157.69385529483458
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 8400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 153.71943559929142
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 8400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 153.71943559929142
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 8400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 153.71943559929142
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 8400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.70151183827676
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 153.71943559929142
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 8400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.50152461005854
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 147.8454508833174
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 8800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.50152461005854
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 147.8454508833174
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 8800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.50152461005854
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 147.8454508833174
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 8800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 491.50152461005854
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 147.8454508833174
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 8800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 489.171056221875
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 137.43502183443653
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 9600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 489.171056221875
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 137.43502183443653
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 9600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 489.171056221875
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 137.43502183443653
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 9600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 489.171056221875
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 137.43502183443653
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 9600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 486.8807819132293
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 126.52499890871977
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 10400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 486.8807819132293
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 126.52499890871977
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 10400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 486.8807819132293
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 126.52499890871977
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 10400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 486.8807819132293
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 126.52499890871977
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 10400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 484.63127153295665
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 10800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 484.63127153295665
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 10800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 484.63127153295665
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 10800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 484.63127153295665
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 10800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 482.42309532076007
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 11600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 482.42309532076007
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 11600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 482.42309532076007
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 11600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 482.42309532076007
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 11600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 480.2568234289607
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 12400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 480.2568234289607
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 12400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 480.2568234289607
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 12400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 480.2568234289607
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 12400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 476.83485711139724
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 12400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 476.83485711139724
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 12400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 476.83485711139724
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 12400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 476.83485711139724
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 12400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 473.4409630173727
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 12400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 473.4409630173727
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 12400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 473.4409630173727
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 12400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 473.4409630173727
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 12400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 470.0757491821802
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 12800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 470.0757491821802
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 12800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 470.0757491821802
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 12800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 470.0757491821802
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 12800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 466.7398359638468
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 13600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 466.7398359638468
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 13600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 466.7398359638468
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 13600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 466.7398359638468
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 13600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 463.4338561023885
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 13600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 463.4338561023885
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 13600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 463.4338561023885
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 13600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 463.4338561023885
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 13600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 460.158454761292
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 14000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 460.158454761292
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 14000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 460.158454761292
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 14000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 460.158454761292
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 14000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 455.8939746917364
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 14400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 455.8939746917364
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 14400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 455.8939746917364
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 14400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 455.8939746917364
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 14400.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 451.6445824231252
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 14800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 451.6445824231252
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 14800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 451.6445824231252
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 14800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 451.6445824231252
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 14800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 447.4107078558678
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 15600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 447.4107078558678
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 15600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 447.4107078558678
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 15600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 447.4107078558678
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 15600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 442.5675114499209
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 16000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 442.5675114499209
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 16000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 442.5675114499209
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 16000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 442.5675114499209
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 16000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 437.72784110433633
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 16000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 437.72784110433633
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 16000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 437.72784110433633
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 16000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 437.72784110433633
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 16000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 433.5254100989032
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 16000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 433.5254100989032
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 16000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 433.5254100989032
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 16000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 433.5254100989032
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 16000.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 429.3400744456325
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 16800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 429.3400744456325
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 16800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 429.3400744456325
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 16800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 429.3400744456325
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 16800.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 424.520512888951
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 17600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 424.520512888951
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 17600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 424.520512888951
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 17600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 424.520512888951
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 17600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 419.70517295122147
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 17600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 419.70517295122147
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 17600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 419.70517295122147
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 17600.0
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 419.70517295122147
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.60762209233631
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 17600.0
+[36m(RolloutWorker pid=1885686)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_obs_dist': 804.5926457575902, 'min_drone_dist': 491.09016314340056, 'explored_area': 13600.0}
+[36m(RolloutWorker pid=1885686)[0m no obstacles! infinite comm range
+[36m(RolloutWorker pid=1885686)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_obs_dist': 39.38520521498083, 'min_drone_dist': 460.5281479171561, 'explored_area': 1200.0}
+[36m(RolloutWorker pid=1885686)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_obs_dist': 621.4028655208983, 'min_drone_dist': 217.1081549198925, 'explored_area': 22400.0}
+2026-06-02 14:11:09,050	WARNING sgd.py:55 -- DeprecationWarning: `_get_slice_indices` has been deprecated. This will raise an error in the future!
+
+--- Iteration 1 ---
+Mean Reward: -1217.92
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 279.9289966172561, 'min_drone_dist_min': 90.42400146348979, 'min_drone_dist_max': 491.09016314340056, 'min_obs_dist_mean': 349.8650565318012, 'min_obs_dist_min': 39.38520521498083, 'min_obs_dist_max': 804.5926457575902, 'explored_area_mean': 40057.142857142855, 'explored_area_min': 1200.0, 'explored_area_max': 88000.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.8571428571428571, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 2 ---
+Mean Reward: -570.09
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 229.76782864441864, 'min_drone_dist_min': 33.49687899606025, 'min_drone_dist_max': 491.09016314340056, 'min_obs_dist_mean': 291.9289890357752, 'min_obs_dist_min': 26.473641440273607, 'min_obs_dist_max': 804.5926457575902, 'explored_area_mean': 38652.63157894737, 'explored_area_min': 1200.0, 'explored_area_max': 88000.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.8947368421052632, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 3 ---
+Mean Reward: -663.32
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 214.19343559152088, 'min_drone_dist_min': 33.49687899606025, 'min_drone_dist_max': 491.09016314340056, 'min_obs_dist_mean': 346.3170066904715, 'min_obs_dist_min': 6.324555320336759, 'min_obs_dist_max': 804.5926457575902, 'explored_area_mean': 39000.0, 'explored_area_min': 1200.0, 'explored_area_max': 88000.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.8928571428571429, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 232.59845987210863[32m [repeated 12052x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#log-deduplication for more options.)[0m
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 68.98757706112107[32m [repeated 12052x across cluster][0m
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 100000.0[32m [repeated 12052x across cluster][0m
+[36m(RolloutWorker pid=1885681)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_obs_dist': 784.0928520872301, 'min_drone_dist': 42.35645132722868, 'explored_area': 45600.0}[32m [repeated 23x across cluster][0m
+[36m(RolloutWorker pid=1885681)[0m no obstacles! infinite comm range[32m [repeated 2x across cluster][0m
+[36m(RolloutWorker pid=1885681)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_obs_dist': 6.324555320336759, 'min_drone_dist': 170.2232313625824, 'explored_area': 1200.0}[32m [repeated 2x across cluster][0m
+
+--- Iteration 4 ---
+Mean Reward: -717.23
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 190.38363275344176, 'min_drone_dist_min': 5.148629780640392, 'min_drone_dist_max': 491.09016314340056, 'min_obs_dist_mean': 344.74763940273033, 'min_obs_dist_min': 6.324555320336759, 'min_obs_dist_max': 804.5926457575902, 'explored_area_mean': 42290.90909090909, 'explored_area_min': 1200.0, 'explored_area_max': 112000.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.8181818181818182, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 5 ---
+Mean Reward: -743.70
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 179.75136207613656, 'min_drone_dist_min': 5.148629780640392, 'min_drone_dist_max': 491.09016314340056, 'min_obs_dist_mean': 343.271368268263, 'min_obs_dist_min': 6.324555320336759, 'min_obs_dist_max': 804.5926457575902, 'explored_area_mean': 47290.0, 'explored_area_min': 1200.0, 'explored_area_max': 118400.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.8, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 6 ---
+Mean Reward: -999.04
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 174.87294637434545, 'min_drone_dist_min': 5.148629780640392, 'min_drone_dist_max': 491.09016314340056, 'min_obs_dist_mean': 329.4752469881697, 'min_obs_dist_min': 6.324555320336759, 'min_obs_dist_max': 804.5926457575902, 'explored_area_mean': 53590.90909090909, 'explored_area_min': 1200.0, 'explored_area_max': 126800.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.7272727272727273, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 163.3781505530196[32m [repeated 11848x across cluster][0m
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 121.21435006720543[32m [repeated 11848x across cluster][0m
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 29200.0[32m [repeated 11848x across cluster][0m
+[36m(RolloutWorker pid=1885686)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_obs_dist': 338.65981508125293, 'min_drone_dist': 46.75918227507841, 'explored_area': 114400.0}[32m [repeated 7x across cluster][0m
+[36m(RolloutWorker pid=1885685)[0m no obstacles! infinite comm range[32m [repeated 38x across cluster][0m
+[36m(RolloutWorker pid=1885685)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_obs_dist': 64.31873930108891, 'min_drone_dist': 245.05881866659087, 'explored_area': 124800.0}[32m [repeated 9x across cluster][0m
+
+--- Iteration 7 ---
+Mean Reward: -949.59
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 168.70454430287722, 'min_drone_dist_min': 5.148629780640392, 'min_drone_dist_max': 491.09016314340056, 'min_obs_dist_mean': 325.485372738502, 'min_obs_dist_min': 6.324555320336759, 'min_obs_dist_max': 804.5926457575902, 'explored_area_mean': 56153.1914893617, 'explored_area_min': 1200.0, 'explored_area_max': 126800.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.7021276595744681, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 8 ---
+Mean Reward: -1001.43
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 168.21720550925312, 'min_drone_dist_min': 5.148629780640392, 'min_drone_dist_max': 491.09016314340056, 'min_obs_dist_mean': 323.18801882404193, 'min_obs_dist_min': 6.324555320336759, 'min_obs_dist_max': 804.5926457575902, 'explored_area_mean': 56744.0, 'explored_area_min': 1200.0, 'explored_area_max': 126800.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.7, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1885686)[0m
+
+--- Iteration 9 ---
+Mean Reward: -949.06
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 158.60992775311732, 'min_drone_dist_min': 5.148629780640392, 'min_drone_dist_max': 491.09016314340056, 'min_obs_dist_mean': 319.67688293141185, 'min_obs_dist_min': 6.324555320336759, 'min_obs_dist_max': 804.5926457575902, 'explored_area_mean': 58496.2962962963, 'explored_area_min': 1200.0, 'explored_area_max': 127600.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.6666666666666666, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1885689)[0m float(self.min_obs_dist): 185.08787309220833[32m [repeated 12096x across cluster][0m
+[36m(RolloutWorker pid=1885689)[0m float(self.min_drone_dist): 272.250345858878[32m [repeated 12096x across cluster][0m
+[36m(RolloutWorker pid=1885689)[0m float(len(self.explored_grids) * 400): 7200.0[32m [repeated 12096x across cluster][0m
+[36m(RolloutWorker pid=1885685)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_obs_dist': 366.18381657585456, 'min_drone_dist': 7.559564807212687, 'explored_area': 27600.0}[32m [repeated 4x across cluster][0m
+[36m(RolloutWorker pid=1885689)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_obs_dist': 214.70293188218804, 'min_drone_dist': 262.7706537649971, 'explored_area': 115600.0}[32m [repeated 7x across cluster][0m
+[36m(RolloutWorker pid=1885685)[0m no obstacles! infinite comm range
+[36m(RolloutWorker pid=1885685)[0m no obstacles! infinite comm range
+[36m(RolloutWorker pid=1885685)[0m no obstacles! infinite comm range
+[36m(RolloutWorker pid=1885685)[0m no obstacles! infinite comm range
+[36m(RolloutWorker pid=1885685)[0m no obstacles! infinite comm range
+[36m(RolloutWorker pid=1885685)[0m no obstacles! infinite comm range
+[36m(RolloutWorker pid=1885685)[0m no obstacles! infinite comm range
+[36m(RolloutWorker pid=1885685)[0m no obstacles! infinite comm range
+[36m(RolloutWorker pid=1885685)[0m no obstacles! infinite comm range
+Traceback (most recent call last):
+  File "/home/cau/Documents/hemac/src/train/train.py", line 169, in <module>
+    main()
+  File "/home/cau/Documents/hemac/src/train/train.py", line 134, in main
+    result = algo.train()
+             ^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 321, in train
+    result = self.step()
+             ^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 1224, in step
+    ) = self._run_one_training_iteration_old_api_stack()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 4359, in _run_one_training_iteration_old_api_stack
+    training_step_results = self.training_step()
+                            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 394, in training_step
+    return self._training_step_old_api_stack()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 498, in _training_step_old_api_stack
+    train_results = train_one_step(self, train_batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/train_ops.py", line 59, in train_one_step
+    info = do_minibatch_sgd(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/sgd.py", line 130, in do_minibatch_sgd
+    local_worker.learn_on_batch(
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/rollout_worker.py", line 798, in learn_on_batch
+    info_out[pid] = policy.learn_on_batch(batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/threading.py", line 24, in wrapper
+    return func(self, *a, **k)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 626, in learn_on_batch
+    grads, fetches = self.compute_gradients(postprocessed_batch)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/threading.py", line 24, in wrapper
+    return func(self, *a, **k)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 834, in compute_gradients
+    tower_outputs = self._multi_gpu_parallel_grad_calc([postprocessed_batch])
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 1231, in _multi_gpu_parallel_grad_calc
+    _worker(shard_idx, model, sample_batch, device)
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 1173, in _worker
+    loss_out[opt_idx].backward(retain_graph=True)
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/_tensor.py", line 630, in backward
+    torch.autograd.backward(
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/autograd/__init__.py", line 364, in backward
+    _engine_run_backward(
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/autograd/graph.py", line 865, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/cau/Documents/hemac/src/train/train.py", line 169, in <module>
+    main()
+  File "/home/cau/Documents/hemac/src/train/train.py", line 134, in main
+    result = algo.train()
+             ^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 321, in train
+    result = self.step()
+             ^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 1224, in step
+    ) = self._run_one_training_iteration_old_api_stack()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 4359, in _run_one_training_iteration_old_api_stack
+    training_step_results = self.training_step()
+                            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 394, in training_step
+    return self._training_step_old_api_stack()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 498, in _training_step_old_api_stack
+    train_results = train_one_step(self, train_batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/train_ops.py", line 59, in train_one_step
+    info = do_minibatch_sgd(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/sgd.py", line 130, in do_minibatch_sgd
+    local_worker.learn_on_batch(
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/rollout_worker.py", line 798, in learn_on_batch
+    info_out[pid] = policy.learn_on_batch(batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/threading.py", line 24, in wrapper
+    return func(self, *a, **k)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 626, in learn_on_batch
+    grads, fetches = self.compute_gradients(postprocessed_batch)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/threading.py", line 24, in wrapper
+    return func(self, *a, **k)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 834, in compute_gradients
+    tower_outputs = self._multi_gpu_parallel_grad_calc([postprocessed_batch])
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 1231, in _multi_gpu_parallel_grad_calc
+    _worker(shard_idx, model, sample_batch, device)
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 1173, in _worker
+    loss_out[opt_idx].backward(retain_graph=True)
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/_tensor.py", line 630, in backward
+    torch.autograd.backward(
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/autograd/__init__.py", line 364, in backward
+    _engine_run_backward(
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/autograd/graph.py", line 865, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

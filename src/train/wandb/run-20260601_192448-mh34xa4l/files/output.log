@@ -1,0 +1,128 @@
+학습 루프 시작...
+2026-06-01 19:24:50,105	WARNING sgd.py:55 -- DeprecationWarning: `_get_slice_indices` has been deprecated. This will raise an error in the future!
+
+--- Iteration 1 ---
+Mean Reward: -8.85
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 2 ---
+Mean Reward: -7.41
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 3 ---
+Mean Reward: -5.88
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 4 ---
+Mean Reward: -5.70
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 5 ---
+Mean Reward: -4.90
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 6 ---
+Mean Reward: -3.40
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 7 ---
+Mean Reward: -2.30
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 8 ---
+Mean Reward: -0.20
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+
+--- Iteration 9 ---
+Mean Reward: 4.50
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 0.0, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 0.0, 'min_obs_dist_mean': 0.0, 'min_obs_dist_min': 0.0, 'min_obs_dist_max': 0.0, 'explored_area_mean': 0.0, 'explored_area_min': 0.0, 'explored_area_max': 0.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.0, 'crash_rate_min': 0.0, 'crash_rate_max': 0.0}
+Traceback (most recent call last):
+  File "/home/cau/Documents/hemac/src/train/train.py", line 147, in <module>
+    main()
+  File "/home/cau/Documents/hemac/src/train/train.py", line 112, in main
+    result = algo.train()
+             ^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 321, in train
+    result = self.step()
+             ^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 1224, in step
+    ) = self._run_one_training_iteration_old_api_stack()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 4359, in _run_one_training_iteration_old_api_stack
+    training_step_results = self.training_step()
+                            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 394, in training_step
+    return self._training_step_old_api_stack()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 498, in _training_step_old_api_stack
+    train_results = train_one_step(self, train_batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/train_ops.py", line 59, in train_one_step
+    info = do_minibatch_sgd(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/sgd.py", line 130, in do_minibatch_sgd
+    local_worker.learn_on_batch(
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/rollout_worker.py", line 790, in learn_on_batch
+    batch.decompress_if_needed()
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/sample_batch.py", line 1111, in decompress_if_needed
+    tree.map_structure_with_path(_decompress_in_place, self)
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/tree/__init__.py", line 467, in map_structure_with_path
+    return map_structure_with_path_up_to(structures[0], func, *structures,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/tree/__init__.py", line 772, in map_structure_with_path_up_to
+    return unflatten_as(shallow_structure, results)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/tree/__init__.py", line 374, in unflatten_as
+    return _sequence_like(structure, packed)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/tree/sequence.py", line 84, in _sequence_like
+    return type(instance)(keys_and_values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/sample_batch.py", line 206, in __init__
+    dict.__init__(self, *args, **kwargs)
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/cau/Documents/hemac/src/train/train.py", line 147, in <module>
+    main()
+  File "/home/cau/Documents/hemac/src/train/train.py", line 112, in main
+    result = algo.train()
+             ^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 321, in train
+    result = self.step()
+             ^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 1224, in step
+    ) = self._run_one_training_iteration_old_api_stack()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 4359, in _run_one_training_iteration_old_api_stack
+    training_step_results = self.training_step()
+                            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 394, in training_step
+    return self._training_step_old_api_stack()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 498, in _training_step_old_api_stack
+    train_results = train_one_step(self, train_batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/train_ops.py", line 59, in train_one_step
+    info = do_minibatch_sgd(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/sgd.py", line 130, in do_minibatch_sgd
+    local_worker.learn_on_batch(
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/rollout_worker.py", line 790, in learn_on_batch
+    batch.decompress_if_needed()
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/sample_batch.py", line 1111, in decompress_if_needed
+    tree.map_structure_with_path(_decompress_in_place, self)
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/tree/__init__.py", line 467, in map_structure_with_path
+    return map_structure_with_path_up_to(structures[0], func, *structures,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/tree/__init__.py", line 772, in map_structure_with_path_up_to
+    return unflatten_as(shallow_structure, results)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/tree/__init__.py", line 374, in unflatten_as
+    return _sequence_like(structure, packed)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/tree/sequence.py", line 84, in _sequence_like
+    return type(instance)(keys_and_values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cau/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/sample_batch.py", line 206, in __init__
+    dict.__init__(self, *args, **kwargs)
+KeyboardInterrupt
