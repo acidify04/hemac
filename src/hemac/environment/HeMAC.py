@@ -81,8 +81,8 @@ class HeMAC:
         n_provisioners=1,
         provisioner_config: dict = None,
         provisioner_sensor: dict = None,  # TODO: move sensors in agent configs
-        min_obstacles=1,
-        max_obstacles=3,
+        min_obstacles=0,
+        max_obstacles=0,
         rescuing_targets=False,
         known_goals=False,
         geofence_config: dict = None,

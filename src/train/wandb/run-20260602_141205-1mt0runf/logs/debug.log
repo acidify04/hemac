@@ -17,3 +17,8 @@ config: {'exploration_config': {'type': 'StochasticSampling'}, 'extra_python_env
 2026-06-02 14:12:06,640 INFO    MainThread:1887742 [wandb_run.py:_redirect():2428] Wrapping output streams.
 2026-06-02 14:12:06,640 INFO    MainThread:1887742 [wandb_run.py:_redirect():2451] Redirects installed.
 2026-06-02 14:12:06,640 INFO    MainThread:1887742 [wandb_init.py:init():1095] run started, returning control to user process
+2026-06-02 20:04:47,491 INFO    MainThread:1887742 [wandb_run.py:_finish():2271] finishing run parkeh0724-chung-ang-university/HeMAC-RL/1mt0runf
+2026-06-02 20:04:47,491 INFO    MainThread:1887742 [wandb_run.py:_atexit_cleanup():2476] got exitcode: 0
+2026-06-02 20:04:47,491 INFO    MainThread:1887742 [wandb_run.py:_restore():2458] restore
+2026-06-02 20:04:47,491 INFO    MainThread:1887742 [wandb_run.py:_restore():2464] restore done
+2026-06-02 20:04:50,173 INFO    MainThread:1887742 [wandb_run.py:_footer_sync_info():3877] logging synced files

@@ -174,12 +174,15 @@ class Drone(BaseAgent):
         self.charging_point = (0, 0)
         self.goto_pos = [0, 0]
 
+        self.is_broken = False
+
     def reset(self, seed=None, options=None):
         """Reset drone."""
         self.charge_level = self.max_charge
         self.charging = False
         self.out_of_bound = False
         self.carried_targets = 0
+        self.is_broken = False
         self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
 
     def draw(self, screen):
@@ -216,6 +219,9 @@ class Drone(BaseAgent):
 
     def update(self, area, world, action):
         """Update drone."""
+        if self.is_broken:
+            return
+
         if self.discrete_action_space:
             action = self.discrete_to_continuous(action)
 
@@ -332,6 +338,8 @@ class Drone(BaseAgent):
         """
         if not self.rect.colliderect(o_rect):
             return False
+        
+        self.is_broken = True
         return True
 
     def observe(self, world, agents, poi) -> np.array:
