@@ -1,0 +1,1 @@
+{"reward/drone_policy":-1.5,"metrics/crash_rate":0.36,"metrics/explored_area":0,"_wandb":{"runtime":1079},"_timestamp":1.780743183028555e+09,"iteration":431,"_runtime":1079,"metrics/min_drone_dist":0,"metrics/min_obs_dist":0,"reward/mean_reward":16.09577228725689,"reward/observer_policy":20.595772287256892,"_step":430,"metrics/success_rate":0}

@@ -83,7 +83,8 @@ def env_creator(config):
             "drone_max_thrust": 8,
             "drones_starting_pos": [],
         },
-        "max_obstacles": 2,
+        "min_obstacles": 0,  # [추가] 확실한 통제를 위해 최소값 0 명시
+        "max_obstacles": 0,  # [수정] 2 -> 0 (목표 도달을 먼저 학습시키기 위함)
         "poi_config": [{"speed": 0}] 
     }
     return PettingZooEnv(HeMAC_v0.env(**env_config))
@@ -115,6 +116,7 @@ def main():
         .environment(env=env_name)
         .env_runners(num_env_runners=4) 
         .multi_agent(policies=policies, policy_mapping_fn=policy_mapping_fn)
+        .resources(num_gpus=1)
         .training(train_batch_size=4000, lr=5e-5, gamma=0.99, grad_clip=1.0, clip_param=0.2)
         .debugging(log_level="WARN")
     )
@@ -159,8 +161,11 @@ def main():
             "metrics/explored_area": custom_metrics.get("explored_area_mean", 0),
         })
         
-        if (i + 1) % 500 == 0:
-            algo.save(checkpoint_dir)
+        if (i + 1) % 300 == 0:
+            # i+1:05d는 숫자를 5자리(예: 00500)로 포맷팅하여 정렬이 잘 되게 합니다.
+            iter_checkpoint_dir = os.path.join(checkpoint_dir, f"checkpoint_{i+1:05d}")
+            algo.save(iter_checkpoint_dir)
+            print(f"Checkpoint 저장 완료: {iter_checkpoint_dir}")
 
     wandb.finish()
     ray.shutdown()

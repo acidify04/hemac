@@ -1,0 +1,137 @@
+학습 루프 시작...
+[36m(RolloutWorker pid=59835)[0m 2026-06-06 17:39:01,353	ERROR actor_manager.py:186 -- Worker exception caught during `apply()`: 'Drone' object has no attribute 'is_newly_explored'
+[36m(RolloutWorker pid=59835)[0m Traceback (most recent call last):
+[36m(RolloutWorker pid=59835)[0m   File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/actor_manager.py", line 182, in apply
+[36m(RolloutWorker pid=59835)[0m     return func(self, *args, **kwargs)
+[36m(RolloutWorker pid=59835)[0m            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[36m(RolloutWorker pid=59835)[0m   File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/rollout_ops.py", line 109, in <lambda>
+[36m(RolloutWorker pid=59835)[0m     (lambda w: w.sample(**random_action_kwargs))
+[36m(RolloutWorker pid=59835)[0m                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[36m(RolloutWorker pid=59835)[0m   File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/util/tracing/tracing_helper.py", line 461, in _resume_span
+[36m(RolloutWorker pid=59835)[0m     return method(self, *_args, **_kwargs)
+[36m(RolloutWorker pid=59835)[0m            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[36m(RolloutWorker pid=59835)[0m   File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/rollout_worker.py", line 661, in sample
+[36m(RolloutWorker pid=59835)[0m     batches = [self.input_reader.next()]
+[36m(RolloutWorker pid=59835)[0m                ^^^^^^^^^^^^^^^^^^^^^^^^
+[36m(RolloutWorker pid=59835)[0m   File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/sampler.py", line 59, in next
+[36m(RolloutWorker pid=59835)[0m     batches = [self.get_data()]
+[36m(RolloutWorker pid=59835)[0m                ^^^^^^^^^^^^^^^
+[36m(RolloutWorker pid=59835)[0m   File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/sampler.py", line 225, in get_data
+[36m(RolloutWorker pid=59835)[0m     item = next(self._env_runner)
+[36m(RolloutWorker pid=59835)[0m            ^^^^^^^^^^^^^^^^^^^^^^
+[36m(RolloutWorker pid=59835)[0m   File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/env_runner_v2.py", line 330, in run
+[36m(RolloutWorker pid=59835)[0m     outputs = self.step()
+[36m(RolloutWorker pid=59835)[0m               ^^^^^^^^^^^
+[36m(RolloutWorker pid=59835)[0m   File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/env_runner_v2.py", line 386, in step
+[36m(RolloutWorker pid=59835)[0m     self._base_env.send_actions(actions_to_send)
+[36m(RolloutWorker pid=59835)[0m   File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/env/multi_agent_env.py", line 552, in send_actions
+[36m(RolloutWorker pid=59835)[0m     raise e
+[36m(RolloutWorker pid=59835)[0m   File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/env/multi_agent_env.py", line 541, in send_actions
+[36m(RolloutWorker pid=59835)[0m     obs, rewards, terminateds, truncateds, infos = env.step(agent_dict)
+[36m(RolloutWorker pid=59835)[0m                                                    ^^^^^^^^^^^^^^^^^^^^
+[36m(RolloutWorker pid=59835)[0m   File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/env/wrappers/pettingzoo_env.py", line 152, in step
+[36m(RolloutWorker pid=59835)[0m     self.env.step(action[self.env.agent_selection])
+[36m(RolloutWorker pid=59835)[0m   File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/pettingzoo/utils/wrappers/order_enforcing.py", line 96, in step
+[36m(RolloutWorker pid=59835)[0m     super().step(action)
+[36m(RolloutWorker pid=59835)[0m   File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/pettingzoo/utils/wrappers/base.py", line 47, in step
+[36m(RolloutWorker pid=59835)[0m     self.env.step(action)
+[36m(RolloutWorker pid=59835)[0m   File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/pettingzoo/utils/wrappers/assert_out_of_bounds.py", line 26, in step
+[36m(RolloutWorker pid=59835)[0m     super().step(action)
+[36m(RolloutWorker pid=59835)[0m   File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/pettingzoo/utils/wrappers/base.py", line 47, in step
+[36m(RolloutWorker pid=59835)[0m     self.env.step(action)
+[36m(RolloutWorker pid=59835)[0m   File "/home/choi/Desktop/hemac/src/hemac/environment/HeMAC.py", line 702, in step
+[36m(RolloutWorker pid=59835)[0m     self.env.step(action, agent)
+[36m(RolloutWorker pid=59835)[0m   File "/home/choi/Desktop/hemac/src/hemac/environment/HeMAC.py", line 520, in step
+[36m(RolloutWorker pid=59835)[0m     if agent.is_newly_explored(self.explored_grids):
+[36m(RolloutWorker pid=59835)[0m        ^^^^^^^^^^^^^^^^^^^^^^^
+[36m(RolloutWorker pid=59835)[0m AttributeError: 'Drone' object has no attribute 'is_newly_explored'
+Traceback (most recent call last):
+  File "/home/choi/Desktop/hemac/src/train/train.py", line 170, in <module>
+    main()
+  File "/home/choi/Desktop/hemac/src/train/train.py", line 135, in main
+    result = algo.train()
+             ^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 321, in train
+    result = self.step()
+             ^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 1224, in step
+    ) = self._run_one_training_iteration_old_api_stack()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 4359, in _run_one_training_iteration_old_api_stack
+    training_step_results = self.training_step()
+                            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 394, in training_step
+    return self._training_step_old_api_stack()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 483, in _training_step_old_api_stack
+    train_batch = synchronous_parallel_sample(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/rollout_ops.py", line 107, in synchronous_parallel_sample
+    sampled_data = worker_set.foreach_env_runner(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/env/env_runner_group.py", line 876, in foreach_env_runner
+    remote_results = self._worker_manager.foreach_actor(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/actor_manager.py", line 484, in foreach_actor
+    _, remote_results = self._fetch_result(
+                        ^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/actor_manager.py", line 939, in _fetch_result
+    readies, _ = ray.wait(
+                 ^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/_private/auto_init_hook.py", line 22, in auto_init_wrapper
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/_private/client_mode_hook.py", line 107, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/_private/worker.py", line 3223, in wait
+    ready_ids, remaining_ids = worker.core_worker.wait(
+                               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "python/ray/_raylet.pyx", line 3307, in ray._raylet.CoreWorker.wait
+  File "python/ray/includes/common.pxi", line 104, in ray._raylet.check_status
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/choi/Desktop/hemac/src/train/train.py", line 170, in <module>
+    main()
+  File "/home/choi/Desktop/hemac/src/train/train.py", line 135, in main
+    result = algo.train()
+             ^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 321, in train
+    result = self.step()
+             ^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 1224, in step
+    ) = self._run_one_training_iteration_old_api_stack()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 4359, in _run_one_training_iteration_old_api_stack
+    training_step_results = self.training_step()
+                            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 394, in training_step
+    return self._training_step_old_api_stack()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 483, in _training_step_old_api_stack
+    train_batch = synchronous_parallel_sample(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/rollout_ops.py", line 107, in synchronous_parallel_sample
+    sampled_data = worker_set.foreach_env_runner(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/env/env_runner_group.py", line 876, in foreach_env_runner
+    remote_results = self._worker_manager.foreach_actor(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/actor_manager.py", line 484, in foreach_actor
+    _, remote_results = self._fetch_result(
+                        ^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/actor_manager.py", line 939, in _fetch_result
+    readies, _ = ray.wait(
+                 ^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/_private/auto_init_hook.py", line 22, in auto_init_wrapper
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/_private/client_mode_hook.py", line 107, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/_private/worker.py", line 3223, in wait
+    ready_ids, remaining_ids = worker.core_worker.wait(
+                               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "python/ray/_raylet.pyx", line 3307, in ray._raylet.CoreWorker.wait
+  File "python/ray/includes/common.pxi", line 104, in ray._raylet.check_status
+KeyboardInterrupt
