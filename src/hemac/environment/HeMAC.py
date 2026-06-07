@@ -45,8 +45,9 @@ from pettingzoo.utils.conversions import parallel_wrapper_fn
 from pymap3d import geodetic2enu
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
-
+from .world import world_ref_to_game_ref, game_ref_to_world_ref
 import hemac.environment.sensors as sensors
+import math
 from hemac.helpers.logger import LOGGER
 from .drone import Drone
 from .observer import Observer
@@ -134,8 +135,6 @@ class HeMAC:
         self.agents = self.agents + ["provisioner_" + str(i) for i in range(self.n_provisioners)]
         self.agent_name_mapping = dict(zip(self.agents, list(range(self.num_agents))))
         self.agents_list = []
-
-        self.old_dist_to_goal = 1000
 
         # Display screen
         self.render_ratio = render_ratio
@@ -302,6 +301,7 @@ class HeMAC:
 
         # self.world.observer_communication = [0, 0]
 
+        self.found_goal = False
         self.reinit()
 
         self.render_fps = render_fps
@@ -344,6 +344,14 @@ class HeMAC:
     def reset(self, seed=None, options=None):
         """Reset the environment."""
         # reset goals
+        self.explored_grids = set() # 이거 안 지우면 다음 에피소드에서 정찰 보상 다 뺏김
+        self.min_drone_dist = 99999.0 # 거리 초기화 필수
+        self.min_obs_dist = 99999.0
+        self.found_goal = False
+        
+        # 2. 목표물 리셋
+        for goal in self.goals:
+            goal.detected_by_drone = False
         for goal in self.goals:
             goal.spawn_poi(self.search_area)
             goal.reset()
@@ -360,20 +368,59 @@ class HeMAC:
             self.world.generate_obstacles(num_obstacles)
 
         # reset agents to initial state
+        # ---------------------------------------------------------
+        # [수정 1] 유인기 및 무인기 동기화 스폰 로직
+        # ---------------------------------------------------------
+        observer_spawned = False
+        base_x, base_y = 0.0, 0.0
+
+        # 1. 유인기 스폰 (기지 중앙 좌표를 훔쳐옴)
+        for agent, name in zip(self.agents_list, self.agents):
+            if "observer" in name:
+                agent.reset()
+                
+                # 1) World에 있는 기지(Base)의 화면 좌표를 수학 좌표로 변환해 가져옴
+                [base_world_x, base_world_y] = game_ref_to_world_ref(self.world.base.center, self.area)
+                
+                agent.x = base_world_x
+                agent.y = base_world_y
+                agent.z = 5.0
+                
+                # 2) 시각적 껍데기도 기지(Base) 정중앙에 완벽하게 일치시킴
+                agent.rect.center = self.world.base.center
+                agent.sync_pose_state()
+                
+                base_x, base_y = agent.x, agent.y
+                observer_spawned = True
+                break
+
+        # 2. 무인기 스폰 (유인기를 중심으로 호위 대형)
+        drone_offsets = [(0, 50), (-50, -50), (50, -50), (0, -50)]
+        drone_idx = 0
+        
         for agent, name in zip(self.agents_list, self.agents):
             if "drone" in name:
-                self.world.spawn_asset(agent, self.agents_list, avoid_world_obstacles=True, set_real_coordinates=True)
-            elif "observer" in name:
-                self.world.spawn_asset(agent, self.agents_list, avoid_world_obstacles=False, set_real_coordinates=True)
-            agent.reset()
+                agent.reset()
+                
+                if observer_spawned:
+                    agent.x = base_x + drone_offsets[drone_idx % len(drone_offsets)][0]
+                    agent.y = base_y + drone_offsets[drone_idx % len(drone_offsets)][1]
+                    agent.z = 5.0
+                    
+                    rect_pos = world_ref_to_game_ref([agent.x, agent.y], self.area)
+                    agent.rect.centerx = rect_pos[0]
+                    agent.rect.centery = rect_pos[1]
+                else:
+                    self.world.spawn_asset(agent, self.agents_list, avoid_world_obstacles=True, set_real_coordinates=True)
+                agent.sync_pose_state()
+                
+                drone_idx += 1
 
         self.terminate = False
         self.collided = False
         self.truncate = False
 
         self.num_frames = 0
-        self.old_dist_to_goal = 1000
-
         self.reinit()
 
         self.time = 1
@@ -384,10 +431,6 @@ class HeMAC:
             self.screen = pygame.Surface((self.s_width, self.s_height))
         if self.render_mode is not None:
             self.render()
-        
-        self.min_drone_dist = 99999.0
-        self.min_obs_dist = 99999.0
-        self.explored_grids = set()
 
     def close(self):
         """Close the environment."""
@@ -433,155 +476,150 @@ class HeMAC:
             agent.draw(self.screen)
         for goal in self.goals:
             goal.draw(self.screen)
+    def count_nearby_drones(self, agent, radius=100):
+        """특정 에이전트 주변의 드론 수를 셉니다."""
+        count = 0
+        for name, other_agent in zip(self.agents, self.agents_list):
+            if "drone" in name and other_agent != agent:
+                # 유클리드 거리 계산
+                d = math.sqrt((agent.x - other_agent.x)**2 + (agent.y - other_agent.y)**2)
+                if d < radius:
+                    count += 1
+        return count
+
+    def get_primary_observer(self):
+        """Return the first observer in the environment."""
+        for name, agent in zip(self.agents, self.agents_list):
+            if "observer" in name:
+                return agent
+        return None
 
     def step(self, action, active_agent):
         """Execute a step."""
         if active_agent == self.agents[0]:
             self.global_reward = 0
-        found_goal = False
+            
         reward = 0
-
         agent = self.agents_list[self.agent_name_mapping[active_agent]]
+        observer = self.get_primary_observer()
+        
+        # 1. 에이전트 업데이트 및 맵 이탈 체크
         agent.update(self.area, self.world, action)
+        
+        # [안전 로직] 즉시 맵 이탈 확인
+        if agent.out_of_bound:
+            self.collided = True
+            reward -= 20
+            self.terminate = True
 
-        # Update position and uncertainty of objectives
+        # 목표 이동 (오브젝트 이동)
         for goal in self.goals:
             goal.move(self.world.obstacles, self.search_area)
 
         # ---------------------------------------------------------
-        # [수정] 무인기(Drone) 로직: 정찰 및 위험 회피
+        # [협업 로직] 역할별 보상 부여
         # ---------------------------------------------------------
-        if "drone" in active_agent:
-            # 맵 이탈 및 장애물 충돌 시 드론 개별 페널티 (에피소드 종료 안함)
-            if agent.out_of_bound:
-                reward -= 20 
-            elif not self.search_area.covers(Point((agent.x, agent.y))):
-                reward -= 10
-            else:
-                for obstacle in self.world.obstacles:
-                    if agent.process_collision(obstacle, 0):
-                        reward -= 20
+        
+        # Drone
+        if "drone" in active_agent and not self.collided:
+            if agent.is_newly_explored(self.explored_grids):
+                reward += 0.02
+                self.explored_grids.add(
+                    (int(agent.x // 20), int(agent.y // 20))
+                )
 
-            # 정찰 로직: 무인기가 목표를 시야에 넣었을 때
-            for goal in self.goals[:]:
-                if dist(goal.x, goal.y, agent.x, agent.y) < agent.sensing_range:
-                    # 무한 보상 획득(Hovering 꼼수) 방지: 한 번 정찰한 목표는 보상 제외
-                    if not getattr(goal, "detected_by_drone", False):
-                        found_goal = True
-                        self.global_reward += 10 # 정찰 성공 공동 보상
-                        goal.detected_by_drone = True # 상태 깃발 추가 (기존 리셋 로직 제거)
+            if observer is not None:
+                observer_dist = dist(observer.x, observer.y, agent.x, agent.y)
+                if 60 <= observer_dist <= 180:
+                    reward += 0.03
+                else:
+                    reward -= min(abs(observer_dist - 120) * 0.0005, 0.05)
+                agent.last_observer_distance = observer_dist
 
-            # ---------------------------------------------------------
-            # [추가 1] 분산 (Dispersion) 페널티: 드론끼리 넓게 퍼지도록 유도
-            # ---------------------------------------------------------
-            # 가정: 모든 에이전트 객체를 self.world.agents(또는 self.agents.values())로 순회 가능
-            for other_name, other in zip(self.agents, self.agents_list):
-                if other != agent and "drone" in other_name:
-                    dist_to_other = dist(agent.x, agent.y, other.x, other.y)
-                    if dist_to_other < agent.sensing_range:
-                        # 0.5는 매 스텝 적용되기엔 너무 큽니다. 확 줄여줍니다.
-                        reward -= 0.05
-
-            # ---------------------------------------------------------
-            # [추가 2] 목표 접근 셰이핑 보상 & 기존 정찰 로직
-            # ---------------------------------------------------------
-            for goal in self.goals[:]:
-                current_dist = dist(goal.x, goal.y, agent.x, agent.y)
-
-                self.min_drone_dist = min(self.min_drone_dist, current_dist)
-                self.explored_grids.add((int(agent.x // 20), int(agent.y // 20)))
-
-                if hasattr(agent, "old_dist_to_goal"):
-                    if current_dist < agent.old_dist_to_goal:
-                        reward += 0.1  # 전진 시 칭찬
+            min_current_dist = min(
+                [dist(goal.x, goal.y, agent.x, agent.y)
+                for goal in self.goals]
+            )
+            self.min_drone_dist = min(
+                self.min_drone_dist,
+                min_current_dist
+            )
+            for goal in self.goals:
+                d = dist(goal.x, goal.y, agent.x, agent.y)
+                if d < agent.sensing_range:
+                    goal.detected = True
+                    self.world.goal_known = True
+                    self.world.observer_communication = [goal.x, goal.y]
+                    if not goal.detected_by_drone:
+                        goal.detected_by_drone = True
+                        reward += 5.0
+                        self.global_reward += 15.0
                     else:
-                        # 멀어질 때의 페널티는 아예 없애거나 아주 작게(0.01) 설정합니다.
-                        # 제자리 맴돌기를 방지하려면 Time Penalty (매 스텝 -0.01) 정도만 주는 것이 낫습니다.
-                        reward -= 0.01 
-                
-                agent.old_dist_to_goal = current_dist
+                        reward += 0.02
 
-                # (기존 로직) 정찰 로직: 무인기가 목표를 시야에 넣었을 때
-                if current_dist < agent.sensing_range:
-                    if not getattr(goal, "detected_by_drone", False):
-                        found_goal = True
-                        self.global_reward += 10 # 정찰 성공 공동 보상
-                        goal.detected_by_drone = True # 상태 깃발 추가
+        # =========================================================
+        # Observer : 최종 도착 담당
+        # =========================================================
+        elif "observer" in active_agent and not self.collided:
+            actual_min_dist = min(
+                [dist(goal.x, goal.y, agent.x, agent.y)
+                for goal in self.goals]
+            )
+            self.min_obs_dist = min(
+                self.min_obs_dist,
+                actual_min_dist
+            )
 
-        # ---------------------------------------------------------
-        # [수정] 유인기(Observer) 로직: 안전한 목적지 도달
-        # ---------------------------------------------------------
+            reward -= 0.005
+            reward += 0.02 * self.count_nearby_drones(agent, radius=180)
 
-        # 이미 밝혀진 경로로 이동하기.
-        elif "observer" in active_agent:
-            if agent.out_of_bound:
-                self.collided = True
-                reward -= 10
+            if self.world.goal_known:
+                goal_x, goal_y = self.world.observer_communication
+                current_dist = dist(goal_x, goal_y, agent.x, agent.y)
+
+                if agent.last_goal_distance is None:
+                    agent.last_goal_distance = current_dist
+                else:
+                    delta = agent.last_goal_distance - current_dist
+                    if delta > 0:
+                        reward += delta * 0.08
+                    else:
+                        reward -= abs(delta) * 0.04
+                    agent.last_goal_distance = current_dist
+
+                if current_dist < 50:
+                    self.found_goal = True
+                    self.global_reward += 100
+                    self.terminate = True
             else:
-                for obstacle in self.world.obstacles:
-                    if agent.process_collision(obstacle, 0):
-                        self.collided = True
-                        reward -= 20
-                        break
-                
-                # ---------------------------------------------------------
-                # [추가] 거리 기반 셰이핑 보상 (Reward Shaping)
-                # ---------------------------------------------------------
-                for goal in self.goals[:]:
-                    current_dist = dist(goal.x, goal.y, agent.x, agent.y)
+                agent.last_goal_distance = None
 
-                    self.min_obs_dist = min(self.min_obs_dist, current_dist)
-                    
-                    # 목적지에 가까워질수록 보상 부여 (멀어지면 페널티)
-                    # 이전 스텝과의 거리 차이를 이용해 전진할 때마다 보상을 줍니다.
-                    if hasattr(self, "old_dist_to_goal"):
-                        if current_dist < self.old_dist_to_goal:
-                            reward += 0.5  # 가깝게 잘 다가가면 칭찬
-                        else:
-                            reward -= 0.01  # 멀어지면 페널티
-                    
-                    self.old_dist_to_goal = current_dist # 거리 갱신
-
-                    # 유인기 목표 도달 시 에피소드 성공 종료 (기존 코드)
-                    if current_dist < 50: 
-                        found_goal = True
-                        self.terminate = True 
-                        self.global_reward += 50 
-                        break
-
-        # 개별 보상 부여
+        # 최종 보상 합산
         self.rewards[active_agent] = reward
 
-        # ---------------------------------------------------------
-        # 에피소드 종료 조건 판별
-        # ---------------------------------------------------------
+        # 에피소드 종료/Truncation 처리
         if agent == self.agents_list[-1]:
-            # 유인기가 충돌했거나 맵을 벗어나면 실패 종료
             if self.collided:
                 self.terminate = True
 
             self.world.update(self.area)
-
             if not self.terminate:
                 self.num_frames += 1
                 self.truncate = self.num_frames >= self.max_cycles
 
-            # 에이전트들에게 보상 분배 및 종료 신호 전송
-            for i, ag in enumerate(self.agents):
+            for ag in self.agents:
                 self.rewards[ag] += self.global_reward
                 self.terminations[ag] = self.terminate
                 self.truncations[ag] = self.truncate
-                self.infos[ag] = {"success": found_goal, "fatal_crash": self.collided}
-            
-            for a in self.agents:
-                if a in self.infos:
-                    self.infos[a]["min_obs_dist"] = float(self.min_obs_dist)
-                    self.infos[a]["min_drone_dist"] = float(self.min_drone_dist)
-                    self.infos[a]["explored_area"] = float(len(self.explored_grids) * 400)
-                    print(f'float(self.min_obs_dist): {float(self.min_obs_dist)}')
-                    print(f'float(self.min_drone_dist): {float(self.min_drone_dist)}')
-                    print(f'float(len(self.explored_grids) * 400): {float(len(self.explored_grids) * 400)}')
-
+                
+                # [수정] 아래와 같이 metric들을 딕셔너리에 다시 포함시켜야 합니다.
+                self.infos[ag] = {
+                    "success": self.found_goal, 
+                    "fatal_crash": self.collided,
+                    "min_drone_dist": self.min_drone_dist,
+                    "min_obs_dist": self.min_obs_dist,
+                    "explored_area": len(self.explored_grids) * 400
+                }
 
 def env(**kwargs):
     """Env."""

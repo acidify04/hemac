@@ -44,7 +44,8 @@ class World(pygame.sprite.Sprite):
         self.time_factor = time_factor
         self.timestep = 0
         self.simulation_start_time = datetime.now(UTC).timestamp()  # set to current timestamp
-        self.observer_communication = [0, 0]
+        self.observer_communication = [0.0, 0.0]
+        self.goal_known = False
 
         # Road network data TODO: random generation
         nodes = {
@@ -65,18 +66,20 @@ class World(pygame.sprite.Sprite):
     def reset(self, poi_list, seed=None, options=None):
         """Reset world."""
         self.timestep = 0
-        self.observer_communication = [self.search_area.centroid.x, self.search_area.centroid.y]
-        collision = True
-        while collision:
-            self.base.center = world_ref_to_game_ref(
-                sample_point_in_polygon(self.search_area, self.randomizer), self.area
-            )
-            for start_id, end_id in self.roads["edges"]:
-                start = world_ref_to_game_ref(self.roads["nodes"][start_id], self.area)
-                end = world_ref_to_game_ref(self.roads["nodes"][end_id], self.area)
-                collision = self.base.clipline(start, end)
-                if collision:
-                    break
+        self.observer_communication = [0.0, 0.0]
+        self.goal_known = False
+        self.base.center = (150, 150)
+        # collision = True
+        # while collision:
+        #     self.base.center = world_ref_to_game_ref(
+        #         sample_point_in_polygon(self.search_area, self.randomizer), self.area
+        #     )
+        #     for start_id, end_id in self.roads["edges"]:
+        #         start = world_ref_to_game_ref(self.roads["nodes"][start_id], self.area)
+        #         end = world_ref_to_game_ref(self.roads["nodes"][end_id], self.area)
+        #         collision = self.base.clipline(start, end)
+        #         if collision:
+        #             break
         # TODO: re spawn base, roads and obstacles here?
 
     def clear_obstacles(self):

@@ -4,7 +4,7 @@ from ray.rllib.algorithms.algorithm import Algorithm
 from ray.tune.registry import register_env
 from ray.rllib.env.wrappers.pettingzoo_env import PettingZooEnv
 from hemac import HeMAC_v0
-
+import time
 def run_trained_model_simulation():
     # 1. Ray 및 가상환경 내 초기화
     ray.init(ignore_reinit_error=True)
@@ -19,9 +19,11 @@ def run_trained_model_simulation():
             "drone_config": {
                 "drone_max_speed": 25,
                 "drone_max_thrust": 8,
-                "drones_starting_pos": [], 
+                # 수정 예시
+                "drones_starting_pos": [[0.0, 0.0, 0.0],[0.0, 0.0, 0.0],[0.0, 0.0, 0.0]],
             },
-            "max_obstacles": 5,
+            "min_obstacles": 0,
+            "max_obstacles": 0,
             "poi_config": [{"speed": 0}],
         }
         env = HeMAC_v0.env(**train_env_config)
@@ -32,7 +34,7 @@ def run_trained_model_simulation():
 
     # 2. 저장된 체크포인트로부터 알고리즘(모델) 로드
     # 저장된 폴더 경로를 지정합니다. (예: ./hemac_checkpoints 하위의 실제 체크포인트 폴더)
-    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints")
+    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_00300")
     print(f"[{checkpoint_path}] 경로에서 학습된 모델을 불러오는 중...")
     algo = Algorithm.from_checkpoint(checkpoint_path)
 
@@ -52,7 +54,8 @@ def run_trained_model_simulation():
         },
         
         # 맵 및 목적지 설정
-        "max_obstacles": 5,
+        "min_obstacles": 0,
+        "max_obstacles": 0,
         "poi_config": [{"speed": 0}],
         
         # [핵심] 화면 시각화 활성화
@@ -73,7 +76,25 @@ def run_trained_model_simulation():
             return "drone_policy"
         return None
 
-    # 5. 모델 기반 상호작용 루프 (사용자 제공 뼈대 유기적 수정)
+
+    print("AI 모델을 끄고 모든 에이전트가 무작위로 움직입니다.")
+    
+    # for agent in env.agent_iter():
+    #     observation, reward, termination, truncation, info = env.last()
+    #     if termination or truncation:
+    #         action = None
+    #     else:
+    #         # this is where you would insert your policy
+    #         action = env.action_space(agent).sample()
+    #     env.step(action)
+    #     env.render()
+    #     time.sleep(0.01)
+    #     # env.close()
+    # time.sleep(2)
+    # env.close()
+    # ray.shutdown()
+    # ray.shutdown()
+    # # 5. 모델 기반 상호작용 루프 (사용자 제공 뼈대 유기적 수정)
     for agent in env.agent_iter():
         observation, reward, termination, truncation, info = env.last()
         
@@ -95,9 +116,12 @@ def run_trained_model_simulation():
                 action = env.action_space(agent).sample()
                 
         env.step(action)
+        env.render()
+        time.sleep(0.01)
         
+    time.sleep(2)
     env.close()
-    ray.shutdown()
+    # ray.shutdown()
 
 if __name__ == "__main__":
     run_trained_model_simulation()

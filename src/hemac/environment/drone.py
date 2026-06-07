@@ -160,19 +160,28 @@ class Drone(BaseAgent):
         """
         action space: [wanted vx, wanted vy, recharge] where recharge is mapped to a bool for trying to recharge.
         """
-        self.observation_space = gymnasium.spaces.Box(low=-10000, high=10000, shape=(9 + self.number_of_drones * 2,))
+        self.observation_space = gymnasium.spaces.Box(
+            low=-10000, high=10000, shape=(17 + self.number_of_drones * 2,)
+        )
         """
-        observation space: [x, y, charge, x_base, y_base, d1.. d4, agents_rel_pos] where
+        observation space: [x, y, charge, x_base, y_base, obs_x, obs_y, d1.. d4, agents_rel_pos] where
         [x,y] are the relative coordinates (capped at 100) communicated by the observer,
         [x_base y_base] are the relative coordinates to the base center, and charge is its own charge level.
+        [obs_x, obs_y] is the relative observer position,
         [d1, d2, d3, d4] are the sensed distances to obstacles or boundaries
         in the East-North-West-South directions (capped to sensing_range),
         agent_rel_pos is a list of the relative [x,y] positions of the other drones in this form: [x1, y1, x2, y2, ...]
+        the final 6 values are the recent trajectory.
         """
         self.charge_level = self.max_charge
         self.charging = False
         self.charging_point = (0, 0)
         self.goto_pos = [0, 0]
+
+        self.trajectory_len = 3
+        self.trajectory = []
+        self.last_goal_distance = None
+        self.last_observer_distance = None
 
         self.is_broken = False
 
@@ -183,8 +192,26 @@ class Drone(BaseAgent):
         self.out_of_bound = False
         self.carried_targets = 0
         self.is_broken = False
+        self.vx = 0.0
+        self.vy = 0.0
+        self.accel_x = 0.0
+        self.accel_y = 0.0
+        self.orientation = 0.0
+        self.goto_pos = [0, 0]
+        self.trajectory = []
+        self.last_goal_distance = None
+        self.last_observer_distance = None
+
+    def sync_pose_state(self):
+        """Sync state derived from the current spawn pose."""
+        self.trajectory = [(self.x, self.y)] * self.trajectory_len
         self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
 
+    def is_newly_explored(self, explored_grids):
+        """탐색되지 않은 새로운 영역인지 확인합니다."""
+        grid_key = (int(self.x // 20), int(self.y // 20))
+        return grid_key not in explored_grids
+    
     def draw(self, screen):
         """Draw drone."""
         # draw drone UI representation (not necessary accurate to real drone dimensions)
@@ -225,93 +252,99 @@ class Drone(BaseAgent):
         if self.discrete_action_space:
             action = self.discrete_to_continuous(action)
 
-        if action[2] > 0:  # drone tries to recharge
-            self.closest_point_in_base = closest_point_in_rect(world.base, self.rect.center)
-            can_charge = self.charging_distance > dist(
-                self.rect.x,
-                self.rect.y,
-                self.closest_point_in_base[0],
-                self.closest_point_in_base[1],
-            )
-            if can_charge:
-                if (self.closest_point_in_base == self.rect.center).all():
-                    self.charging_point = world.base.center
-                else:
-                    self.charging_point = self.closest_point_in_base  # game ref
-                self.charging = True
-                self.charge_level += 9
-                if self.charge_level > self.max_charge:
-                    self.charge_level = self.max_charge
-                # print("charging at base!")
-            else:  # check if provisioner near
-                for id, coords in world.provisioners.items():
-                    if self.charging_distance > dist(self.x, self.y, coords[0], coords[1]):
-                        self.charging_point = world_ref_to_game_ref(coords, area)
-                        self.charging = True
-                        self.charge_level += 9
-                        if self.charge_level > self.max_charge:
-                            self.charge_level = self.max_charge
+        # if action[2] > 0:  # drone tries to recharge
+        #     self.closest_point_in_base = closest_point_in_rect(world.base, self.rect.center)
+        #     can_charge = self.charging_distance > dist(
+        #         self.rect.x,
+        #         self.rect.y,
+        #         self.closest_point_in_base[0],
+        #         self.closest_point_in_base[1],
+        #     )
+        #     if can_charge:
+        #         if (self.closest_point_in_base == self.rect.center).all():
+        #             self.charging_point = world.base.center
+        #         else:
+        #             self.charging_point = self.closest_point_in_base  # game ref
+        #         self.charging = True
+        #         self.charge_level += 9
+        #         if self.charge_level > self.max_charge:
+        #             self.charge_level = self.max_charge
+        #         # print("charging at base!")
+        #     else:  # check if provisioner near
+        #         for id, coords in world.provisioners.items():
+        #             if self.charging_distance > dist(self.x, self.y, coords[0], coords[1]):
+        #                 self.charging_point = world_ref_to_game_ref(coords, area)
+        #                 self.charging = True
+        #                 self.charge_level += 9
+        #                 if self.charge_level > self.max_charge:
+        #                     self.charge_level = self.max_charge
+        # else:
+        #     self.charging = False
+
+        # if not self.charging:  # drone wants to move (only if not currently charging)
+        #     if self.charge_level > 0:
+        #         self.charge_level -= 1
+        self.previous_accel = [self.accel_x, self.accel_y]
+
+        # compute target acceleration compensating for predicted drag (a = dV/dt + drag compensation)
+        self.accel_x = (action[0] - self.vx) / self.time_factor + 0.02 * action[0] * abs(action[0])
+        self.accel_y = (action[1] - self.vy) / self.time_factor + 0.02 * action[1] * abs(action[1])
+
+        # for position control
+        self.goto_pos = (int(self.rect.x + action[0]), int(self.rect.y - action[1]))
+
+        # compute achievable acceleration given max thrust
+        if np.linalg.norm([self.accel_x, self.accel_y]) > self.max_thrust:
+            self.accel_x = self.accel_x / np.linalg.norm([self.accel_x, self.accel_y]) * self.max_thrust
+            self.accel_y = self.accel_y / np.linalg.norm([self.accel_x, self.accel_y]) * self.max_thrust
+
+        # compute actual acceleration given drag and wind
+        self.accel_x -= 0.02 * self.vx * abs(self.vx) + self.randomizer.normal(0, 0.1)
+        self.accel_y -= 0.02 * self.vy * abs(self.vy) + self.randomizer.normal(0, 0.1)
+
+        # blend with previous acceleration to simulate delay
+        self.accel_x = 0.6 * self.accel_x + 0.4 * self.previous_accel[0]
+        self.accel_y = 0.6 * self.accel_y + 0.4 * self.previous_accel[1]
+
+        # update position using the exact method (assuming constant acceleration)
+        dx = self.vx * self.time_factor + 0.5 * self.accel_x * self.time_factor**2
+        dy = self.vy * self.time_factor + 0.5 * self.accel_y * self.time_factor**2
+
+        # move and update pygame coordinates
+        self.x += dx
+        self.y += dy
+        self.trajectory.append((self.x, self.y))
+        if len(self.trajectory) > self.trajectory_len:
+            self.trajectory.pop(0)
+
+        newpos = self.rect.copy()
+        rect_pos = world_ref_to_game_ref([self.x, self.y], world.area)
+        newpos.centerx = rect_pos[0]
+        newpos.centery = rect_pos[1]
+
+        # make sure the players stay inside the screen
+        if area.contains(newpos):
+            self.rect = newpos
         else:
-            self.charging = False
+            self.rect = newpos
+            self.out_of_bound = True
 
-        if not self.charging:  # drone wants to move (only if not currently charging)
-            if self.charge_level > 0:
-                self.charge_level -= 1
-                self.previous_accel = [self.accel_x, self.accel_y]
-
-                # compute target acceleration compensating for predicted drag (a = dV/dt + drag compensation)
-                self.accel_x = (action[0] - self.vx) / self.time_factor + 0.02 * action[0] * abs(action[0])
-                self.accel_y = (action[1] - self.vy) / self.time_factor + 0.02 * action[1] * abs(action[1])
-
-                # for position control
-                self.goto_pos = (int(self.rect.x + action[0]), int(self.rect.y - action[1]))
-
-                # compute achievable acceleration given max thrust
-                if np.linalg.norm([self.accel_x, self.accel_y]) > self.max_thrust:
-                    self.accel_x = self.accel_x / np.linalg.norm([self.accel_x, self.accel_y]) * self.max_thrust
-                    self.accel_y = self.accel_y / np.linalg.norm([self.accel_x, self.accel_y]) * self.max_thrust
-
-                # compute actual acceleration given drag and wind
-                self.accel_x -= 0.02 * self.vx * abs(self.vx) + self.randomizer.normal(0, 0.1)
-                self.accel_y -= 0.02 * self.vy * abs(self.vy) + self.randomizer.normal(0, 0.1)
-
-                # blend with previous acceleration to simulate delay
-                self.accel_x = 0.6 * self.accel_x + 0.4 * self.previous_accel[0]
-                self.accel_y = 0.6 * self.accel_y + 0.4 * self.previous_accel[1]
-
-                # update position using the exact method (assuming constant acceleration)
-                dx = self.vx * self.time_factor + 0.5 * self.accel_x * self.time_factor**2
-                dy = self.vy * self.time_factor + 0.5 * self.accel_y * self.time_factor**2
-
-                # move and update pygame coordinates
-                self.x += dx
-                self.y += dy
-                newpos = self.rect.copy()
-                rect_pos = world_ref_to_game_ref([self.x, self.y], world.area)
-                newpos.centerx = rect_pos[0]
-                newpos.centery = rect_pos[1]
-
-                # make sure the players stay inside the screen
-                if area.contains(newpos):
-                    self.rect = newpos
-                else:
-                    self.rect = newpos
-                    self.out_of_bound = True
-
-                # update velocity
-                self.vx = self.vx + self.accel_x * self.time_factor
-                self.vy = self.vy + self.accel_y * self.time_factor
-                # LOGGER.info(f"Velocity: {round((self.vx ** 2 + self.vy ** 2) ** 0.5)} m/s, Pos: {[self.x, self.y]}")
-            else:
-                # print("drone has no energy!")
-                pass
+        # update velocity
+        self.vx = self.vx + self.accel_x * self.time_factor
+        self.vy = self.vy + self.accel_y * self.time_factor
+            # LOGGER.info(f"Velocity: {round((self.vx ** 2 + self.vy ** 2) ** 0.5)} m/s, Pos: {[self.x, self.y]}")
+        # else:
+        #     # print("drone has no energy!")
+        #     pass
 
         self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
 
     def discrete_to_continuous(self, action):
         """Convert discrete action to box space."""
+        # if action == 0:
+        #     out = [0, 0, 1]
         if action == 0:
-            out = [0, 0, 1]
+            out = [0, 0, 0]
         elif action == 1:
             out = [10, 10, 0]
         elif action == 2:
@@ -344,25 +377,48 @@ class Drone(BaseAgent):
 
     def observe(self, world, agents, poi) -> np.array:
         """Observe the world."""
-        # goal and base observation
-        goal_x, goal_y = world.observer_communication
-        to_goal_x = np.clip((goal_x - self.x), -50, 50)
-        to_goal_y = np.clip((goal_y - self.y), -50, 50)
+        if world.goal_known:
+            goal_x, goal_y = world.observer_communication
+            to_goal_x = np.clip((goal_x - self.x), -50, 50)
+            to_goal_y = np.clip((goal_y - self.y), -50, 50)
+        else:
+            to_goal_x = 0.0
+            to_goal_y = 0.0
 
         base_x, base_y = game_ref_to_world_ref(world.base.center, world.area)
         to_base_x = np.clip((base_x - self.x), -50, 50)
         to_base_y = np.clip((base_y - self.y), -50, 50)
 
-        # boundary observation
+        observer = next((agent for agent in agents if agent.__class__.__name__ == "Observer"), None)
+        if observer is not None:
+            to_observer_x = np.clip((observer.x - self.x), -100, 100)
+            to_observer_y = np.clip((observer.y - self.y), -100, 100)
+        else:
+            to_observer_x = 0.0
+            to_observer_y = 0.0
+
         distances = self.obstacles_in_quadrants(Point(self.x, self.y), world.search_area, world.obstacles)
 
-        # swarm observation
         agents_rel_pos = [
             coord for agent in agents if isinstance(agent, Drone) for coord in (agent.x - self.x, agent.y - self.y)
         ]
+        traj_obs = []
+        for pos in self.trajectory:
+            traj_obs.extend([pos[0], pos[1]])
 
-        obs = np.array([to_goal_x, to_goal_y, self.charge_level / self.max_charge, to_base_x, to_base_y], np.float32)
-        obs = np.concatenate((obs, distances, agents_rel_pos), dtype=np.float32)
+        obs = np.array(
+            [
+                to_goal_x,
+                to_goal_y,
+                self.charge_level / self.max_charge,
+                to_base_x,
+                to_base_y,
+                to_observer_x,
+                to_observer_y,
+            ],
+            np.float32,
+        )
+        obs = np.concatenate((obs, distances, agents_rel_pos, traj_obs), dtype=np.float32)
         return obs
 
     def obstacles_in_quadrants(self, point, area, obstacles):
