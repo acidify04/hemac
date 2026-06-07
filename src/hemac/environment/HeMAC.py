@@ -201,6 +201,14 @@ class HeMAC:
                 )
             )
 
+        self.exploration_cell_size = 20
+        self.observer_exploration_cell_size = 30
+        self.search_grid_rects = self._build_search_grid_cache(self.exploration_cell_size)
+        self.search_grid_centers = {
+            key: ((key[0] + 0.5) * self.exploration_cell_size, (key[1] + 0.5) * self.exploration_cell_size)
+            for key in self.search_grid_rects
+        }
+
         # init POI
         if poi_spawn_range is None:
             minx, miny, maxx, maxy = self.search_area.bounds
@@ -345,6 +353,7 @@ class HeMAC:
         """Reset the environment."""
         # reset goals
         self.explored_grids = set() # 이거 안 지우면 다음 에피소드에서 정찰 보상 다 뺏김
+        self.observer_explored_grids = set()
         self.min_drone_dist = 99999.0 # 거리 초기화 필수
         self.min_obs_dist = 99999.0
         self.found_goal = False
@@ -468,10 +477,57 @@ class HeMAC:
         state = np.array([0, 0])
         return state
 
+    def _build_search_grid_cache(self, cell_size):
+        """Build a cache of renderable search-area grid cells."""
+        minx, miny, maxx, maxy = self.search_area.bounds
+        grid_rects = {}
+        for gx in range(int(minx // cell_size), int(maxx // cell_size) + 1):
+            for gy in range(int(miny // cell_size), int(maxy // cell_size) + 1):
+                world_center = ((gx + 0.5) * cell_size, (gy + 0.5) * cell_size)
+                if not self.search_area.covers(Point(world_center)):
+                    continue
+                world_top_left = (gx * cell_size, (gy + 1) * cell_size)
+                game_top_left = world_ref_to_game_ref(world_top_left, self.area)
+                grid_rects[(gx, gy)] = pygame.Rect(
+                    int(game_top_left[0]),
+                    int(game_top_left[1]),
+                    cell_size,
+                    cell_size,
+                )
+        return grid_rects
+
+    def draw_exploration_overlay(self):
+        """Draw explored vs unexplored search cells."""
+        overlay = pygame.Surface(self.area.size, pygame.SRCALPHA)
+        unexplored_color = (38, 57, 84, 60)
+        explored_color = (76, 196, 120, 110)
+        outline_color = (220, 235, 255, 25)
+
+        for grid_key, rect in self.search_grid_rects.items():
+            cell_color = explored_color if grid_key in self.explored_grids else unexplored_color
+            pygame.draw.rect(overlay, cell_color, rect)
+            pygame.draw.rect(overlay, outline_color, rect, width=1)
+
+        self.screen.blit(overlay, (0, 0))
+
+        legend_font = pygame.font.SysFont("Trebuchet MS", 16)
+        legend_bg = pygame.Surface((170, 58), pygame.SRCALPHA)
+        legend_bg.fill((8, 12, 16, 150))
+        self.screen.blit(legend_bg, (12, 40))
+
+        pygame.draw.rect(self.screen, explored_color, pygame.Rect(22, 50, 18, 18))
+        pygame.draw.rect(self.screen, unexplored_color, pygame.Rect(22, 74, 18, 18))
+
+        explored_label = legend_font.render("explored", True, (240, 248, 255))
+        unexplored_label = legend_font.render("unexplored", True, (240, 248, 255))
+        self.screen.blit(explored_label, (48, 50))
+        self.screen.blit(unexplored_label, (48, 74))
+
     def draw(self):
         """Draw the environment."""
         pygame.event.pump()
         self.world.draw(self.screen)
+        self.draw_exploration_overlay()
         for agent in self.agents_list:
             agent.draw(self.screen)
         for goal in self.goals:
@@ -487,12 +543,57 @@ class HeMAC:
                     count += 1
         return count
 
+    def drone_spacing_penalty(self, agent, radius=90):
+        """Return a penalty when drones bunch up too tightly."""
+        penalty = 0.0
+        for name, other_agent in zip(self.agents, self.agents_list):
+            if "drone" not in name or other_agent == agent:
+                continue
+            separation = dist(agent.x, agent.y, other_agent.x, other_agent.y)
+            if separation < radius:
+                penalty += 0.03
+        return penalty
+
+    def get_drone_exploration_cells(self, agent):
+        """Return exploration-grid cells covered by a drone's circular sensing range."""
+        cell_size = self.exploration_cell_size
+        min_gx = int((agent.x - agent.sensing_range) // cell_size)
+        max_gx = int((agent.x + agent.sensing_range) // cell_size)
+        min_gy = int((agent.y - agent.sensing_range) // cell_size)
+        max_gy = int((agent.y + agent.sensing_range) // cell_size)
+        sensing_range_sq = agent.sensing_range ** 2
+
+        covered_cells = set()
+        for gx in range(min_gx, max_gx + 1):
+            for gy in range(min_gy, max_gy + 1):
+                grid_key = (gx, gy)
+                if grid_key not in self.search_grid_centers:
+                    continue
+                center_x, center_y = self.search_grid_centers[grid_key]
+                if (center_x - agent.x) ** 2 + (center_y - agent.y) ** 2 <= sensing_range_sq:
+                    covered_cells.add(grid_key)
+        return covered_cells
+
     def get_primary_observer(self):
         """Return the first observer in the environment."""
         for name, agent in zip(self.agents, self.agents_list):
             if "observer" in name:
                 return agent
         return None
+
+    def finalize_episode(self):
+        """Propagate the current end-of-episode state to every agent."""
+        for ag in self.agents:
+            self.rewards[ag] += self.global_reward
+            self.terminations[ag] = self.terminate
+            self.truncations[ag] = self.truncate
+            self.infos[ag] = {
+                "success": self.found_goal,
+                "fatal_crash": self.collided,
+                "min_drone_dist": self.min_drone_dist,
+                "min_obs_dist": self.min_obs_dist,
+                "explored_area": len(self.explored_grids) * 400,
+            }
 
     def step(self, action, active_agent):
         """Execute a step."""
@@ -511,6 +612,9 @@ class HeMAC:
             self.collided = True
             reward -= 20
             self.terminate = True
+            self.rewards[active_agent] = reward
+            self.finalize_episode()
+            return
 
         # 목표 이동 (오브젝트 이동)
         for goal in self.goals:
@@ -522,19 +626,29 @@ class HeMAC:
         
         # Drone
         if "drone" in active_agent and not self.collided:
-            if agent.is_newly_explored(self.explored_grids):
-                reward += 0.02
-                self.explored_grids.add(
-                    (int(agent.x // 20), int(agent.y // 20))
-                )
+            covered_cells = self.get_drone_exploration_cells(agent)
+            new_cells = covered_cells - self.explored_grids
+            if new_cells:
+                reward += min(0.004 * len(new_cells), 0.15)
+                self.explored_grids.update(covered_cells)
 
             if observer is not None:
                 observer_dist = dist(observer.x, observer.y, agent.x, agent.y)
-                if 60 <= observer_dist <= 180:
-                    reward += 0.03
+                if self.world.goal_known:
+                    if 80 <= observer_dist <= 180:
+                        reward += 0.02
+                    else:
+                        reward -= min(abs(observer_dist - 130) * 0.0004, 0.03)
                 else:
-                    reward -= min(abs(observer_dist - 120) * 0.0005, 0.05)
+                    if 140 <= observer_dist <= 280:
+                        reward += 0.01
+                    elif observer_dist < 90:
+                        reward -= 0.05
+                    elif observer_dist > 340:
+                        reward -= 0.02
                 agent.last_observer_distance = observer_dist
+
+            reward -= self.drone_spacing_penalty(agent)
 
             min_current_dist = min(
                 [dist(goal.x, goal.y, agent.x, agent.y)
@@ -571,9 +685,9 @@ class HeMAC:
             )
 
             reward -= 0.005
-            reward += 0.02 * self.count_nearby_drones(agent, radius=180)
 
             if self.world.goal_known:
+                reward += 0.01 * self.count_nearby_drones(agent, radius=220)
                 goal_x, goal_y = self.world.observer_communication
                 current_dist = dist(goal_x, goal_y, agent.x, agent.y)
 
@@ -593,6 +707,28 @@ class HeMAC:
                     self.terminate = True
             else:
                 agent.last_goal_distance = None
+                observer_grid = (
+                    int(agent.x // self.observer_exploration_cell_size),
+                    int(agent.y // self.observer_exploration_cell_size),
+                )
+                if observer_grid not in self.observer_explored_grids:
+                    self.observer_explored_grids.add(observer_grid)
+                    reward += 0.05
+
+                base_x, base_y = game_ref_to_world_ref(self.world.base.center, self.area)
+                base_dist = dist(base_x, base_y, agent.x, agent.y)
+                if agent.last_base_distance is None:
+                    agent.last_base_distance = base_dist
+                else:
+                    delta_base = base_dist - agent.last_base_distance
+                    if delta_base > 0 and base_dist < 320:
+                        reward += delta_base * 0.01
+                    elif delta_base < 0 and base_dist < 220:
+                        reward -= abs(delta_base) * 0.01
+                    agent.last_base_distance = base_dist
+
+                if base_dist < 120:
+                    reward -= 0.03
 
         # 최종 보상 합산
         self.rewards[active_agent] = reward
@@ -607,19 +743,7 @@ class HeMAC:
                 self.num_frames += 1
                 self.truncate = self.num_frames >= self.max_cycles
 
-            for ag in self.agents:
-                self.rewards[ag] += self.global_reward
-                self.terminations[ag] = self.terminate
-                self.truncations[ag] = self.truncate
-                
-                # [수정] 아래와 같이 metric들을 딕셔너리에 다시 포함시켜야 합니다.
-                self.infos[ag] = {
-                    "success": self.found_goal, 
-                    "fatal_crash": self.collided,
-                    "min_drone_dist": self.min_drone_dist,
-                    "min_obs_dist": self.min_obs_dist,
-                    "explored_area": len(self.explored_grids) * 400
-                }
+            self.finalize_episode()
 
 def env(**kwargs):
     """Env."""

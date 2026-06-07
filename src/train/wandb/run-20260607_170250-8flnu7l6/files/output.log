@@ -1,0 +1,20 @@
+학습 루프 시작...
+[36m(RolloutWorker pid=301446)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 598.0945862603245, 'min_obs_dist': 775.1700824430233, 'explored_area': 58000}
+[36m(RolloutWorker pid=301453)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 2.067166797370743, 'min_obs_dist': 49.844771637054045, 'explored_area': 28800}
+2026-06-07 17:02:51,926	WARNING sgd.py:55 -- DeprecationWarning: `_get_slice_indices` has been deprecated. This will raise an error in the future!
+
+--- Iteration 1 ---
+Mean Reward: 23.69
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 450.1115445718, 'min_drone_dist_min': 2.067166797370743, 'min_drone_dist_max': 926.8782260025228, 'min_obs_dist_mean': 482.23500725106686, 'min_obs_dist_min': 45.9351806455924, 'min_obs_dist_max': 968.0694930458457, 'explored_area_mean': 55180.0, 'explored_area_min': 28800.0, 'explored_area_max': 189600.0, 'success_rate_mean': 0.1, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.9, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 2 ---
+Mean Reward: 14.03
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 441.1704219486563, 'min_drone_dist_min': 2.067166797370743, 'min_drone_dist_max': 926.8782260025228, 'min_obs_dist_mean': 474.0968168236561, 'min_obs_dist_min': 45.9351806455924, 'min_obs_dist_max': 968.0694930458457, 'explored_area_mean': 57383.78378378379, 'explored_area_min': 28800.0, 'explored_area_max': 189600.0, 'success_rate_mean': 0.08108108108108109, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.918918918918919, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=301446)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 20.737574534438043, 'min_obs_dist': 336.37750367875503, 'explored_area': 78400}[32m [repeated 34x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#log-deduplication for more options.)[0m
+[36m(RolloutWorker pid=301457)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 88.05266194374583, 'min_obs_dist': 46.88522135671803, 'explored_area': 52000}[32m [repeated 2x across cluster][0m
+
+--- Iteration 3 ---
+Mean Reward: 15.73
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 420.80784917118245, 'min_drone_dist_min': 2.067166797370743, 'min_drone_dist_max': 926.8782260025228, 'min_obs_dist_mean': 466.8351596632321, 'min_obs_dist_min': 45.9351806455924, 'min_obs_dist_max': 968.0694930458457, 'explored_area_mean': 61480.0, 'explored_area_min': 28800.0, 'explored_area_max': 189600.0, 'success_rate_mean': 0.08, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.92, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=301446)[0m final_info1: {'success': True, 'fatal_crash': True, 'min_drone_dist': 373.941708685087, 'min_obs_dist': 49.086204646109735, 'explored_area': 140800}
+[36m(RolloutWorker pid=301457)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 39.882151018677135, 'min_obs_dist': 338.11889609723863, 'explored_area': 213200}

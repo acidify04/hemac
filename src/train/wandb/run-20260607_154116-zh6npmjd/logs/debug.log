@@ -17,3 +17,107 @@ config: {'exploration_config': {'type': 'StochasticSampling'}, 'extra_python_env
 2026-06-07 15:41:17,495 INFO    MainThread:50178 [wandb_run.py:_redirect():2428] Wrapping output streams.
 2026-06-07 15:41:17,495 INFO    MainThread:50178 [wandb_run.py:_redirect():2451] Redirects installed.
 2026-06-07 15:41:17,496 INFO    MainThread:50178 [wandb_init.py:init():1095] run started, returning control to user process
+2026-06-07 16:15:01,688 INFO    wandb-AsyncioManager-main:50178 [service_client.py:_forward_responses():122] Reached EOF.
+2026-06-07 16:15:01,689 INFO    wandb-AsyncioManager-main:50178 [mailbox.py:close():154] Closing mailbox, abandoning 1 handles.
+2026-06-07 16:15:02,715 ERROR   wandb-AsyncioManager-main:50178 [asyncio_manager.py:fn_wrap_exceptions():184] Uncaught exception in run_soon callback.
+Traceback (most recent call last):
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/asyncio_manager.py", line 182, in fn_wrap_exceptions
+    await fn()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/run_stopping.py", line 87, in loop
+    should_stop = await self._check_should_stop()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/run_stopping.py", line 115, in _check_should_stop
+    handle = await self._interface.deliver_async(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/interface/interface_sock.py", line 58, in deliver_async
+    handle = await self._client.deliver(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 57, in deliver
+    handle = self._mailbox.require_response(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/mailbox/mailbox.py", line 89, in require_response
+    raise MailboxClosedError()
+wandb.sdk.mailbox.mailbox.MailboxClosedError
+2026-06-07 16:15:03,560 ERROR   wandb-AsyncioManager-main:50178 [asyncio_manager.py:fn_wrap_exceptions():184] Uncaught exception in run_soon callback.
+Traceback (most recent call last):
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/asyncio_manager.py", line 182, in fn_wrap_exceptions
+    await fn()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 42, in publish
+    await self._send_server_request(request)
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 84, in _send_server_request
+    await self._drain_writer()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 92, in _drain_writer
+    await self._writer.drain()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/asyncio/streams.py", line 392, in drain
+    await self._protocol._drain_helper()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/asyncio/streams.py", line 166, in _drain_helper
+    raise ConnectionResetError('Connection lost')
+ConnectionResetError: Connection lost
+2026-06-07 16:15:04,353 ERROR   wandb-AsyncioManager-main:50178 [asyncio_manager.py:fn_wrap_exceptions():184] Uncaught exception in run_soon callback.
+Traceback (most recent call last):
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/asyncio_manager.py", line 182, in fn_wrap_exceptions
+    await fn()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 42, in publish
+    await self._send_server_request(request)
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 75, in _send_server_request
+    raise self._broken_exc.with_traceback(self._broken_tb)
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 84, in _send_server_request
+    await self._drain_writer()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 92, in _drain_writer
+    await self._writer.drain()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/asyncio/streams.py", line 392, in drain
+    await self._protocol._drain_helper()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/asyncio/streams.py", line 166, in _drain_helper
+    raise ConnectionResetError('Connection lost')
+ConnectionResetError: Connection lost
+2026-06-07 16:15:04,354 ERROR   wandb-AsyncioManager-main:50178 [asyncio_manager.py:fn_wrap_exceptions():184] Uncaught exception in run_soon callback.
+Traceback (most recent call last):
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/asyncio_manager.py", line 182, in fn_wrap_exceptions
+    await fn()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 42, in publish
+    await self._send_server_request(request)
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 75, in _send_server_request
+    raise self._broken_exc.with_traceback(self._broken_tb)
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 84, in _send_server_request
+    await self._drain_writer()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 92, in _drain_writer
+    await self._writer.drain()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/asyncio/streams.py", line 392, in drain
+    await self._protocol._drain_helper()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/asyncio/streams.py", line 166, in _drain_helper
+    raise ConnectionResetError('Connection lost')
+ConnectionResetError: Connection lost
+2026-06-07 16:15:04,354 ERROR   wandb-AsyncioManager-main:50178 [asyncio_manager.py:fn_wrap_exceptions():184] Uncaught exception in run_soon callback.
+Traceback (most recent call last):
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/asyncio_manager.py", line 182, in fn_wrap_exceptions
+    await fn()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 42, in publish
+    await self._send_server_request(request)
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 75, in _send_server_request
+    raise self._broken_exc.with_traceback(self._broken_tb)
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 84, in _send_server_request
+    await self._drain_writer()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 92, in _drain_writer
+    await self._writer.drain()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/asyncio/streams.py", line 392, in drain
+    await self._protocol._drain_helper()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/asyncio/streams.py", line 166, in _drain_helper
+    raise ConnectionResetError('Connection lost')
+ConnectionResetError: Connection lost
+2026-06-07 16:15:04,354 ERROR   wandb-AsyncioManager-main:50178 [asyncio_manager.py:fn_wrap_exceptions():184] Uncaught exception in run_soon callback.
+Traceback (most recent call last):
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/asyncio_manager.py", line 182, in fn_wrap_exceptions
+    await fn()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 42, in publish
+    await self._send_server_request(request)
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 75, in _send_server_request
+    raise self._broken_exc.with_traceback(self._broken_tb)
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 84, in _send_server_request
+    await self._drain_writer()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/wandb/sdk/lib/service/service_client.py", line 92, in _drain_writer
+    await self._writer.drain()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/asyncio/streams.py", line 392, in drain
+    await self._protocol._drain_helper()
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/asyncio/streams.py", line 166, in _drain_helper
+    raise ConnectionResetError('Connection lost')
+ConnectionResetError: Connection lost
