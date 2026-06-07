@@ -504,6 +504,11 @@ class HeMAC:
         observer = self.get_primary_observer()
         
         # 1. 에이전트 업데이트 및 맵 이탈 체크
+        # save previous pose so we can revert if needed
+        prev_x, prev_y = getattr(agent, "x", None), getattr(agent, "y", None)
+        prev_rect = agent.rect.copy() if hasattr(agent, "rect") else None
+
+        # update agent once
         agent.update(self.area, self.world, action)
         
         # [안전 로직] 즉시 맵 이탈 확인
@@ -561,6 +566,23 @@ class HeMAC:
         # Observer : 최종 도착 담당
         # =========================================================
         elif "observer" in active_agent and not self.collided:
+            # initialize forbidden flag
+            entered_forbidden = False
+            for goal in self.goals:
+                # use goal center distance and a threshold based on goal rect size
+                threshold = max(goal.rect.width, goal.rect.height) / 2.0 + 2.0
+                if dist(agent.x, agent.y, goal.x, goal.y) < threshold:
+                    entered_forbidden = True
+                    break
+
+            if entered_forbidden:  # revert pose
+                agent.x, agent.y = prev_x, prev_y
+                agent.rect = prev_rect
+                # update sensor polygon to match reverted position
+                if hasattr(agent, "sensor") and hasattr(agent.rect, "centerx"):
+                    agent.sensor.update_poly_points((agent.rect.centerx, agent.rect.centery), agent.orientation, agent.altitude)
+                # optional: mark as out_of_bound or log
+                agent.out_of_bound = False
             actual_min_dist = min(
                 [dist(goal.x, goal.y, agent.x, agent.y)
                 for goal in self.goals]
@@ -577,14 +599,20 @@ class HeMAC:
                 goal_x, goal_y = self.world.observer_communication
                 current_dist = dist(goal_x, goal_y, agent.x, agent.y)
 
+                # Use exponential distance-based shaping: score = exp(-d / sigma)
+                # Reward the improvement in score (delta_score). This yields diminishing returns
+                # as agent gets closer. scale_factor tunes magnitude to previous linear scheme.
+                sigma = 50.0
+                scale_factor = 25.0
+
                 if agent.last_goal_distance is None:
                     agent.last_goal_distance = current_dist
                 else:
-                    delta = agent.last_goal_distance - current_dist
-                    if delta > 0:
-                        reward += delta * 0.08
-                    else:
-                        reward -= abs(delta) * 0.04
+                    prev_score = math.exp(-agent.last_goal_distance / sigma)
+                    curr_score = math.exp(-current_dist / sigma)
+                    delta_score = curr_score - prev_score
+                    # Positive delta_score => closer to goal => positive reward
+                    reward += delta_score * scale_factor
                     agent.last_goal_distance = current_dist
 
                 if current_dist < 50:
