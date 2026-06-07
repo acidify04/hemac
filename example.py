@@ -5,6 +5,15 @@ from ray.tune.registry import register_env
 from ray.rllib.env.wrappers.pettingzoo_env import PettingZooEnv
 from hemac import HeMAC_v0
 import time
+
+
+DRONE_START_POSITIONS = [
+    [130.0, 870.0, 5.0],
+    [170.0, 870.0, 5.0],
+    [150.0, 830.0, 5.0],
+]
+
+
 def run_trained_model_simulation():
     # 1. Ray 및 가상환경 내 초기화
     ray.init(ignore_reinit_error=True)
@@ -16,15 +25,21 @@ def run_trained_model_simulation():
             "observer_speed": 5, 
             "n_drones": 3,
             "n_provisioners": 0,
+            "known_goals": True,
+            "max_cycles": 500,
             "drone_config": {
                 "drone_max_speed": 25,
                 "drone_max_thrust": 8,
-                # 수정 예시
-                "drones_starting_pos": [[0.0, 0.0, 0.0],[0.0, 0.0, 0.0],[0.0, 0.0, 0.0]],
+                "drones_starting_pos": DRONE_START_POSITIONS,
             },
             "min_obstacles": 0,
             "max_obstacles": 0,
-            "poi_config": [{"speed": 0}],
+            "poi_config": [{
+                "speed": 0,
+                "spawn_mode": "fixed",
+                "starting_pos": [720.0, 760.0],
+                "boundary_margin": 160,
+            }],
         }
         env = HeMAC_v0.env(**train_env_config)
         return PettingZooEnv(env)
@@ -34,7 +49,7 @@ def run_trained_model_simulation():
 
     # 2. 저장된 체크포인트로부터 알고리즘(모델) 로드
     # 저장된 폴더 경로를 지정합니다. (예: ./hemac_checkpoints 하위의 실제 체크포인트 폴더)
-    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_00900")
+    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_00200")
     print(f"[{checkpoint_path}] 경로에서 학습된 모델을 불러오는 중...")
     algo = Algorithm.from_checkpoint(checkpoint_path)
 
@@ -47,16 +62,23 @@ def run_trained_model_simulation():
         # 무인기 3대 (빠른 속도)
         "n_drones": 3,
         "n_provisioners": 0,
+        "known_goals": True,
+        "max_cycles": 500,
         "drone_config": {
             "drone_max_speed": 25,
             "drone_max_thrust": 8,
-            "drones_starting_pos": [], 
+            "drones_starting_pos": DRONE_START_POSITIONS,
         },
         
         # 맵 및 목적지 설정
         "min_obstacles": 0,
         "max_obstacles": 0,
-        "poi_config": [{"speed": 0}],
+        "poi_config": [{
+            "speed": 0,
+            "spawn_mode": "fixed",
+            "starting_pos": [720.0, 760.0],
+            "boundary_margin": 140,
+        }],
         
         # [핵심] 화면 시각화 활성화
         "render_mode": "human" 

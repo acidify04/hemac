@@ -1,0 +1,234 @@
+학습 루프 시작...
+[36m(RolloutWorker pid=1380511)[0m final_info1: {'success': False, 'fatal_crash': True, 'drone_crash': False, 'observer_crash': True, 'min_drone_dist': 568.6839827735672, 'min_obs_dist': 561.5619988625604, 'explored_area': 18000}
+2026-06-07 20:05:42,339	WARNING sgd.py:55 -- DeprecationWarning: `_get_slice_indices` has been deprecated. This will raise an error in the future!
+
+--- Iteration 1 ---
+Mean Reward: -49.56
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 568.24733431074, 'min_drone_dist_min': 567.6576498836433, 'min_drone_dist_max': 568.6839827735672, 'min_obs_dist_mean': 422.2327696190414, 'min_obs_dist_min': 108.61880685048803, 'min_obs_dist_max': 561.5619988625604, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 1.0, 'observer_crash_rate_min': 1.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380515)[0m final_info1: {'success': True, 'fatal_crash': False, 'drone_crash': False, 'observer_crash': False, 'min_drone_dist': 568.7527279705175, 'min_obs_dist': 78.74933045548941, 'explored_area': 18000}
+
+--- Iteration 2 ---
+Mean Reward: 19.99
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 568.0627874369586, 'min_drone_dist_min': 566.4914374791111, 'min_drone_dist_max': 568.7527279705175, 'min_obs_dist_mean': 349.5940646980199, 'min_obs_dist_min': 78.74933045548941, 'min_obs_dist_max': 561.5619988625604, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.06666666666666667, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.9333333333333333, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.9333333333333333, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380511)[0m final_info1: {'success': False, 'fatal_crash': True, 'drone_crash': False, 'observer_crash': True, 'min_drone_dist': 568.3369003680767, 'min_obs_dist': 388.4755017316369, 'explored_area': 18000}[32m [repeated 13x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#log-deduplication for more options.)[0m
+
+--- Iteration 3 ---
+Mean Reward: 173.35
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 568.073782793145, 'min_drone_dist_min': 566.4914374791111, 'min_drone_dist_max': 568.7527279705175, 'min_obs_dist_mean': 282.4168509613596, 'min_obs_dist_min': 76.45187348641795, 'min_obs_dist_max': 561.5619988625604, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.25, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.75, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.75, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380511)[0m final_info1: {'success': True, 'fatal_crash': False, 'drone_crash': False, 'observer_crash': False, 'min_drone_dist': 568.461157066513, 'min_obs_dist': 76.45187348641795, 'explored_area': 18000}[32m [repeated 4x across cluster][0m
+[36m(RolloutWorker pid=1380515)[0m final_info1: {'success': False, 'fatal_crash': False, 'drone_crash': False, 'observer_crash': False, 'min_drone_dist': 565.5744677819397, 'min_obs_dist': 96.15986366029148, 'explored_area': 18000}
+
+--- Iteration 4 ---
+Mean Reward: 226.32
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.9344363971205, 'min_drone_dist_min': 565.5744677819397, 'min_drone_dist_max': 568.7527279705175, 'min_obs_dist_mean': 267.83655154200324, 'min_obs_dist_min': 75.86771014552694, 'min_obs_dist_max': 561.5619988625604, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.3103448275862069, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.6551724137931034, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.6551724137931034, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380514)[0m final_info1: {'success': False, 'fatal_crash': True, 'drone_crash': False, 'observer_crash': True, 'min_drone_dist': 566.9537919393952, 'min_obs_dist': 327.3018804210511, 'explored_area': 18000}[32m [repeated 5x across cluster][0m
+
+--- Iteration 5 ---
+Mean Reward: 348.55
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.9420820265094, 'min_drone_dist_min': 565.5744677819397, 'min_drone_dist_max': 568.7527279705175, 'min_obs_dist_mean': 226.67812938408363, 'min_obs_dist_min': 75.69989793536982, 'min_obs_dist_max': 561.5619988625604, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.4594594594594595, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.5135135135135135, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.5135135135135135, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380511)[0m final_info1: {'success': True, 'fatal_crash': False, 'drone_crash': False, 'observer_crash': False, 'min_drone_dist': 568.0097625894525, 'min_obs_dist': 77.868039317055, 'explored_area': 18000}[32m [repeated 13x across cluster][0m
+
+--- Iteration 6 ---
+Mean Reward: 401.29
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.9590149656445, 'min_drone_dist_min': 565.5744677819397, 'min_drone_dist_max': 568.7527279705175, 'min_obs_dist_mean': 208.91665696069694, 'min_obs_dist_min': 75.39680932859734, 'min_obs_dist_max': 561.5619988625604, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.5238095238095238, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.4523809523809524, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.4523809523809524, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+
+--- Iteration 7 ---
+Mean Reward: 463.77
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.9363062082649, 'min_drone_dist_min': 565.5744677819397, 'min_drone_dist_max': 568.7527279705175, 'min_obs_dist_mean': 187.91838200123036, 'min_obs_dist_min': 75.39680932859734, 'min_obs_dist_max': 561.5619988625604, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.6, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.38, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.38, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380514)[0m final_info1: {'success': True, 'fatal_crash': False, 'drone_crash': False, 'observer_crash': False, 'min_drone_dist': 566.5446204922848, 'min_obs_dist': 79.01527687711881, 'explored_area': 18000}[32m [repeated 13x across cluster][0m
+
+--- Iteration 8 ---
+Mean Reward: 509.01
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.9149359885778, 'min_drone_dist_min': 565.5744677819397, 'min_drone_dist_max': 568.7527279705175, 'min_obs_dist_mean': 172.76852746135563, 'min_obs_dist_min': 75.39680932859734, 'min_obs_dist_max': 561.5619988625604, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.6551724137931034, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.3275862068965517, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.3275862068965517, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380514)[0m final_info1: {'success': False, 'fatal_crash': True, 'drone_crash': False, 'observer_crash': True, 'min_drone_dist': 568.2818663892996, 'min_obs_dist': 92.84145422811727, 'explored_area': 18000}
+
+--- Iteration 9 ---
+Mean Reward: 527.27
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.9383937645669, 'min_drone_dist_min': 565.5744677819397, 'min_drone_dist_max': 568.7527279705175, 'min_obs_dist_mean': 162.7504085086858, 'min_obs_dist_min': 75.39680932859734, 'min_obs_dist_max': 561.5619988625604, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.676923076923077, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.3076923076923077, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.3076923076923077, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380514)[0m final_info1: {'success': True, 'fatal_crash': False, 'drone_crash': False, 'observer_crash': False, 'min_drone_dist': 568.6364094406796, 'min_obs_dist': 78.90783905363357, 'explored_area': 18000}[32m [repeated 14x across cluster][0m
+
+--- Iteration 10 ---
+Mean Reward: 552.99
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.9411850084502, 'min_drone_dist_min': 565.5744677819397, 'min_drone_dist_max': 568.7527279705175, 'min_obs_dist_mean': 154.5090278366851, 'min_obs_dist_min': 75.39680932859734, 'min_obs_dist_max': 561.5619988625604, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.7083333333333334, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.2777777777777778, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.2777777777777778, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380515)[0m final_info1: {'success': False, 'fatal_crash': True, 'drone_crash': False, 'observer_crash': True, 'min_drone_dist': 568.1377023736092, 'min_obs_dist': 526.9351431918673, 'explored_area': 18000}
+
+--- Iteration 11 ---
+Mean Reward: 561.93
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.9274837654259, 'min_drone_dist_min': 565.5744677819397, 'min_drone_dist_max': 568.7576807611363, 'min_obs_dist_mean': 154.08497764513498, 'min_obs_dist_min': 75.3160647589938, 'min_obs_dist_max': 561.5619988625604, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.7195121951219512, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.2682926829268293, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.2682926829268293, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380514)[0m final_info1: {'success': True, 'fatal_crash': False, 'drone_crash': False, 'observer_crash': False, 'min_drone_dist': 568.0386890316481, 'min_obs_dist': 77.20733349386275, 'explored_area': 18000}[32m [repeated 15x across cluster][0m
+
+--- Iteration 12 ---
+Mean Reward: 575.78
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.8894868684845, 'min_drone_dist_min': 565.5744677819397, 'min_drone_dist_max': 568.7576807611363, 'min_obs_dist_mean': 149.17679068173388, 'min_obs_dist_min': 75.3160647589938, 'min_obs_dist_max': 561.5619988625604, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.7362637362637363, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.25274725274725274, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.25274725274725274, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380514)[0m final_info1: {'success': False, 'fatal_crash': True, 'drone_crash': False, 'observer_crash': True, 'min_drone_dist': 567.7069852734387, 'min_obs_dist': 319.5181669885391, 'explored_area': 18000}[32m [repeated 2x across cluster][0m
+
+--- Iteration 13 ---
+Mean Reward: 593.25
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.9010130665586, 'min_drone_dist_min': 565.5744677819397, 'min_drone_dist_max': 568.7576807611363, 'min_obs_dist_mean': 143.40495797544617, 'min_obs_dist_min': 75.3160647589938, 'min_obs_dist_max': 561.5619988625604, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.7575757575757576, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.23232323232323232, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.23232323232323232, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380515)[0m final_info1: {'success': True, 'fatal_crash': False, 'drone_crash': False, 'observer_crash': False, 'min_drone_dist': 567.8097117141141, 'min_obs_dist': 75.97623897314514, 'explored_area': 18000}[32m [repeated 16x across cluster][0m
+
+--- Iteration 14 ---
+Mean Reward: 670.24
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.8874118258867, 'min_drone_dist_min': 565.5744677819397, 'min_drone_dist_max': 568.7889393311647, 'min_obs_dist_mean': 113.39729364383075, 'min_obs_dist_min': 75.3160647589938, 'min_obs_dist_max': 526.9351431918673, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.85, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.14, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.14, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380512)[0m final_info1: {'success': False, 'fatal_crash': True, 'drone_crash': False, 'observer_crash': True, 'min_drone_dist': 567.9235726867283, 'min_obs_dist': 483.864067410764, 'explored_area': 18000}
+
+--- Iteration 15 ---
+Mean Reward: 710.61
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.8515798801913, 'min_drone_dist_min': 565.5744677819397, 'min_drone_dist_max': 568.7889393311647, 'min_obs_dist_mean': 105.90447261792733, 'min_obs_dist_min': 75.3160647589938, 'min_obs_dist_max': 526.9351431918673, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.9, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.09, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.09, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380514)[0m final_info1: {'success': True, 'fatal_crash': False, 'drone_crash': False, 'observer_crash': False, 'min_drone_dist': 567.0485691325908, 'min_obs_dist': 75.54748155864596, 'explored_area': 18000}[32m [repeated 18x across cluster][0m
+
+--- Iteration 16 ---
+Mean Reward: 734.33
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.8850006582204, 'min_drone_dist_min': 565.7778616218316, 'min_drone_dist_max': 568.7889393311647, 'min_obs_dist_mean': 99.31802070969549, 'min_obs_dist_min': 75.24319225940913, 'min_obs_dist_max': 526.9351431918673, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.93, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.07, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.07, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380514)[0m final_info1: {'success': False, 'fatal_crash': True, 'drone_crash': False, 'observer_crash': True, 'min_drone_dist': 568.74790992079, 'min_obs_dist': 436.0661037884662, 'explored_area': 18000}
+
+--- Iteration 17 ---
+Mean Reward: 742.69
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.8607939360126, 'min_drone_dist_min': 565.7778616218316, 'min_drone_dist_max': 568.7889393311647, 'min_obs_dist_mean': 95.33693239936996, 'min_obs_dist_min': 75.24319225940913, 'min_obs_dist_max': 526.9351431918673, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.94, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.06, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.06, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380515)[0m final_info1: {'success': True, 'fatal_crash': False, 'drone_crash': False, 'observer_crash': False, 'min_drone_dist': 566.3932374508843, 'min_obs_dist': 77.99198007703885, 'explored_area': 18000}[32m [repeated 19x across cluster][0m
+
+--- Iteration 18 ---
+Mean Reward: 742.73
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.8248574384785, 'min_drone_dist_min': 565.7778616218316, 'min_drone_dist_max': 568.7889393311647, 'min_obs_dist_mean': 95.34186770434091, 'min_obs_dist_min': 75.24319225940913, 'min_obs_dist_max': 526.9351431918673, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.94, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.06, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.06, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+
+--- Iteration 19 ---
+Mean Reward: 742.73
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.839199706057, 'min_drone_dist_min': 565.7778616218316, 'min_drone_dist_max': 568.7889393311647, 'min_obs_dist_mean': 95.37534314618644, 'min_obs_dist_min': 75.24319225940913, 'min_obs_dist_max': 526.9351431918673, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.94, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.06, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.06, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380514)[0m final_info1: {'success': True, 'fatal_crash': False, 'drone_crash': False, 'observer_crash': False, 'min_drone_dist': 568.7327780365548, 'min_obs_dist': 78.06978287634522, 'explored_area': 18000}[32m [repeated 17x across cluster][0m
+
+--- Iteration 20 ---
+Mean Reward: 750.67
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.8102920955128, 'min_drone_dist_min': 565.6879674262652, 'min_drone_dist_max': 568.7889393311647, 'min_obs_dist_mean': 95.27746710660625, 'min_obs_dist_min': 75.24319225940913, 'min_obs_dist_max': 526.9351431918673, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.95, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.05, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.05, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+
+--- Iteration 21 ---
+Mean Reward: 750.69
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.8313009715166, 'min_drone_dist_min': 565.6879674262652, 'min_drone_dist_max': 568.7889393311647, 'min_obs_dist_mean': 95.23682668860407, 'min_obs_dist_min': 75.24319225940913, 'min_obs_dist_max': 526.9351431918673, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.95, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.05, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.05, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380515)[0m final_info1: {'success': True, 'fatal_crash': False, 'drone_crash': False, 'observer_crash': False, 'min_drone_dist': 567.859518152215, 'min_obs_dist': 75.66324635298152, 'explored_area': 18000}[32m [repeated 19x across cluster][0m
+
+--- Iteration 22 ---
+Mean Reward: 767.26
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.8415033469995, 'min_drone_dist_min': 565.6879674262652, 'min_drone_dist_max': 568.7889393311647, 'min_obs_dist_mean': 87.9151859496898, 'min_obs_dist_min': 75.24319225940913, 'min_obs_dist_max': 483.864067410764, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.97, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.03, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.03, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+
+--- Iteration 23 ---
+Mean Reward: 775.37
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.8899534544474, 'min_drone_dist_min': 565.6879674262652, 'min_drone_dist_max': 568.7889393311647, 'min_obs_dist_mean': 85.50149013941744, 'min_obs_dist_min': 75.24319225940913, 'min_obs_dist_max': 483.864067410764, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.98, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.02, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.02, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380514)[0m final_info1: {'success': True, 'fatal_crash': False, 'drone_crash': False, 'observer_crash': False, 'min_drone_dist': 568.6673514511995, 'min_obs_dist': 76.81946839635637, 'explored_area': 18000}[32m [repeated 17x across cluster][0m
+
+--- Iteration 24 ---
+Mean Reward: 775.39
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.8481751738824, 'min_drone_dist_min': 565.1795088053277, 'min_drone_dist_max': 568.7881922884952, 'min_obs_dist_mean': 85.4508471385713, 'min_obs_dist_min': 75.24319225940913, 'min_obs_dist_max': 483.864067410764, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.98, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.02, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.02, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+
+--- Iteration 25 ---
+Mean Reward: 775.41
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.8313400298277, 'min_drone_dist_min': 565.1795088053277, 'min_drone_dist_max': 568.7881922884952, 'min_obs_dist_mean': 85.34143078406544, 'min_obs_dist_min': 75.03316405714733, 'min_obs_dist_max': 483.864067410764, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.98, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.02, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.02, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+[36m(RolloutWorker pid=1380515)[0m final_info1: {'success': True, 'fatal_crash': False, 'drone_crash': False, 'observer_crash': False, 'min_drone_dist': 568.0676025771779, 'min_obs_dist': 78.12378703611346, 'explored_area': 18000}[32m [repeated 19x across cluster][0m
+
+--- Iteration 26 ---
+Mean Reward: 783.74
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 567.8567953716779, 'min_drone_dist_min': 565.1795088053277, 'min_drone_dist_max': 568.7881922884952, 'min_obs_dist_mean': 81.25470176250084, 'min_obs_dist_min': 75.03316405714733, 'min_obs_dist_max': 436.0661037884662, 'explored_area_mean': 18000.0, 'explored_area_min': 18000.0, 'explored_area_max': 18000.0, 'success_rate_mean': 0.99, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.01, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0, 'drone_crash_rate_mean': 0.0, 'drone_crash_rate_min': 0.0, 'drone_crash_rate_max': 0.0, 'observer_crash_rate_mean': 0.01, 'observer_crash_rate_min': 0.0, 'observer_crash_rate_max': 1.0}
+Traceback (most recent call last):
+  File "/home/choi/Desktop/hemac/src/train/train.py", line 195, in <module>
+    main()
+  File "/home/choi/Desktop/hemac/src/train/train.py", line 155, in main
+    result = algo.train()
+             ^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 321, in train
+    result = self.step()
+             ^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 1224, in step
+    ) = self._run_one_training_iteration_old_api_stack()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 4359, in _run_one_training_iteration_old_api_stack
+    training_step_results = self.training_step()
+                            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 394, in training_step
+    return self._training_step_old_api_stack()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 498, in _training_step_old_api_stack
+    train_results = train_one_step(self, train_batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/train_ops.py", line 59, in train_one_step
+    info = do_minibatch_sgd(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/sgd.py", line 130, in do_minibatch_sgd
+    local_worker.learn_on_batch(
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/rollout_worker.py", line 798, in learn_on_batch
+    info_out[pid] = policy.learn_on_batch(batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/threading.py", line 24, in wrapper
+    return func(self, *a, **k)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 626, in learn_on_batch
+    grads, fetches = self.compute_gradients(postprocessed_batch)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/threading.py", line 24, in wrapper
+    return func(self, *a, **k)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 834, in compute_gradients
+    tower_outputs = self._multi_gpu_parallel_grad_calc([postprocessed_batch])
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 1231, in _multi_gpu_parallel_grad_calc
+    _worker(shard_idx, model, sample_batch, device)
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 1173, in _worker
+    loss_out[opt_idx].backward(retain_graph=True)
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/_tensor.py", line 630, in backward
+    torch.autograd.backward(
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/autograd/__init__.py", line 364, in backward
+    _engine_run_backward(
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/autograd/graph.py", line 865, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/choi/Desktop/hemac/src/train/train.py", line 195, in <module>
+    main()
+  File "/home/choi/Desktop/hemac/src/train/train.py", line 155, in main
+    result = algo.train()
+             ^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 321, in train
+    result = self.step()
+             ^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 1224, in step
+    ) = self._run_one_training_iteration_old_api_stack()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 4359, in _run_one_training_iteration_old_api_stack
+    training_step_results = self.training_step()
+                            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 394, in training_step
+    return self._training_step_old_api_stack()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 498, in _training_step_old_api_stack
+    train_results = train_one_step(self, train_batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/train_ops.py", line 59, in train_one_step
+    info = do_minibatch_sgd(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/sgd.py", line 130, in do_minibatch_sgd
+    local_worker.learn_on_batch(
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/rollout_worker.py", line 798, in learn_on_batch
+    info_out[pid] = policy.learn_on_batch(batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/threading.py", line 24, in wrapper
+    return func(self, *a, **k)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 626, in learn_on_batch
+    grads, fetches = self.compute_gradients(postprocessed_batch)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/threading.py", line 24, in wrapper
+    return func(self, *a, **k)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 834, in compute_gradients
+    tower_outputs = self._multi_gpu_parallel_grad_calc([postprocessed_batch])
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 1231, in _multi_gpu_parallel_grad_calc
+    _worker(shard_idx, model, sample_batch, device)
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 1173, in _worker
+    loss_out[opt_idx].backward(retain_graph=True)
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/_tensor.py", line 630, in backward
+    torch.autograd.backward(
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/autograd/__init__.py", line 364, in backward
+    _engine_run_backward(
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/torch/autograd/graph.py", line 865, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

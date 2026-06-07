@@ -1,0 +1,876 @@
+학습 루프 시작...
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 650.2224710735838, 'min_obs_dist': 619.7924363964554, 'explored_area': 13600}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 602.5798688073771, 'min_obs_dist': 677.55570081914, 'explored_area': 30400}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 581.5369050577236, 'min_obs_dist': 630.4514255674262, 'explored_area': 28400}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 578.0178519468849, 'min_obs_dist': 648.562555580971, 'explored_area': 32400}
+[36m(RolloutWorker pid=881261)[0m
+2026-06-07 18:39:59,960	WARNING sgd.py:55 -- DeprecationWarning: `_get_slice_indices` has been deprecated. This will raise an error in the future!
+
+--- Iteration 1 ---
+Mean Reward: -27.70
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 242.3318061833218, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 849.4411505590965, 'min_obs_dist_mean': 497.557648234573, 'min_obs_dist_min': 101.18265901107368, 'min_obs_dist_max': 821.0949927938531, 'explored_area_mean': 19429.4670846395, 'explored_area_min': 13600.0, 'explored_area_max': 98400.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 2 ---
+Mean Reward: -30.85
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 279.38695017168845, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 845.1363550991542, 'min_obs_dist_mean': 487.11062927523744, 'min_obs_dist_min': 143.83855299053346, 'min_obs_dist_max': 805.6386106563687, 'explored_area_mean': 21264.516129032258, 'explored_area_min': 13600.0, 'explored_area_max': 183600.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 528.6540556948561, 'min_obs_dist': 572.2909360900163, 'explored_area': 29200}[32m [repeated 534x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#log-deduplication for more options.)[0m
+
+--- Iteration 3 ---
+Mean Reward: -34.90
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 289.10446020440884, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 787.9784112964192, 'min_obs_dist_mean': 503.0558251207921, 'min_obs_dist_min': 85.89551343946806, 'min_obs_dist_max': 808.2258347763947, 'explored_area_mean': 25256.0, 'explored_area_min': 13600.0, 'explored_area_max': 253200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 4 ---
+Mean Reward: -36.70
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 253.7045314000659, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 747.8275912840629, 'min_obs_dist_mean': 488.2375054298433, 'min_obs_dist_min': 134.3208037363624, 'min_obs_dist_max': 820.8109699696521, 'explored_area_mean': 32840.0, 'explored_area_min': 13600.0, 'explored_area_max': 282000.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 428.3601033259663, 'min_obs_dist': 539.1062685109357, 'explored_area': 65600}[32m [repeated 143x across cluster][0m
+
+--- Iteration 5 ---
+Mean Reward: -43.41
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 281.95823467516385, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 773.607161516937, 'min_obs_dist_mean': 493.03611840886975, 'min_obs_dist_min': 138.00447883720582, 'min_obs_dist_max': 820.8109699696521, 'explored_area_mean': 40172.0, 'explored_area_min': 13600.0, 'explored_area_max': 282000.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 134.02416556790666, 'min_obs_dist': 62.25781788250932, 'explored_area': 389200}
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 94.48029832629938, 'min_obs_dist': 45.65250288571702, 'explored_area': 253600}
+
+--- Iteration 6 ---
+Mean Reward: -41.89
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 287.2565056101876, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 784.6510043913048, 'min_obs_dist_mean': 491.63383575463143, 'min_obs_dist_min': 45.65250288571702, 'min_obs_dist_max': 820.8109699696521, 'explored_area_mean': 50028.0, 'explored_area_min': 13600.0, 'explored_area_max': 389200.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.97, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 1.32627401714165, 'min_obs_dist': 52.268626708945966, 'explored_area': 288400}[32m [repeated 47x across cluster][0m
+
+--- Iteration 7 ---
+Mean Reward: -42.07
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 290.83738424020345, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 784.6510043913048, 'min_obs_dist_mean': 481.4470143059289, 'min_obs_dist_min': 45.65250288571702, 'min_obs_dist_max': 820.8109699696521, 'explored_area_mean': 57844.0, 'explored_area_min': 13600.0, 'explored_area_max': 389200.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.96, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 2.603632097693965, 'min_obs_dist': 72.3118842470854, 'explored_area': 238400}[32m [repeated 2x across cluster][0m
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 182.70178332586283, 'min_obs_dist': 47.87260551750862, 'explored_area': 239600}
+
+--- Iteration 8 ---
+Mean Reward: -43.65
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 285.3492803293907, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 784.6510043913048, 'min_obs_dist_mean': 479.3095579158382, 'min_obs_dist_min': 45.65250288571702, 'min_obs_dist_max': 820.8109699696521, 'explored_area_mean': 64940.0, 'explored_area_min': 13600.0, 'explored_area_max': 389200.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.94, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 382.698156322039, 'min_obs_dist': 337.764711004569, 'explored_area': 13600}[32m [repeated 10x across cluster][0m
+
+--- Iteration 9 ---
+Mean Reward: -43.99
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 273.3274766338664, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 784.6510043913048, 'min_obs_dist_mean': 476.87536771884936, 'min_obs_dist_min': 45.65250288571702, 'min_obs_dist_max': 815.4969361499625, 'explored_area_mean': 76800.0, 'explored_area_min': 13600.0, 'explored_area_max': 389200.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.91, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 3.748500410905744, 'min_obs_dist': 145.0051005054128, 'explored_area': 296800}[32m [repeated 4x across cluster][0m
+
+--- Iteration 10 ---
+Mean Reward: -45.37
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 271.57835915561947, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 784.6510043913048, 'min_obs_dist_mean': 463.08755640490324, 'min_obs_dist_min': 45.65250288571702, 'min_obs_dist_max': 815.4969361499625, 'explored_area_mean': 83948.0, 'explored_area_min': 13600.0, 'explored_area_max': 389200.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.9, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 425.27282490419043, 'min_obs_dist': 628.0972841818209, 'explored_area': 72800}[32m [repeated 35x across cluster][0m
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 19.09413706830635, 'min_obs_dist': 48.9641196669917, 'explored_area': 194000}
+
+--- Iteration 11 ---
+Mean Reward: -41.45
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 259.27739597348113, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 784.6510043913048, 'min_obs_dist_mean': 457.56430888599374, 'min_obs_dist_min': 45.65250288571702, 'min_obs_dist_max': 815.4969361499625, 'explored_area_mean': 92180.0, 'explored_area_min': 13600.0, 'explored_area_max': 389200.0, 'success_rate_mean': 0.03, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.87, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 65.45567805529141, 'min_obs_dist': 438.9710184264944, 'explored_area': 341600}[32m [repeated 3x across cluster][0m
+
+--- Iteration 12 ---
+Mean Reward: -40.36
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 260.05909776540705, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 784.6510043913048, 'min_obs_dist_mean': 443.62287269137005, 'min_obs_dist_min': 45.65250288571702, 'min_obs_dist_max': 815.4969361499625, 'explored_area_mean': 102704.0, 'explored_area_min': 13600.0, 'explored_area_max': 389200.0, 'success_rate_mean': 0.04, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.86, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 110.86817962768613, 'min_obs_dist': 310.1775911983488, 'explored_area': 58000}[32m [repeated 14x across cluster][0m
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 93.70297058761432, 'min_obs_dist': 47.22912019578492, 'explored_area': 276000}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 0.8813142731757139, 'min_obs_dist': 46.99611017235401, 'explored_area': 362800}
+
+--- Iteration 13 ---
+Mean Reward: -35.97
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 241.913891299067, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 784.6510043913048, 'min_obs_dist_mean': 437.65985422433704, 'min_obs_dist_min': 46.99611017235401, 'min_obs_dist_max': 809.2873408128908, 'explored_area_mean': 104536.0, 'explored_area_min': 13600.0, 'explored_area_max': 386000.0, 'success_rate_mean': 0.05, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.86, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 66.083174047074, 'min_obs_dist': 51.77118831514012, 'explored_area': 261600}[32m [repeated 2x across cluster][0m
+
+--- Iteration 14 ---
+Mean Reward: -32.09
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 235.63267890710657, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 762.5220624751686, 'min_obs_dist_mean': 431.887281729832, 'min_obs_dist_min': 46.99611017235401, 'min_obs_dist_max': 809.2873408128908, 'explored_area_mean': 103936.0, 'explored_area_min': 13600.0, 'explored_area_max': 386000.0, 'success_rate_mean': 0.05, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.85, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 300.9428248756874, 'min_obs_dist': 585.08734468343, 'explored_area': 181600}[32m [repeated 29x across cluster][0m
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 7.8148790898474685, 'min_obs_dist': 49.50893145738658, 'explored_area': 307200}[32m [repeated 2x across cluster][0m
+
+--- Iteration 15 ---
+Mean Reward: -32.39
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 242.75707025190124, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 782.0257979257327, 'min_obs_dist_mean': 441.22422609132985, 'min_obs_dist_min': 46.99611017235401, 'min_obs_dist_max': 809.2873408128908, 'explored_area_mean': 96272.0, 'explored_area_min': 13600.0, 'explored_area_max': 386000.0, 'success_rate_mean': 0.05, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.88, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 42.277628926890365, 'min_obs_dist': 89.40398807364113, 'explored_area': 325200}[32m [repeated 2x across cluster][0m
+
+--- Iteration 16 ---
+Mean Reward: -35.59
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 240.29882672117907, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 782.0257979257327, 'min_obs_dist_mean': 436.976218971738, 'min_obs_dist_min': 46.99611017235401, 'min_obs_dist_max': 744.6804683889594, 'explored_area_mean': 106808.0, 'explored_area_min': 13600.0, 'explored_area_max': 429600.0, 'success_rate_mean': 0.05, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.87, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 53.63344632157535, 'min_obs_dist': 168.41405689549094, 'explored_area': 111200}[32m [repeated 34x across cluster][0m
+
+--- Iteration 17 ---
+Mean Reward: -40.70
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 237.50245126935855, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 782.0257979257327, 'min_obs_dist_mean': 434.6437776667562, 'min_obs_dist_min': 46.99611017235401, 'min_obs_dist_max': 761.6868847041184, 'explored_area_mean': 105780.0, 'explored_area_min': 13600.0, 'explored_area_max': 429600.0, 'success_rate_mean': 0.04, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.89, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 5.012186662459779, 'min_obs_dist': 82.11750954399643, 'explored_area': 294800}[32m [repeated 2x across cluster][0m
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 48.74449931569777, 'min_obs_dist': 47.60626284814914, 'explored_area': 240800}
+
+--- Iteration 18 ---
+Mean Reward: -35.39
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 229.92167148516725, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 782.0257979257327, 'min_obs_dist_mean': 425.5639041097882, 'min_obs_dist_min': 46.99611017235401, 'min_obs_dist_max': 761.6868847041184, 'explored_area_mean': 108644.0, 'explored_area_min': 13600.0, 'explored_area_max': 429600.0, 'success_rate_mean': 0.05, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.87, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 445.59332760973865, 'min_obs_dist': 691.8860429116193, 'explored_area': 68400}[32m [repeated 15x across cluster][0m
+
+--- Iteration 19 ---
+Mean Reward: -39.22
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 244.02425772527332, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 782.0257979257327, 'min_obs_dist_mean': 450.5137812956271, 'min_obs_dist_min': 46.99611017235401, 'min_obs_dist_max': 799.9426635920245, 'explored_area_mean': 107584.0, 'explored_area_min': 13600.0, 'explored_area_max': 429600.0, 'success_rate_mean': 0.04, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.87, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 3.9653554454979534, 'min_obs_dist': 268.7047700574824, 'explored_area': 281600}[32m [repeated 3x across cluster][0m
+
+--- Iteration 20 ---
+Mean Reward: -47.68
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 259.2928514749248, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 782.0257979257327, 'min_obs_dist_mean': 448.4228907012595, 'min_obs_dist_min': 47.60626284814914, 'min_obs_dist_max': 799.9426635920245, 'explored_area_mean': 110400.0, 'explored_area_min': 13600.0, 'explored_area_max': 429600.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.89, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 22.402772782193285, 'min_obs_dist': 149.54203694330369, 'explored_area': 86400}[32m [repeated 27x across cluster][0m
+
+--- Iteration 21 ---
+Mean Reward: -50.34
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 255.98342399804952, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 715.582495342819, 'min_obs_dist_mean': 437.6358027830583, 'min_obs_dist_min': 47.60626284814914, 'min_obs_dist_max': 799.9426635920245, 'explored_area_mean': 114904.0, 'explored_area_min': 13600.0, 'explored_area_max': 429600.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.89, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 33.90773104147312, 'min_obs_dist': 58.25435479610862, 'explored_area': 303600}[32m [repeated 4x across cluster][0m
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 8.304786929163706, 'min_obs_dist': 49.010886036706474, 'explored_area': 188400}
+
+--- Iteration 22 ---
+Mean Reward: -45.73
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 255.89372929782067, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 715.582495342819, 'min_obs_dist_mean': 436.8514352580949, 'min_obs_dist_min': 47.60626284814914, 'min_obs_dist_max': 799.9426635920245, 'explored_area_mean': 116248.0, 'explored_area_min': 13600.0, 'explored_area_max': 429600.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.88, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 6.507159533947175, 'min_obs_dist': 162.59221814992287, 'explored_area': 232000}[32m [repeated 35x across cluster][0m
+
+--- Iteration 23 ---
+Mean Reward: -43.06
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 273.4241115651154, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 715.582495342819, 'min_obs_dist_mean': 458.14122921147936, 'min_obs_dist_min': 49.010886036706474, 'min_obs_dist_max': 769.6178383915009, 'explored_area_mean': 92552.0, 'explored_area_min': 13600.0, 'explored_area_max': 371200.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.94, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 29.25324166925879, 'min_obs_dist': 359.0966100744641, 'explored_area': 273600}
+
+--- Iteration 24 ---
+Mean Reward: -39.32
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 274.48179101492775, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 686.6596458477709, 'min_obs_dist_mean': 469.2533903071731, 'min_obs_dist_min': 49.010886036706474, 'min_obs_dist_max': 795.1092723765535, 'explored_area_mean': 78624.0, 'explored_area_min': 13600.0, 'explored_area_max': 303600.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.97, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 495.9691976015686, 'min_obs_dist': 732.795047594437, 'explored_area': 63200}[32m [repeated 78x across cluster][0m
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 2.739101740827392, 'min_obs_dist': 77.54821692377267, 'explored_area': 323600}
+
+--- Iteration 25 ---
+Mean Reward: -42.90
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 282.14459931710536, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 686.6596458477709, 'min_obs_dist_mean': 482.061734211839, 'min_obs_dist_min': 61.61453389042332, 'min_obs_dist_max': 844.5349953820053, 'explored_area_mean': 77580.0, 'explored_area_min': 13600.0, 'explored_area_max': 323600.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 26 ---
+Mean Reward: -43.07
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 286.72678975014117, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 794.6936344330046, 'min_obs_dist_mean': 502.23339980226353, 'min_obs_dist_min': 77.54821692377267, 'min_obs_dist_max': 844.5349953820053, 'explored_area_mean': 79472.0, 'explored_area_min': 13600.0, 'explored_area_max': 323600.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 187.77927889098495, 'min_obs_dist': 417.73431704635783, 'explored_area': 63200}[32m [repeated 81x across cluster][0m
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 108.06828852639792, 'min_obs_dist': 293.62952892564255, 'explored_area': 322800}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 12.47135499719001, 'min_obs_dist': 49.811838047076336, 'explored_area': 179200}
+
+--- Iteration 27 ---
+Mean Reward: -34.07
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 283.4011627244306, 'min_drone_dist_min': 1.007336276672353, 'min_drone_dist_max': 794.6936344330046, 'min_obs_dist_mean': 502.74889640111934, 'min_obs_dist_min': 46.71575557041707, 'min_obs_dist_max': 796.2026720833911, 'explored_area_mean': 81632.0, 'explored_area_min': 13600.0, 'explored_area_max': 296400.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 28 ---
+Mean Reward: -23.85
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 265.24990853477607, 'min_drone_dist_min': 1.007336276672353, 'min_drone_dist_max': 794.6936344330046, 'min_obs_dist_mean': 482.69748215900995, 'min_obs_dist_min': 46.71575557041707, 'min_obs_dist_max': 796.2026720833911, 'explored_area_mean': 86328.0, 'explored_area_min': 13600.0, 'explored_area_max': 296400.0, 'success_rate_mean': 0.04, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.96, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 113.4062930238378, 'min_obs_dist': 378.84990426970404, 'explored_area': 184800}[32m [repeated 60x across cluster][0m
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 3.535360545409474, 'min_obs_dist': 48.588802011565875, 'explored_area': 281200}[32m [repeated 3x across cluster][0m
+
+--- Iteration 29 ---
+Mean Reward: -22.02
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 253.34850895426965, 'min_drone_dist_min': 1.007336276672353, 'min_drone_dist_max': 586.090072474651, 'min_obs_dist_mean': 462.94978233333177, 'min_obs_dist_min': 46.71575557041707, 'min_obs_dist_max': 796.2026720833911, 'explored_area_mean': 92304.0, 'explored_area_min': 13600.0, 'explored_area_max': 341200.0, 'success_rate_mean': 0.05, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.95, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 26.73515598862643, 'min_obs_dist': 164.24461952561194, 'explored_area': 365200}
+
+--- Iteration 30 ---
+Mean Reward: -24.81
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 253.2602537667071, 'min_drone_dist_min': 3.079268020944674, 'min_drone_dist_max': 578.1682641969176, 'min_obs_dist_mean': 465.0184415731889, 'min_obs_dist_min': 46.71575557041707, 'min_obs_dist_max': 775.7614827982907, 'explored_area_mean': 93088.0, 'explored_area_min': 13600.0, 'explored_area_max': 365200.0, 'success_rate_mean': 0.04, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.95, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 169.64248830919936, 'min_obs_dist': 480.17922565426846, 'explored_area': 131600}[32m [repeated 64x across cluster][0m
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 8.998067187939954, 'min_obs_dist': 49.530572926169164, 'explored_area': 110000}
+/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/torch_utils.py:372: UserWarning: var(): degrees of freedom is <= 0. Correction should be strictly less than the reduction factor (input numel divided by output numel). (Triggered internally at /pytorch/aten/src/ATen/native/ReduceOps.cpp:1857.)
+  y_var = torch.var(squeezed_y, dim=0)
+/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/torch_utils.py:373: UserWarning: var(): degrees of freedom is <= 0. Correction should be strictly less than the reduction factor (input numel divided by output numel). (Triggered internally at /pytorch/aten/src/ATen/native/ReduceOps.cpp:1857.)
+  diff_var = torch.var(squeezed_y - pred.squeeze(), dim=0)
+
+--- Iteration 31 ---
+Mean Reward: -38.54
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 274.22639560120456, 'min_drone_dist_min': 3.079268020944674, 'min_drone_dist_max': 570.3416245550717, 'min_obs_dist_mean': 491.86459885064403, 'min_obs_dist_min': 49.530572926169164, 'min_obs_dist_max': 771.975293026187, 'explored_area_mean': 90532.0, 'explored_area_min': 13600.0, 'explored_area_max': 423600.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 32 ---
+Mean Reward: -39.87
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 275.7025374255808, 'min_drone_dist_min': 7.2005152623933215, 'min_drone_dist_max': 570.3416245550717, 'min_obs_dist_mean': 496.61968200095515, 'min_obs_dist_min': 152.7980092405267, 'min_obs_dist_max': 787.3623975737814, 'explored_area_mean': 83764.0, 'explored_area_min': 13600.0, 'explored_area_max': 423600.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.99, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 41.92056669535094, 'min_obs_dist': 266.1743566355491, 'explored_area': 74800}[32m [repeated 67x across cluster][0m
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 43.95348441634827, 'min_obs_dist': 143.1676768855762, 'explored_area': 387600}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 24.240283517814966, 'min_obs_dist': 46.0884999178563, 'explored_area': 170000}
+
+--- Iteration 33 ---
+Mean Reward: -37.15
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 271.32101209726176, 'min_drone_dist_min': 7.2005152623933215, 'min_drone_dist_max': 570.3416245550717, 'min_obs_dist_mean': 486.51327650529316, 'min_obs_dist_min': 46.0884999178563, 'min_obs_dist_max': 787.3623975737814, 'explored_area_mean': 86748.0, 'explored_area_min': 13600.0, 'explored_area_max': 423600.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 34 ---
+Mean Reward: -38.37
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 247.4372852582009, 'min_drone_dist_min': 8.102596565088335, 'min_drone_dist_max': 536.9435592981933, 'min_obs_dist_mean': 468.045095161863, 'min_obs_dist_min': 46.0884999178563, 'min_obs_dist_max': 787.3623975737814, 'explored_area_mean': 86876.0, 'explored_area_min': 53600.0, 'explored_area_max': 408800.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.97, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 217.19856925759066, 'min_obs_dist': 446.21875437870256, 'explored_area': 72000}[32m [repeated 59x across cluster][0m
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 8.102596565088335, 'min_obs_dist': 415.7719564915366, 'explored_area': 303600}
+
+--- Iteration 35 ---
+Mean Reward: -38.87
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 258.9253344937613, 'min_drone_dist_min': 3.268637900226199, 'min_drone_dist_max': 610.4455838006854, 'min_obs_dist_mean': 480.86795080195117, 'min_obs_dist_min': 46.0884999178563, 'min_obs_dist_max': 778.965898657091, 'explored_area_mean': 82808.0, 'explored_area_min': 13600.0, 'explored_area_max': 306000.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 62.94124899056893, 'min_obs_dist': 47.13542188740838, 'explored_area': 118800}
+
+--- Iteration 36 ---
+Mean Reward: -23.79
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 274.6342195297365, 'min_drone_dist_min': 3.268637900226199, 'min_drone_dist_max': 610.4455838006854, 'min_obs_dist_mean': 492.47868369728667, 'min_obs_dist_min': 47.13542188740838, 'min_obs_dist_max': 778.965898657091, 'explored_area_mean': 82128.0, 'explored_area_min': 13600.0, 'explored_area_max': 306000.0, 'success_rate_mean': 0.04, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.96, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 300.5436999942069, 'min_obs_dist': 509.9280859676465, 'explored_area': 67200}[32m [repeated 86x across cluster][0m
+
+--- Iteration 37 ---
+Mean Reward: -22.11
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 261.56583660436064, 'min_drone_dist_min': 3.268637900226199, 'min_drone_dist_max': 557.0062550558004, 'min_obs_dist_mean': 477.8910329387382, 'min_obs_dist_min': 47.13542188740838, 'min_obs_dist_max': 778.965898657091, 'explored_area_mean': 83784.0, 'explored_area_min': 53200.0, 'explored_area_max': 309200.0, 'success_rate_mean': 0.04, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.96, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 62.4992643219867, 'min_obs_dist': 49.7849344187945, 'explored_area': 236000}[32m [repeated 3x across cluster][0m
+
+--- Iteration 38 ---
+Mean Reward: -30.22
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 266.5543345020352, 'min_drone_dist_min': 5.24640279067452, 'min_drone_dist_max': 557.0062550558004, 'min_obs_dist_mean': 483.85880453362523, 'min_obs_dist_min': 48.550858342948686, 'min_obs_dist_max': 769.841283615893, 'explored_area_mean': 84228.0, 'explored_area_min': 53200.0, 'explored_area_max': 309200.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 312.6661236022329, 'min_obs_dist': 506.31614908791323, 'explored_area': 149200}[32m [repeated 81x across cluster][0m
+
+--- Iteration 39 ---
+Mean Reward: -31.29
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 269.3164364930275, 'min_drone_dist_min': 5.24640279067452, 'min_drone_dist_max': 551.6012961846794, 'min_obs_dist_mean': 487.36911830612416, 'min_obs_dist_min': 47.7222397072732, 'min_obs_dist_max': 783.1032502764868, 'explored_area_mean': 84644.0, 'explored_area_min': 52400.0, 'explored_area_max': 288800.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 9.875865462137684, 'min_obs_dist': 47.7222397072732, 'explored_area': 247200}[32m [repeated 2x across cluster][0m
+
+--- Iteration 40 ---
+Mean Reward: -37.46
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 275.8474876276637, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 522.4713075143464, 'min_obs_dist_mean': 507.6820623815638, 'min_obs_dist_min': 47.7222397072732, 'min_obs_dist_max': 783.1032502764868, 'explored_area_mean': 80416.0, 'explored_area_min': 13600.0, 'explored_area_max': 247200.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.99, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 307.15177453376344, 'min_obs_dist': 644.5352810072596, 'explored_area': 116400}[32m [repeated 88x across cluster][0m
+
+--- Iteration 41 ---
+Mean Reward: -37.75
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 279.3705546549422, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 519.7509743797735, 'min_obs_dist_mean': 513.4093792958867, 'min_obs_dist_min': 47.7222397072732, 'min_obs_dist_max': 783.1032502764868, 'explored_area_mean': 81904.0, 'explored_area_min': 13600.0, 'explored_area_max': 390400.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.99, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 6.728971179273278, 'min_obs_dist': 84.75182472602975, 'explored_area': 336400}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 2.1356720006165233, 'min_obs_dist': 48.27356069190071, 'explored_area': 289200}
+
+--- Iteration 42 ---
+Mean Reward: -39.29
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 279.73415209404766, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 524.3091734899511, 'min_obs_dist_mean': 514.5408732329731, 'min_obs_dist_min': 48.27356069190071, 'min_obs_dist_max': 771.5523885507839, 'explored_area_mean': 88828.0, 'explored_area_min': 13600.0, 'explored_area_max': 412000.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.97, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 349.3008694324172, 'min_obs_dist': 517.5785066065114, 'explored_area': 66000}[32m [repeated 40x across cluster][0m
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 25.160567147942093, 'min_obs_dist': 48.4240350288269, 'explored_area': 129600}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 2.618965074967152, 'min_obs_dist': 48.693866399136496, 'explored_area': 155600}
+
+--- Iteration 43 ---
+Mean Reward: -31.12
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 275.37594413795995, 'min_drone_dist_min': 2.1356720006165233, 'min_drone_dist_max': 832.4283885018505, 'min_obs_dist_mean': 498.294430526313, 'min_obs_dist_min': 48.27356069190071, 'min_obs_dist_max': 794.3613787187794, 'explored_area_mean': 94976.0, 'explored_area_min': 13600.0, 'explored_area_max': 412000.0, 'success_rate_mean': 0.03, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.93, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 7.116435795223691, 'min_obs_dist': 64.93602201957742, 'explored_area': 333600}[32m [repeated 3x across cluster][0m
+
+--- Iteration 44 ---
+Mean Reward: -31.19
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 281.7450281974985, 'min_drone_dist_min': 2.1356720006165233, 'min_drone_dist_max': 832.4283885018505, 'min_obs_dist_mean': 498.1049705254617, 'min_obs_dist_min': 48.27356069190071, 'min_obs_dist_max': 822.1470705362143, 'explored_area_mean': 94964.0, 'explored_area_min': 13600.0, 'explored_area_max': 412000.0, 'success_rate_mean': 0.03, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.93, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 255.86551230115504, 'min_obs_dist': 449.9137455938668, 'explored_area': 67600}[32m [repeated 78x across cluster][0m
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 129.9095001992959, 'min_obs_dist': 48.92354468587865, 'explored_area': 205600}
+
+--- Iteration 45 ---
+Mean Reward: -32.41
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 283.50868209924016, 'min_drone_dist_min': 5.9447458852542745, 'min_drone_dist_max': 579.6311316069035, 'min_obs_dist_mean': 491.957958964448, 'min_obs_dist_min': 45.46424664077382, 'min_obs_dist_max': 822.1470705362143, 'explored_area_mean': 81984.0, 'explored_area_min': 56800.0, 'explored_area_max': 297200.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 46 ---
+Mean Reward: -13.74
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 251.3725973776799, 'min_drone_dist_min': 0.4635045608342402, 'min_drone_dist_max': 579.6311316069035, 'min_obs_dist_mean': 452.87810304229004, 'min_obs_dist_min': 45.46424664077382, 'min_obs_dist_max': 822.1470705362143, 'explored_area_mean': 78244.0, 'explored_area_min': 13600.0, 'explored_area_max': 297200.0, 'success_rate_mean': 0.05, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.95, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 399.18892810513415, 'min_obs_dist': 657.1554492229741, 'explored_area': 87600}[32m [repeated 87x across cluster][0m
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 22.521529167781356, 'min_obs_dist': 49.63326420770067, 'explored_area': 146000}[32m [repeated 4x across cluster][0m
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 16.985454598732105, 'min_obs_dist': 143.24990261493892, 'explored_area': 328800}
+
+--- Iteration 47 ---
+Mean Reward: -24.12
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 259.87161539201145, 'min_drone_dist_min': 0.4635045608342402, 'min_drone_dist_max': 806.277283915501, 'min_obs_dist_mean': 470.07692869488625, 'min_obs_dist_min': 48.080360735360024, 'min_obs_dist_max': 771.9857607636396, 'explored_area_mean': 77004.0, 'explored_area_min': 13600.0, 'explored_area_max': 328800.0, 'success_rate_mean': 0.03, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.96, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 48 ---
+Mean Reward: -29.63
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 263.21298145695573, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 806.277283915501, 'min_obs_dist_mean': 483.5656636900605, 'min_obs_dist_min': 48.032197302176, 'min_obs_dist_max': 832.8769121405705, 'explored_area_mean': 75680.0, 'explored_area_min': 13600.0, 'explored_area_max': 186400.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 173.7901748907252, 'min_obs_dist': 388.4889698248515, 'explored_area': 77600}[32m [repeated 116x across cluster][0m
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 14.427808665233051, 'min_obs_dist': 48.032197302176, 'explored_area': 186400}[32m [repeated 2x across cluster][0m
+
+--- Iteration 49 ---
+Mean Reward: -29.00
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 266.4593280023171, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 633.8863381924914, 'min_obs_dist_mean': 490.7342229309618, 'min_obs_dist_min': 48.032197302176, 'min_obs_dist_max': 832.8769121405705, 'explored_area_mean': 78988.0, 'explored_area_min': 13600.0, 'explored_area_max': 266800.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 50 ---
+Mean Reward: -35.09
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 281.9846327789789, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 576.5157092568556, 'min_obs_dist_mean': 509.4976240387054, 'min_obs_dist_min': 49.14685699521896, 'min_obs_dist_max': 797.3061975301824, 'explored_area_mean': 80880.0, 'explored_area_min': 13600.0, 'explored_area_max': 332800.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.99, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 308.84432192861755, 'min_obs_dist': 550.860724867311, 'explored_area': 72000}[32m [repeated 84x across cluster][0m
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 53.7946021193134, 'min_obs_dist': 49.14685699521896, 'explored_area': 103200}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 5.876635862392206, 'min_obs_dist': 334.3699207374801, 'explored_area': 401600}
+
+--- Iteration 51 ---
+Mean Reward: -37.53
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 278.5153777175281, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 576.5157092568556, 'min_obs_dist_mean': 508.55228742254616, 'min_obs_dist_min': 49.14685699521896, 'min_obs_dist_max': 799.4348272749908, 'explored_area_mean': 88032.0, 'explored_area_min': 13600.0, 'explored_area_max': 401600.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 52 ---
+Mean Reward: -38.37
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 280.001985451992, 'min_drone_dist_min': 1.4542844287710983, 'min_drone_dist_max': 546.066514477253, 'min_obs_dist_mean': 506.61086552862986, 'min_obs_dist_min': 49.14685699521896, 'min_obs_dist_max': 799.4348272749908, 'explored_area_mean': 84788.0, 'explored_area_min': 59200.0, 'explored_area_max': 401600.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 536.2103102018522, 'min_obs_dist': 751.0427714947499, 'explored_area': 61200}[32m [repeated 92x across cluster][0m
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 16.93157733080495, 'min_obs_dist': 49.94820856188153, 'explored_area': 310800}
+
+--- Iteration 53 ---
+Mean Reward: -35.83
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 274.48501335842155, 'min_drone_dist_min': 1.4542844287710983, 'min_drone_dist_max': 546.066514477253, 'min_obs_dist_mean': 490.03222833398917, 'min_obs_dist_min': 49.94820856188153, 'min_obs_dist_max': 799.4348272749908, 'explored_area_mean': 83528.0, 'explored_area_min': 57600.0, 'explored_area_max': 350800.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.99, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 54 ---
+Mean Reward: -35.58
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 285.408222874011, 'min_drone_dist_min': 1.4542844287710983, 'min_drone_dist_max': 579.6138187087611, 'min_obs_dist_mean': 503.10750922053126, 'min_obs_dist_min': 49.94820856188153, 'min_obs_dist_max': 800.370487299999, 'explored_area_mean': 77484.0, 'explored_area_min': 57200.0, 'explored_area_max': 310800.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.99, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 508.4696751700811, 'min_obs_dist': 726.382695085347, 'explored_area': 61600}[32m [repeated 89x across cluster][0m
+
+--- Iteration 55 ---
+Mean Reward: -41.75
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 297.4565060219872, 'min_drone_dist_min': 7.11689480575384, 'min_drone_dist_max': 579.6138187087611, 'min_obs_dist_mean': 516.4015420401533, 'min_obs_dist_min': 50.32265105124919, 'min_obs_dist_max': 814.435027290362, 'explored_area_mean': 80532.0, 'explored_area_min': 55600.0, 'explored_area_max': 312400.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 40.683096911165684, 'min_obs_dist': 47.61697493317818, 'explored_area': 101200}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 9.905035416127946, 'min_obs_dist': 70.7238688560364, 'explored_area': 367200}
+
+--- Iteration 56 ---
+Mean Reward: -37.08
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 291.0581413637379, 'min_drone_dist_min': 6.078953674565447, 'min_drone_dist_max': 587.4910025606315, 'min_obs_dist_mean': 512.3121435341357, 'min_obs_dist_min': 47.61697493317818, 'min_obs_dist_max': 817.0172917494779, 'explored_area_mean': 83596.0, 'explored_area_min': 55600.0, 'explored_area_max': 367200.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 26.81087614742859, 'min_obs_dist': 253.31363139558388, 'explored_area': 74800}[32m [repeated 95x across cluster][0m
+
+--- Iteration 57 ---
+Mean Reward: -22.24
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 287.77643932576916, 'min_drone_dist_min': 3.216018930140084, 'min_drone_dist_max': 607.0274498371018, 'min_obs_dist_mean': 510.02177741525213, 'min_obs_dist_min': 46.248908347347175, 'min_obs_dist_max': 831.837712840718, 'explored_area_mean': 83156.0, 'explored_area_min': 59600.0, 'explored_area_max': 367200.0, 'success_rate_mean': 0.04, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.95, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 3.216018930140084, 'min_obs_dist': 46.248908347347175, 'explored_area': 102000}[32m [repeated 3x across cluster][0m
+
+--- Iteration 58 ---
+Mean Reward: -27.60
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 306.35409512662267, 'min_drone_dist_min': 3.216018930140084, 'min_drone_dist_max': 607.0274498371018, 'min_obs_dist_mean': 533.3948115851877, 'min_obs_dist_min': 46.248908347347175, 'min_obs_dist_max': 831.837712840718, 'explored_area_mean': 80148.0, 'explored_area_min': 58800.0, 'explored_area_max': 251600.0, 'success_rate_mean': 0.03, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.97, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 363.51129358934253, 'min_obs_dist': 687.3379511320747, 'explored_area': 134000}[32m [repeated 83x across cluster][0m
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 8.199667689056584, 'min_obs_dist': 133.039751961149, 'explored_area': 327600}
+
+--- Iteration 59 ---
+Mean Reward: -33.03
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 296.47621836289665, 'min_drone_dist_min': 5.156801153693598, 'min_drone_dist_max': 609.6821137074005, 'min_obs_dist_mean': 517.91508800216, 'min_obs_dist_min': 47.8934390298696, 'min_obs_dist_max': 804.4061982017492, 'explored_area_mean': 85092.0, 'explored_area_min': 58800.0, 'explored_area_max': 327600.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.97, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 18.82181559278873, 'min_obs_dist': 47.8934390298696, 'explored_area': 231200}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 28.110118449457996, 'min_obs_dist': 46.111660787422814, 'explored_area': 149600}
+
+--- Iteration 60 ---
+Mean Reward: -24.27
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 282.34423544491824, 'min_drone_dist_min': 3.362153589635062, 'min_drone_dist_max': 625.4401351557603, 'min_obs_dist_mean': 500.29428953635284, 'min_obs_dist_min': 46.111660787422814, 'min_obs_dist_max': 812.7004279211577, 'explored_area_mean': 91228.0, 'explored_area_min': 13600.0, 'explored_area_max': 372000.0, 'success_rate_mean': 0.04, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.95, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 331.3768744629448, 'min_obs_dist': 500.29899706934947, 'explored_area': 75200}[32m [repeated 62x across cluster][0m
+
+--- Iteration 61 ---
+Mean Reward: -8.33
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 274.8785533808062, 'min_drone_dist_min': 3.362153589635062, 'min_drone_dist_max': 625.4401351557603, 'min_obs_dist_mean': 484.2809810203661, 'min_obs_dist_min': 46.111660787422814, 'min_obs_dist_max': 812.7004279211577, 'explored_area_mean': 93552.0, 'explored_area_min': 13600.0, 'explored_area_max': 372000.0, 'success_rate_mean': 0.07, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.93, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 3.4075571226706396, 'min_obs_dist': 49.640643712876845, 'explored_area': 126000}[32m [repeated 5x across cluster][0m
+
+--- Iteration 62 ---
+Mean Reward: -20.89
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 284.6569556249407, 'min_drone_dist_min': 3.4075571226706396, 'min_drone_dist_max': 570.3766187695219, 'min_obs_dist_mean': 506.16785280359494, 'min_obs_dist_min': 47.61280933879019, 'min_obs_dist_max': 797.608391500458, 'explored_area_mean': 88696.0, 'explored_area_min': 60800.0, 'explored_area_max': 278400.0, 'success_rate_mean': 0.04, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.96, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 419.25619661652524, 'min_obs_dist': 664.1559684627775, 'explored_area': 65600}[32m [repeated 80x across cluster][0m
+
+--- Iteration 63 ---
+Mean Reward: -34.24
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 274.0410266473085, 'min_drone_dist_min': 0.6501984242531087, 'min_drone_dist_max': 585.6047256038711, 'min_obs_dist_mean': 500.02549790410876, 'min_obs_dist_min': 49.640643712876845, 'min_obs_dist_max': 823.7264171268343, 'explored_area_mean': 85496.0, 'explored_area_min': 57600.0, 'explored_area_max': 274800.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.99, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 1.9821743201545448, 'min_obs_dist': 45.55211645366849, 'explored_area': 135600}
+
+--- Iteration 64 ---
+Mean Reward: -34.74
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 272.6245468645718, 'min_drone_dist_min': 0.6501984242531087, 'min_drone_dist_max': 585.6047256038711, 'min_obs_dist_mean': 491.94830673207645, 'min_obs_dist_min': 45.55211645366849, 'min_obs_dist_max': 823.7264171268343, 'explored_area_mean': 80244.0, 'explored_area_min': 56800.0, 'explored_area_max': 249200.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.99, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 133.1242235713524, 'min_obs_dist': 374.1222391137463, 'explored_area': 68800}[32m [repeated 103x across cluster][0m
+
+--- Iteration 65 ---
+Mean Reward: -34.41
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 290.1043930712626, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 600.3245482553659, 'min_obs_dist_mean': 517.173010551297, 'min_obs_dist_min': 45.55211645366849, 'min_obs_dist_max': 822.7131391302989, 'explored_area_mean': 78208.0, 'explored_area_min': 13600.0, 'explored_area_max': 249200.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.99, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 2.9871756472640696, 'min_obs_dist': 47.80140558049224, 'explored_area': 168800}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 6.615948364122494, 'min_obs_dist': 98.64085707978944, 'explored_area': 220400}
+
+--- Iteration 66 ---
+Mean Reward: -35.29
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 296.2958402805491, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 600.3245482553659, 'min_obs_dist_mean': 531.754216963278, 'min_obs_dist_min': 47.80140558049224, 'min_obs_dist_max': 817.942423004424, 'explored_area_mean': 79256.0, 'explored_area_min': 13600.0, 'explored_area_max': 220400.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 243.00840984478208, 'min_obs_dist': 466.92693901218365, 'explored_area': 72800}[32m [repeated 86x across cluster][0m
+
+--- Iteration 67 ---
+Mean Reward: -29.21
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 273.3939741671461, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 597.5474950996371, 'min_obs_dist_mean': 499.1288934646, 'min_obs_dist_min': 47.34447072474159, 'min_obs_dist_max': 834.7390036702395, 'explored_area_mean': 81456.0, 'explored_area_min': 13600.0, 'explored_area_max': 222000.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.97, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 11.814318018268594, 'min_obs_dist': 47.34447072474159, 'explored_area': 208400}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 15.346466455678138, 'min_obs_dist': 49.982312224905506, 'explored_area': 156400}
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 4.171989154803255, 'min_obs_dist': 50.81701807090855, 'explored_area': 205600}
+
+--- Iteration 68 ---
+Mean Reward: -19.22
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 255.02677538146796, 'min_drone_dist_min': 3.9388256782245357, 'min_drone_dist_max': 597.5474950996371, 'min_obs_dist_mean': 474.13429198399933, 'min_obs_dist_min': 47.34447072474159, 'min_obs_dist_max': 834.7390036702395, 'explored_area_mean': 84408.0, 'explored_area_min': 56400.0, 'explored_area_max': 222000.0, 'success_rate_mean': 0.04, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.94, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 261.7578483916502, 'min_obs_dist': 486.882319924606, 'explored_area': 65600}[32m [repeated 75x across cluster][0m
+
+--- Iteration 69 ---
+Mean Reward: -20.39
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 245.83362882183323, 'min_drone_dist_min': 3.9388256782245357, 'min_drone_dist_max': 597.5474950996371, 'min_obs_dist_mean': 468.8543197389435, 'min_obs_dist_min': 45.687206759796084, 'min_obs_dist_max': 834.7390036702395, 'explored_area_mean': 85800.0, 'explored_area_min': 56400.0, 'explored_area_max': 340400.0, 'success_rate_mean': 0.04, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.94, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 32.263973109748406, 'min_obs_dist': 45.687206759796084, 'explored_area': 117600}[32m [repeated 3x across cluster][0m
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 86.0048245345516, 'min_obs_dist': 304.91985303526434, 'explored_area': 340400}
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 215.32338314226516, 'min_obs_dist': 249.18799111612006, 'explored_area': 314800}
+
+--- Iteration 70 ---
+Mean Reward: -17.80
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 239.90328061723758, 'min_drone_dist_min': 3.347981216317799, 'min_drone_dist_max': 515.5435360152829, 'min_obs_dist_mean': 462.9838596866492, 'min_obs_dist_min': 45.687206759796084, 'min_obs_dist_max': 747.0548278178619, 'explored_area_mean': 92084.0, 'explored_area_min': 56400.0, 'explored_area_max': 340400.0, 'success_rate_mean': 0.05, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.92, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 252.8684328085857, 'min_obs_dist': 454.91885808539905, 'explored_area': 65200}[32m [repeated 60x across cluster][0m
+
+--- Iteration 71 ---
+Mean Reward: -27.17
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 246.13548780749207, 'min_drone_dist_min': 3.347981216317799, 'min_drone_dist_max': 515.5435360152829, 'min_obs_dist_mean': 470.7041957704725, 'min_obs_dist_min': 45.687206759796084, 'min_obs_dist_max': 747.0548278178619, 'explored_area_mean': 91752.0, 'explored_area_min': 62000.0, 'explored_area_max': 340400.0, 'success_rate_mean': 0.03, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.95, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 4.756270631439948, 'min_obs_dist': 48.81786651287164, 'explored_area': 93600}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 79.90654536828535, 'min_obs_dist': 209.18461533806473, 'explored_area': 292400}
+
+--- Iteration 72 ---
+Mean Reward: -36.79
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 247.86678909765928, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 559.1693536192676, 'min_obs_dist_mean': 481.5822210670189, 'min_obs_dist_min': 48.81786651287164, 'min_obs_dist_max': 774.690679188274, 'explored_area_mean': 89396.0, 'explored_area_min': 13600.0, 'explored_area_max': 292400.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 464.9517675263857, 'min_obs_dist': 698.2342823321696, 'explored_area': 86800}[32m [repeated 73x across cluster][0m
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 25.897245589114544, 'min_obs_dist': 48.238268657019056, 'explored_area': 218000}
+
+--- Iteration 73 ---
+Mean Reward: -36.80
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 261.07325884846904, 'min_drone_dist_min': 0.0, 'min_drone_dist_max': 609.4619509416908, 'min_obs_dist_mean': 503.69844401020504, 'min_obs_dist_min': 48.238268657019056, 'min_obs_dist_max': 841.826232262017, 'explored_area_mean': 88924.0, 'explored_area_min': 13600.0, 'explored_area_max': 292400.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 74 ---
+Mean Reward: -36.13
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 279.5339808015809, 'min_drone_dist_min': 3.7770502234198036, 'min_drone_dist_max': 609.4619509416908, 'min_obs_dist_mean': 517.822346205969, 'min_obs_dist_min': 48.238268657019056, 'min_obs_dist_max': 841.826232262017, 'explored_area_mean': 86636.0, 'explored_area_min': 60000.0, 'explored_area_max': 292400.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 183.64251860708174, 'min_obs_dist': 411.2891268998463, 'explored_area': 75200}[32m [repeated 72x across cluster][0m
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 5.977328819775259, 'min_obs_dist': 113.83456167319801, 'explored_area': 290800}
+
+--- Iteration 75 ---
+Mean Reward: -35.62
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 261.1981962851325, 'min_drone_dist_min': 4.3669548308820145, 'min_drone_dist_max': 572.9928266890928, 'min_obs_dist_mean': 490.5838994767887, 'min_obs_dist_min': 48.238268657019056, 'min_obs_dist_max': 784.3159056539408, 'explored_area_mean': 89692.0, 'explored_area_min': 60000.0, 'explored_area_max': 366000.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.97, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 2.6222744895816477, 'min_obs_dist': 49.78815508659716, 'explored_area': 210400}
+
+--- Iteration 76 ---
+Mean Reward: -25.86
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 282.59096940127205, 'min_drone_dist_min': 2.6222744895816477, 'min_drone_dist_max': 572.9928266890928, 'min_obs_dist_mean': 505.3376608893752, 'min_obs_dist_min': 45.79011462857723, 'min_obs_dist_max': 785.5689066127728, 'explored_area_mean': 87648.0, 'explored_area_min': 60000.0, 'explored_area_max': 366000.0, 'success_rate_mean': 0.03, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.95, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 334.36721893548037, 'min_obs_dist': 547.526777230122, 'explored_area': 68000}[32m [repeated 81x across cluster][0m
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 86.59848306039247, 'min_obs_dist': 53.87443865169367, 'explored_area': 366000}
+
+--- Iteration 77 ---
+Mean Reward: -15.41
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 279.33393420390723, 'min_drone_dist_min': 2.6222744895816477, 'min_drone_dist_max': 572.9928266890928, 'min_obs_dist_mean': 498.60053949254404, 'min_obs_dist_min': 45.79011462857723, 'min_obs_dist_max': 785.5689066127728, 'explored_area_mean': 85996.0, 'explored_area_min': 61200.0, 'explored_area_max': 329600.0, 'success_rate_mean': 0.05, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.95, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 105.93624356594243, 'min_obs_dist': 49.119457211459455, 'explored_area': 329600}[32m [repeated 4x across cluster][0m
+
+--- Iteration 78 ---
+Mean Reward: -12.99
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 287.87851092535175, 'min_drone_dist_min': 2.6222744895816477, 'min_drone_dist_max': 542.4604342627242, 'min_obs_dist_mean': 505.2613140870757, 'min_obs_dist_min': 45.79011462857723, 'min_obs_dist_max': 785.5689066127728, 'explored_area_mean': 91964.0, 'explored_area_min': 61600.0, 'explored_area_max': 369200.0, 'success_rate_mean': 0.06, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.94, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 153.1786662037662, 'min_obs_dist': 336.0352325654106, 'explored_area': 70000}[32m [repeated 61x across cluster][0m
+
+--- Iteration 79 ---
+Mean Reward: -21.04
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 258.5329792612894, 'min_drone_dist_min': 3.18053783509727, 'min_drone_dist_max': 529.0973737957643, 'min_obs_dist_mean': 482.48917032909435, 'min_obs_dist_min': 47.435413085056126, 'min_obs_dist_max': 777.037174217123, 'explored_area_mean': 91004.0, 'explored_area_min': 58400.0, 'explored_area_max': 369200.0, 'success_rate_mean': 0.04, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.96, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 25.61915968693383, 'min_obs_dist': 47.93310412818859, 'explored_area': 149600}[32m [repeated 3x across cluster][0m
+
+--- Iteration 80 ---
+Mean Reward: -28.97
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 253.1172440275204, 'min_drone_dist_min': 7.688649586010113, 'min_drone_dist_max': 516.8974026692134, 'min_obs_dist_mean': 495.86476821937055, 'min_obs_dist_min': 47.435413085056126, 'min_obs_dist_max': 793.5277864447648, 'explored_area_mean': 87252.0, 'explored_area_min': 58400.0, 'explored_area_max': 369200.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 280.87769903056716, 'min_obs_dist': 582.3041711834525, 'explored_area': 101600}[32m [repeated 86x across cluster][0m
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 23.471007689256762, 'min_obs_dist': 64.31207083558714, 'explored_area': 210800}
+
+--- Iteration 81 ---
+Mean Reward: -35.83
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 250.49830846661973, 'min_drone_dist_min': 3.3529002022049603, 'min_drone_dist_max': 516.8974026692134, 'min_obs_dist_mean': 493.73745797909976, 'min_obs_dist_min': 46.44004726326405, 'min_obs_dist_max': 793.5277864447648, 'explored_area_mean': 85352.0, 'explored_area_min': 58400.0, 'explored_area_max': 210800.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 3.3529002022049603, 'min_obs_dist': 46.44004726326405, 'explored_area': 111200}
+
+--- Iteration 82 ---
+Mean Reward: -39.73
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 251.0282958760028, 'min_drone_dist_min': 3.3529002022049603, 'min_drone_dist_max': 526.6904900866829, 'min_obs_dist_mean': 499.3164525470441, 'min_obs_dist_min': 46.44004726326405, 'min_obs_dist_max': 793.5277864447648, 'explored_area_mean': 93056.0, 'explored_area_min': 58400.0, 'explored_area_max': 290000.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 36.961271350057075, 'min_obs_dist': 347.9212608337781, 'explored_area': 101600}[32m [repeated 39x across cluster][0m
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 11.215550051068453, 'min_obs_dist': 49.6390780916827, 'explored_area': 122000}
+
+--- Iteration 83 ---
+Mean Reward: -37.10
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 247.83520847962012, 'min_drone_dist_min': 3.3529002022049603, 'min_drone_dist_max': 542.4665344151465, 'min_obs_dist_mean': 488.8541761459271, 'min_obs_dist_min': 46.44004726326405, 'min_obs_dist_max': 803.5511996466381, 'explored_area_mean': 99980.0, 'explored_area_min': 62800.0, 'explored_area_max': 344400.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.97, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 84 ---
+Mean Reward: -34.00
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 254.98824549137302, 'min_drone_dist_min': 3.448892587701334, 'min_drone_dist_max': 542.4665344151465, 'min_obs_dist_mean': 490.88429934191146, 'min_obs_dist_min': 46.534703745625116, 'min_obs_dist_max': 803.5511996466381, 'explored_area_mean': 94500.0, 'explored_area_min': 63600.0, 'explored_area_max': 344400.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 562.1400578525894, 'min_obs_dist': 801.5925940192029, 'explored_area': 76800}[32m [repeated 89x across cluster][0m
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 3.448892587701334, 'min_obs_dist': 46.534703745625116, 'explored_area': 244800}
+
+--- Iteration 85 ---
+Mean Reward: -33.19
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 258.37238889445814, 'min_drone_dist_min': 3.448892587701334, 'min_drone_dist_max': 562.1400578525894, 'min_obs_dist_mean': 497.59938511396814, 'min_obs_dist_min': 46.534703745625116, 'min_obs_dist_max': 801.5925940192029, 'explored_area_mean': 86360.0, 'explored_area_min': 60800.0, 'explored_area_max': 244800.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.99, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 16.265004413827068, 'min_obs_dist': 45.71324227356891, 'explored_area': 138400}
+
+--- Iteration 86 ---
+Mean Reward: -26.57
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 238.62828193015213, 'min_drone_dist_min': 2.4930076721212595, 'min_drone_dist_max': 564.3159852217296, 'min_obs_dist_mean': 472.45852442927736, 'min_obs_dist_min': 45.71324227356891, 'min_obs_dist_max': 824.4401117955451, 'explored_area_mean': 90160.0, 'explored_area_min': 60800.0, 'explored_area_max': 261200.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 473.1319607317612, 'min_obs_dist': 706.2389185174493, 'explored_area': 66800}[32m [repeated 92x across cluster][0m
+
+--- Iteration 87 ---
+Mean Reward: -24.35
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 252.40224999488743, 'min_drone_dist_min': 2.4523442700572686, 'min_drone_dist_max': 570.5925204913166, 'min_obs_dist_mean': 484.1554169746222, 'min_obs_dist_min': 45.71324227356891, 'min_obs_dist_max': 830.98046949314, 'explored_area_mean': 85896.0, 'explored_area_min': 62000.0, 'explored_area_max': 261200.0, 'success_rate_mean': 0.03, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.97, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 19.564316210687075, 'min_obs_dist': 47.93653851563699, 'explored_area': 134400}[32m [repeated 2x across cluster][0m
+
+--- Iteration 88 ---
+Mean Reward: -31.33
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 263.2043870877788, 'min_drone_dist_min': 2.4523442700572686, 'min_drone_dist_max': 583.6927869264562, 'min_obs_dist_mean': 505.7782167690318, 'min_obs_dist_min': 45.95547451582819, 'min_obs_dist_max': 838.9993335939607, 'explored_area_mean': 85536.0, 'explored_area_min': 66800.0, 'explored_area_max': 232400.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 355.2567618679984, 'min_obs_dist': 620.2471483444401, 'explored_area': 96400}[32m [repeated 97x across cluster][0m
+
+--- Iteration 89 ---
+Mean Reward: -38.51
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 281.97545259518404, 'min_drone_dist_min': 12.65218486120278, 'min_drone_dist_max': 583.6927869264562, 'min_obs_dist_mean': 523.469407448739, 'min_obs_dist_min': 154.29294379341295, 'min_obs_dist_max': 838.9993335939607, 'explored_area_mean': 82684.0, 'explored_area_min': 60400.0, 'explored_area_max': 232400.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 90 ---
+Mean Reward: -39.18
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 305.46500589532025, 'min_drone_dist_min': 4.549709684742235, 'min_drone_dist_max': 590.791646318565, 'min_obs_dist_mean': 539.0498171649368, 'min_obs_dist_min': 95.51106595538943, 'min_obs_dist_max': 832.528446504454, 'explored_area_mean': 80520.0, 'explored_area_min': 58400.0, 'explored_area_max': 163200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 403.99501436433405, 'min_obs_dist': 678.0866362203627, 'explored_area': 80800}[32m [repeated 123x across cluster][0m
+
+--- Iteration 91 ---
+Mean Reward: -36.96
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 308.74652864739284, 'min_drone_dist_min': 19.808373992073538, 'min_drone_dist_max': 590.791646318565, 'min_obs_dist_mean': 544.4391136596837, 'min_obs_dist_min': 174.37627666289893, 'min_obs_dist_max': 832.528446504454, 'explored_area_mean': 78508.0, 'explored_area_min': 58400.0, 'explored_area_max': 200800.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 92 ---
+Mean Reward: -36.68
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 294.11446896985433, 'min_drone_dist_min': 10.406600567082448, 'min_drone_dist_max': 588.2236472032905, 'min_obs_dist_mean': 522.6290490131296, 'min_obs_dist_min': 112.94916120254132, 'min_obs_dist_max': 798.8250053952418, 'explored_area_mean': 78916.0, 'explored_area_min': 61200.0, 'explored_area_max': 198400.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 117.88756558800728, 'min_obs_dist': 346.5862086119412, 'explored_area': 73600}[32m [repeated 124x across cluster][0m
+
+--- Iteration 93 ---
+Mean Reward: -36.08
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 285.1227693942881, 'min_drone_dist_min': 8.236425321431804, 'min_drone_dist_max': 576.1715780472073, 'min_obs_dist_mean': 522.1039110692604, 'min_obs_dist_min': 112.94916120254132, 'min_obs_dist_max': 787.7182307304421, 'explored_area_mean': 80964.0, 'explored_area_min': 56800.0, 'explored_area_max': 198400.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 1.378651214550494, 'min_obs_dist': 80.32773547395155, 'explored_area': 234000}
+
+--- Iteration 94 ---
+Mean Reward: -33.49
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 258.18976762081996, 'min_drone_dist_min': 1.378651214550494, 'min_drone_dist_max': 576.1715780472073, 'min_obs_dist_mean': 489.6799885071401, 'min_obs_dist_min': 80.32773547395155, 'min_obs_dist_max': 774.9185433818224, 'explored_area_mean': 79416.0, 'explored_area_min': 56800.0, 'explored_area_max': 234000.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 0.99, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 218.34182507085012, 'min_obs_dist': 439.4231185133655, 'explored_area': 66000}[32m [repeated 120x across cluster][0m
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 4.5907451338726855, 'min_obs_dist': 47.90719622727049, 'explored_area': 116400}
+
+--- Iteration 95 ---
+Mean Reward: -30.62
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 250.83761567970473, 'min_drone_dist_min': 1.378651214550494, 'min_drone_dist_max': 531.3742680164008, 'min_obs_dist_mean': 483.4881379639873, 'min_obs_dist_min': 47.90719622727049, 'min_obs_dist_max': 771.9648235405117, 'explored_area_mean': 80076.0, 'explored_area_min': 62000.0, 'explored_area_max': 234000.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 96 ---
+Mean Reward: -29.81
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 265.3341520809303, 'min_drone_dist_min': 8.964401194689463, 'min_drone_dist_max': 585.7859140817177, 'min_obs_dist_mean': 494.91972286693766, 'min_obs_dist_min': 48.54000609669799, 'min_obs_dist_max': 814.1764950302263, 'explored_area_mean': 77748.0, 'explored_area_min': 61200.0, 'explored_area_max': 165600.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.99, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 579.691931609667, 'min_obs_dist': 808.5013112877431, 'explored_area': 63600}[32m [repeated 112x across cluster][0m
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 9.614127281173852, 'min_obs_dist': 48.54000609669799, 'explored_area': 145200}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 4.777529884861429, 'min_obs_dist': 63.886920306721365, 'explored_area': 268000}
+
+--- Iteration 97 ---
+Mean Reward: -27.17
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 267.3326524022036, 'min_drone_dist_min': 4.777529884861429, 'min_drone_dist_max': 609.9795194862982, 'min_obs_dist_mean': 490.09128578466573, 'min_obs_dist_min': 48.54000609669799, 'min_obs_dist_max': 847.5982010900202, 'explored_area_mean': 77776.0, 'explored_area_min': 61200.0, 'explored_area_max': 268000.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 15.928590751316307, 'min_obs_dist': 46.505401098178766, 'explored_area': 124800}
+
+--- Iteration 98 ---
+Mean Reward: -27.88
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 267.81699159457895, 'min_drone_dist_min': 2.862080153877223, 'min_drone_dist_max': 603.9333376698465, 'min_obs_dist_mean': 498.3712843889556, 'min_obs_dist_min': 46.505401098178766, 'min_obs_dist_max': 813.1847271954579, 'explored_area_mean': 80480.0, 'explored_area_min': 58000.0, 'explored_area_max': 268000.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 21.960901337308012, 'min_obs_dist': 222.0614054656167, 'explored_area': 74800}[32m [repeated 125x across cluster][0m
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 36.31780049737377, 'min_obs_dist': 49.85311048324305, 'explored_area': 113600}
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 15.820311839623962, 'min_obs_dist': 48.65771774969108, 'explored_area': 121200}
+
+--- Iteration 99 ---
+Mean Reward: -27.13
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 274.30850385656316, 'min_drone_dist_min': 2.862080153877223, 'min_drone_dist_max': 603.9333376698465, 'min_obs_dist_mean': 511.36632156538997, 'min_obs_dist_min': 48.65771774969108, 'min_obs_dist_max': 802.6282186770493, 'explored_area_mean': 80216.0, 'explored_area_min': 58000.0, 'explored_area_max': 163600.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 100 ---
+Mean Reward: -39.00
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 280.48174138452947, 'min_drone_dist_min': 5.893165418203998, 'min_drone_dist_max': 530.4824521665483, 'min_obs_dist_mean': 519.9040124579603, 'min_obs_dist_min': 152.9306845427608, 'min_obs_dist_max': 802.5648998424898, 'explored_area_mean': 82336.0, 'explored_area_min': 63200.0, 'explored_area_max': 257200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 279.4066624095594, 'min_obs_dist': 531.4270373734223, 'explored_area': 77600}[32m [repeated 122x across cluster][0m
+
+--- Iteration 101 ---
+Mean Reward: -37.39
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 274.2171111732381, 'min_drone_dist_min': 1.5538292195831351, 'min_drone_dist_max': 566.0324197053185, 'min_obs_dist_mean': 510.96430314705026, 'min_obs_dist_min': 133.73845365752402, 'min_obs_dist_max': 809.8074615941567, 'explored_area_mean': 82424.0, 'explored_area_min': 64400.0, 'explored_area_max': 257200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 12.701714756594132, 'min_obs_dist': 49.86122437786083, 'explored_area': 135200}
+
+--- Iteration 102 ---
+Mean Reward: -28.10
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 265.62404918224513, 'min_drone_dist_min': 3.066094132743724, 'min_drone_dist_max': 566.0324197053185, 'min_obs_dist_mean': 498.4570883445272, 'min_obs_dist_min': 49.86122437786083, 'min_obs_dist_max': 809.8074615941567, 'explored_area_mean': 78176.0, 'explored_area_min': 64400.0, 'explored_area_max': 198800.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.99, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 376.8244634648489, 'min_obs_dist': 608.9576128177437, 'explored_area': 77600}[32m [repeated 116x across cluster][0m
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': False, 'fatal_crash': False, 'min_drone_dist': 6.476756526329382, 'min_obs_dist': 69.30523619198277, 'explored_area': 320000}
+
+--- Iteration 103 ---
+Mean Reward: -24.05
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 270.24267985725345, 'min_drone_dist_min': 3.066094132743724, 'min_drone_dist_max': 586.7583523319018, 'min_obs_dist_mean': 497.61515613235366, 'min_obs_dist_min': 48.44474928854192, 'min_obs_dist_max': 808.6929979525979, 'explored_area_mean': 78840.0, 'explored_area_min': 66000.0, 'explored_area_max': 320000.0, 'success_rate_mean': 0.02, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.97, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 24.585730834282725, 'min_obs_dist': 48.44474928854192, 'explored_area': 123600}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 10.978121739888936, 'min_obs_dist': 48.65376279677241, 'explored_area': 146800}
+
+--- Iteration 104 ---
+Mean Reward: -29.34
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 279.9713128468882, 'min_drone_dist_min': 6.476756526329382, 'min_drone_dist_max': 534.2585288548778, 'min_obs_dist_mean': 513.2591865824164, 'min_obs_dist_min': 48.65376279677241, 'min_obs_dist_max': 780.6269548053541, 'explored_area_mean': 79744.0, 'explored_area_min': 66400.0, 'explored_area_max': 320000.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.98, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 181.92901657915095, 'min_obs_dist': 389.7448806029408, 'explored_area': 72800}[32m [repeated 140x across cluster][0m
+
+--- Iteration 105 ---
+Mean Reward: -31.45
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 251.15980265648506, 'min_drone_dist_min': 6.977322929001349, 'min_drone_dist_max': 491.14774672285597, 'min_obs_dist_mean': 495.2267876944702, 'min_obs_dist_min': 169.53589714971494, 'min_obs_dist_max': 721.7151588251627, 'explored_area_mean': 81804.0, 'explored_area_min': 66400.0, 'explored_area_max': 224400.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 106 ---
+Mean Reward: -33.45
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 276.9583925943239, 'min_drone_dist_min': 11.767616906981711, 'min_drone_dist_max': 531.5071977199186, 'min_obs_dist_mean': 513.8888018713815, 'min_obs_dist_min': 180.90064634849747, 'min_obs_dist_max': 793.4217225596475, 'explored_area_mean': 76984.0, 'explored_area_min': 67200.0, 'explored_area_max': 151600.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 273.52239530493694, 'min_obs_dist': 484.74025825521034, 'explored_area': 68400}[32m [repeated 136x across cluster][0m
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 10.337995692807468, 'min_obs_dist': 49.60238081679076, 'explored_area': 167200}
+
+--- Iteration 107 ---
+Mean Reward: -28.41
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 280.48751886435394, 'min_drone_dist_min': 8.66916597713027, 'min_drone_dist_max': 566.3708475528732, 'min_obs_dist_mean': 521.1188582907787, 'min_obs_dist_min': 49.60238081679076, 'min_obs_dist_max': 815.251284408809, 'explored_area_mean': 78452.0, 'explored_area_min': 66000.0, 'explored_area_max': 172800.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.99, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 108 ---
+Mean Reward: -31.86
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 272.5171979469728, 'min_drone_dist_min': 8.66916597713027, 'min_drone_dist_max': 558.3044354108231, 'min_obs_dist_mean': 511.89225600258874, 'min_obs_dist_min': 171.53848026942953, 'min_obs_dist_max': 834.9762963264725, 'explored_area_mean': 76780.0, 'explored_area_min': 62400.0, 'explored_area_max': 100800.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 386.50061747529344, 'min_obs_dist': 602.3297391325307, 'explored_area': 67200}[32m [repeated 150x across cluster][0m
+
+--- Iteration 109 ---
+Mean Reward: -30.43
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 291.5089741204819, 'min_drone_dist_min': 3.2976526686973435, 'min_drone_dist_max': 584.8016083583743, 'min_obs_dist_mean': 525.5613274437015, 'min_obs_dist_min': 204.1885711869456, 'min_obs_dist_max': 834.9762963264725, 'explored_area_mean': 75172.0, 'explored_area_min': 62400.0, 'explored_area_max': 113200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 110 ---
+Mean Reward: -33.82
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 265.2049288258066, 'min_drone_dist_min': 4.97927200372775, 'min_drone_dist_max': 584.8016083583743, 'min_obs_dist_mean': 490.6541445478431, 'min_obs_dist_min': 164.2803404228222, 'min_obs_dist_max': 825.9366399908325, 'explored_area_mean': 75592.0, 'explored_area_min': 64800.0, 'explored_area_max': 149200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 183.7586119371398, 'min_obs_dist': 624.2231819517375, 'explored_area': 157600}[32m [repeated 158x across cluster][0m
+
+--- Iteration 111 ---
+Mean Reward: -32.77
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 261.3619219895901, 'min_drone_dist_min': 4.97927200372775, 'min_drone_dist_max': 532.8855559167654, 'min_obs_dist_mean': 492.86182259840115, 'min_obs_dist_min': 164.2803404228222, 'min_obs_dist_max': 778.4603641170693, 'explored_area_mean': 74540.0, 'explored_area_min': 64800.0, 'explored_area_max': 157600.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 112 ---
+Mean Reward: -33.84
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 287.5765924858261, 'min_drone_dist_min': 5.319843521332171, 'min_drone_dist_max': 552.2948815550026, 'min_obs_dist_mean': 517.3383713083189, 'min_obs_dist_min': 221.8556818765882, 'min_obs_dist_max': 807.8198877776573, 'explored_area_mean': 74764.0, 'explored_area_min': 66400.0, 'explored_area_max': 105600.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 302.9691573408521, 'min_obs_dist': 556.4899624464451, 'explored_area': 82400}[32m [repeated 170x across cluster][0m
+
+--- Iteration 113 ---
+Mean Reward: -33.11
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 288.41151105633884, 'min_drone_dist_min': 5.322732471673744, 'min_drone_dist_max': 567.1354496388169, 'min_obs_dist_mean': 522.2361702743385, 'min_obs_dist_min': 211.21757128959942, 'min_obs_dist_max': 802.8610879509924, 'explored_area_mean': 75184.0, 'explored_area_min': 66000.0, 'explored_area_max': 95600.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 114 ---
+Mean Reward: -32.33
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 278.06087109509167, 'min_drone_dist_min': 10.986956630880744, 'min_drone_dist_max': 586.919044978063, 'min_obs_dist_mean': 510.3866662845427, 'min_obs_dist_min': 193.71014183412802, 'min_obs_dist_max': 815.0804410403995, 'explored_area_mean': 74656.0, 'explored_area_min': 64800.0, 'explored_area_max': 94800.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881261)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 278.17881691828603, 'min_obs_dist': 532.4516211722672, 'explored_area': 76400}[32m [repeated 170x across cluster][0m
+
+--- Iteration 115 ---
+Mean Reward: -29.09
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 274.20188489671085, 'min_drone_dist_min': 7.814289277925226, 'min_drone_dist_max': 560.5388543265153, 'min_obs_dist_mean': 505.95525904978575, 'min_obs_dist_min': 135.05118154213673, 'min_obs_dist_max': 813.8373851346796, 'explored_area_mean': 75132.0, 'explored_area_min': 66400.0, 'explored_area_max': 95200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 116 ---
+Mean Reward: -30.94
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 290.5569126432895, 'min_drone_dist_min': 12.487992780098198, 'min_drone_dist_max': 577.8942603582857, 'min_obs_dist_mean': 524.7468961244808, 'min_obs_dist_min': 135.05118154213673, 'min_obs_dist_max': 822.9550100235523, 'explored_area_mean': 75224.0, 'explored_area_min': 67200.0, 'explored_area_max': 90800.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 268.5688552572395, 'min_obs_dist': 497.38240533344435, 'explored_area': 72800}[32m [repeated 171x across cluster][0m
+
+--- Iteration 117 ---
+Mean Reward: -30.98
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 277.68470233444725, 'min_drone_dist_min': 5.174473301716586, 'min_drone_dist_max': 569.2249218417653, 'min_obs_dist_mean': 510.02858262939395, 'min_obs_dist_min': 184.35606578556352, 'min_obs_dist_max': 822.9550100235523, 'explored_area_mean': 75960.0, 'explored_area_min': 68400.0, 'explored_area_max': 173200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 118 ---
+Mean Reward: -34.48
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 277.54418458899016, 'min_drone_dist_min': 3.30028143832027, 'min_drone_dist_max': 500.34087351094655, 'min_obs_dist_mean': 508.7093540708393, 'min_obs_dist_min': 91.14842851835954, 'min_obs_dist_max': 797.7855151794047, 'explored_area_mean': 76824.0, 'explored_area_min': 67600.0, 'explored_area_max': 197600.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 387.8256609243848, 'min_obs_dist': 628.1837390119267, 'explored_area': 74800}[32m [repeated 160x across cluster][0m
+
+--- Iteration 119 ---
+Mean Reward: -34.57
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 285.10480122455965, 'min_drone_dist_min': 3.6135830830998037, 'min_drone_dist_max': 548.5856183131648, 'min_obs_dist_mean': 516.1948084712918, 'min_obs_dist_min': 169.01599670389714, 'min_obs_dist_max': 787.3289569073982, 'explored_area_mean': 73728.0, 'explored_area_min': 67600.0, 'explored_area_max': 83600.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 120 ---
+Mean Reward: -35.24
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 300.9602859883557, 'min_drone_dist_min': 0.6391964551433126, 'min_drone_dist_max': 566.9870499331607, 'min_obs_dist_mean': 533.5862066456023, 'min_obs_dist_min': 153.52511146991958, 'min_obs_dist_max': 805.5668954168187, 'explored_area_mean': 74688.0, 'explored_area_min': 64400.0, 'explored_area_max': 101600.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 240.6683928756553, 'min_obs_dist': 475.65836785916116, 'explored_area': 76400}[32m [repeated 175x across cluster][0m
+
+--- Iteration 121 ---
+Mean Reward: -29.98
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 261.30204231584486, 'min_drone_dist_min': 4.034528590227242, 'min_drone_dist_max': 537.5950029669216, 'min_obs_dist_mean': 492.55542851983535, 'min_obs_dist_min': 138.35977931387205, 'min_obs_dist_max': 784.0058442785062, 'explored_area_mean': 74368.0, 'explored_area_min': 67200.0, 'explored_area_max': 82000.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 122 ---
+Mean Reward: -29.30
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 288.92992219429175, 'min_drone_dist_min': 3.328541799065782, 'min_drone_dist_max': 580.1318220451702, 'min_obs_dist_mean': 514.1580501503258, 'min_obs_dist_min': 134.69067915837906, 'min_obs_dist_max': 837.7387992039355, 'explored_area_mean': 73688.0, 'explored_area_min': 65200.0, 'explored_area_max': 85600.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 131.49209859183145, 'min_obs_dist': 378.55103589007166, 'explored_area': 75200}[32m [repeated 176x across cluster][0m
+
+--- Iteration 123 ---
+Mean Reward: -31.80
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 275.289017879979, 'min_drone_dist_min': 4.283016243139396, 'min_drone_dist_max': 576.6038181531987, 'min_obs_dist_mean': 506.92741779174037, 'min_obs_dist_min': 191.53141710845077, 'min_obs_dist_max': 839.822369495176, 'explored_area_mean': 76300.0, 'explored_area_min': 66400.0, 'explored_area_max': 168400.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 124 ---
+Mean Reward: -34.46
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 315.83424963982424, 'min_drone_dist_min': 4.283016243139396, 'min_drone_dist_max': 577.7851434782609, 'min_obs_dist_mean': 551.0924894595315, 'min_obs_dist_min': 219.3202401444615, 'min_obs_dist_max': 844.062287635811, 'explored_area_mean': 74660.0, 'explored_area_min': 66400.0, 'explored_area_max': 85200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 236.26303401355173, 'min_obs_dist': 495.5564894951029, 'explored_area': 76400}[32m [repeated 170x across cluster][0m
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 10.946204048443617, 'min_obs_dist': 49.695692236930896, 'explored_area': 126400}
+
+--- Iteration 125 ---
+Mean Reward: -17.79
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 250.32227587417398, 'min_drone_dist_min': 5.626233636691472, 'min_drone_dist_max': 553.5118377644679, 'min_obs_dist_mean': 477.1344575596392, 'min_obs_dist_min': 46.656327625799584, 'min_obs_dist_max': 821.0852389779758, 'explored_area_mean': 78228.0, 'explored_area_min': 69600.0, 'explored_area_max': 186400.0, 'success_rate_mean': 0.03, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.97, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+
+--- Iteration 126 ---
+Mean Reward: -31.91
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 270.7769388454375, 'min_drone_dist_min': 5.626233636691472, 'min_drone_dist_max': 549.323774273201, 'min_obs_dist_mean': 506.289117197499, 'min_obs_dist_min': 198.4959903481092, 'min_obs_dist_max': 780.386472045393, 'explored_area_mean': 75716.0, 'explored_area_min': 68000.0, 'explored_area_max': 87600.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 170.50059526262592, 'min_obs_dist': 431.52931550171434, 'explored_area': 72400}[32m [repeated 162x across cluster][0m
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 12.58808040254639, 'min_obs_dist': 49.501099411810536, 'explored_area': 131600}[32m [repeated 2x across cluster][0m
+
+--- Iteration 127 ---
+Mean Reward: -35.14
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 302.13711341009855, 'min_drone_dist_min': 8.958040510296287, 'min_drone_dist_max': 523.359671244204, 'min_obs_dist_mean': 537.5228091098479, 'min_obs_dist_min': 176.10826029466034, 'min_obs_dist_max': 771.740312017897, 'explored_area_mean': 75012.0, 'explored_area_min': 69200.0, 'explored_area_max': 87200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 128 ---
+Mean Reward: -34.06
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 294.35359299398164, 'min_drone_dist_min': 7.690172329028716, 'min_drone_dist_max': 553.609848920805, 'min_obs_dist_mean': 526.6433110528909, 'min_obs_dist_min': 60.38136312976989, 'min_obs_dist_max': 814.6637120542682, 'explored_area_mean': 77720.0, 'explored_area_min': 66800.0, 'explored_area_max': 283600.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 250.65629159819798, 'min_obs_dist': 499.8468789985914, 'explored_area': 73200}[32m [repeated 152x across cluster][0m
+
+--- Iteration 129 ---
+Mean Reward: -32.21
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 286.828431182609, 'min_drone_dist_min': 8.881384110033427, 'min_drone_dist_max': 606.2517185824856, 'min_obs_dist_mean': 526.4783768996195, 'min_obs_dist_min': 58.687732510972715, 'min_obs_dist_max': 845.4765003809144, 'explored_area_mean': 77496.0, 'explored_area_min': 67600.0, 'explored_area_max': 254400.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 130 ---
+Mean Reward: -33.18
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 272.4688800564585, 'min_drone_dist_min': 12.025285033338196, 'min_drone_dist_max': 545.3156348963707, 'min_obs_dist_mean': 511.35284738444733, 'min_obs_dist_min': 136.0907215876192, 'min_obs_dist_max': 799.0753123576692, 'explored_area_mean': 75880.0, 'explored_area_min': 67200.0, 'explored_area_max': 85200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 337.7496676103334, 'min_obs_dist': 586.4317671976027, 'explored_area': 76800}[32m [repeated 167x across cluster][0m
+
+--- Iteration 131 ---
+Mean Reward: -31.21
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 287.87994932278104, 'min_drone_dist_min': 4.99907546770314, 'min_drone_dist_max': 559.7665054076166, 'min_obs_dist_mean': 524.9751298823047, 'min_obs_dist_min': 214.73690405810856, 'min_obs_dist_max': 838.0652228717106, 'explored_area_mean': 76036.0, 'explored_area_min': 70400.0, 'explored_area_max': 88800.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 132 ---
+Mean Reward: -33.43
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 279.6693983936913, 'min_drone_dist_min': 8.378490320298962, 'min_drone_dist_max': 548.704408791764, 'min_obs_dist_mean': 519.0386273044699, 'min_obs_dist_min': 197.85804518072484, 'min_obs_dist_max': 838.0652228717106, 'explored_area_mean': 77052.0, 'explored_area_min': 70400.0, 'explored_area_max': 172400.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 331.82357276118705, 'min_obs_dist': 576.1546908959133, 'explored_area': 80000}[32m [repeated 176x across cluster][0m
+
+--- Iteration 133 ---
+Mean Reward: -33.74
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 283.8558553142282, 'min_drone_dist_min': 13.675561434512652, 'min_drone_dist_max': 542.9039380176271, 'min_obs_dist_mean': 527.2918600636582, 'min_obs_dist_min': 235.9682990635731, 'min_obs_dist_max': 802.61758932227, 'explored_area_mean': 76420.0, 'explored_area_min': 68400.0, 'explored_area_max': 86400.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 134 ---
+Mean Reward: -31.03
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 269.97298199109827, 'min_drone_dist_min': 4.514336614919544, 'min_drone_dist_max': 586.1655233397569, 'min_obs_dist_mean': 508.89405514814024, 'min_obs_dist_min': 230.47671911556623, 'min_obs_dist_max': 836.5951476496298, 'explored_area_mean': 77568.0, 'explored_area_min': 68400.0, 'explored_area_max': 229200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 395.33822880103213, 'min_obs_dist': 650.5402831459941, 'explored_area': 76400}[32m [repeated 172x across cluster][0m
+
+--- Iteration 135 ---
+Mean Reward: -31.77
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 298.5496229886735, 'min_drone_dist_min': 12.580131966100584, 'min_drone_dist_max': 586.1655233397569, 'min_obs_dist_mean': 538.2919636400999, 'min_obs_dist_min': 150.39018112943717, 'min_obs_dist_max': 836.5951476496298, 'explored_area_mean': 76928.0, 'explored_area_min': 68400.0, 'explored_area_max': 89200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 136 ---
+Mean Reward: -30.48
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 290.38625902156105, 'min_drone_dist_min': 5.755212996044846, 'min_drone_dist_max': 567.2628205004753, 'min_obs_dist_mean': 530.9238130836009, 'min_obs_dist_min': 141.5215085483605, 'min_obs_dist_max': 844.061950718918, 'explored_area_mean': 76800.0, 'explored_area_min': 71600.0, 'explored_area_max': 92000.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 363.96141800155266, 'min_obs_dist': 618.9678612630572, 'explored_area': 79200}[32m [repeated 175x across cluster][0m
+
+--- Iteration 137 ---
+Mean Reward: -30.47
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 271.8545893671519, 'min_drone_dist_min': 7.949943141609323, 'min_drone_dist_max': 527.444287118821, 'min_obs_dist_mean': 508.4627520399884, 'min_obs_dist_min': 170.1988653612004, 'min_obs_dist_max': 799.7542302934979, 'explored_area_mean': 76424.0, 'explored_area_min': 70000.0, 'explored_area_max': 85200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 138 ---
+Mean Reward: -33.05
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 290.34413519789274, 'min_drone_dist_min': 6.465733907429825, 'min_drone_dist_max': 543.9278900905076, 'min_obs_dist_mean': 530.1457386319875, 'min_obs_dist_min': 132.50653532959146, 'min_obs_dist_max': 815.9217725306189, 'explored_area_mean': 76356.0, 'explored_area_min': 70000.0, 'explored_area_max': 90800.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 315.59968634228204, 'min_obs_dist': 518.6882701569775, 'explored_area': 73600}[32m [repeated 177x across cluster][0m
+
+--- Iteration 139 ---
+Mean Reward: -31.21
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 288.8311617838365, 'min_drone_dist_min': 8.432274116258414, 'min_drone_dist_max': 574.0927129886059, 'min_obs_dist_mean': 529.644925325874, 'min_obs_dist_min': 120.84179638858917, 'min_obs_dist_max': 817.2988923113901, 'explored_area_mean': 77920.0, 'explored_area_min': 70000.0, 'explored_area_max': 180400.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 140 ---
+Mean Reward: -27.93
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 280.3551205577377, 'min_drone_dist_min': 0.9980863711920989, 'min_drone_dist_max': 556.8942108665283, 'min_obs_dist_mean': 523.3430499275897, 'min_obs_dist_min': 151.43557646476424, 'min_obs_dist_max': 820.6451207376385, 'explored_area_mean': 77288.0, 'explored_area_min': 66400.0, 'explored_area_max': 96400.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881264)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 336.05580661847375, 'min_obs_dist': 565.5544347642676, 'explored_area': 72800}[32m [repeated 169x across cluster][0m
+
+--- Iteration 141 ---
+Mean Reward: -29.96
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 251.8715221961238, 'min_drone_dist_min': 0.9980863711920989, 'min_drone_dist_max': 529.7887705979989, 'min_obs_dist_mean': 488.1440501443696, 'min_obs_dist_min': 161.83634309832428, 'min_obs_dist_max': 786.6650499960205, 'explored_area_mean': 76676.0, 'explored_area_min': 68000.0, 'explored_area_max': 92000.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 142 ---
+Mean Reward: -30.25
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 273.033121256648, 'min_drone_dist_min': 10.04647387335478, 'min_drone_dist_max': 552.8040813794685, 'min_obs_dist_mean': 509.41133146292975, 'min_obs_dist_min': 140.2006334035101, 'min_obs_dist_max': 822.4324859970534, 'explored_area_mean': 79012.0, 'explored_area_min': 71600.0, 'explored_area_max': 209200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 275.8724516037621, 'min_obs_dist': 510.3015826277076, 'explored_area': 74400}[32m [repeated 166x across cluster][0m
+
+--- Iteration 143 ---
+Mean Reward: -32.13
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 259.4999524003006, 'min_drone_dist_min': 6.258869189533339, 'min_drone_dist_max': 510.53720457385435, 'min_obs_dist_mean': 500.08658631878274, 'min_obs_dist_min': 156.66124313655527, 'min_obs_dist_max': 776.8436830956507, 'explored_area_mean': 79108.0, 'explored_area_min': 72800.0, 'explored_area_max': 209200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881257)[0m final_info1: {'success': True, 'fatal_crash': False, 'min_drone_dist': 41.551070628559046, 'min_obs_dist': 46.438083037654906, 'explored_area': 257200}
+
+--- Iteration 144 ---
+Mean Reward: -28.76
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 294.04116067693036, 'min_drone_dist_min': 6.258869189533339, 'min_drone_dist_max': 595.3486364972533, 'min_obs_dist_mean': 527.1393212460616, 'min_obs_dist_min': 46.438083037654906, 'min_obs_dist_max': 830.384416357444, 'explored_area_mean': 79444.0, 'explored_area_min': 69600.0, 'explored_area_max': 257200.0, 'success_rate_mean': 0.01, 'success_rate_min': 0.0, 'success_rate_max': 1.0, 'crash_rate_mean': 0.99, 'crash_rate_min': 0.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 327.19799806112917, 'min_obs_dist': 589.4540017531883, 'explored_area': 78400}[32m [repeated 169x across cluster][0m
+
+--- Iteration 145 ---
+Mean Reward: -32.43
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 295.78707054399825, 'min_drone_dist_min': 8.804738864712107, 'min_drone_dist_max': 517.8687713509427, 'min_obs_dist_mean': 538.0110605475326, 'min_obs_dist_min': 189.23102196038397, 'min_obs_dist_max': 776.1627593600718, 'explored_area_mean': 77632.0, 'explored_area_min': 68400.0, 'explored_area_max': 85200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 146 ---
+Mean Reward: -32.41
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 289.1464786219625, 'min_drone_dist_min': 13.820190173978803, 'min_drone_dist_max': 527.4742748989541, 'min_obs_dist_mean': 532.1652582865162, 'min_obs_dist_min': 265.88880520835914, 'min_obs_dist_max': 795.4752334650598, 'explored_area_mean': 77260.0, 'explored_area_min': 72000.0, 'explored_area_max': 85200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 372.10222870240585, 'min_obs_dist': 559.9118054041406, 'explored_area': 75200}[32m [repeated 176x across cluster][0m
+
+--- Iteration 147 ---
+Mean Reward: -29.21
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 241.86444024625612, 'min_drone_dist_min': 8.232476009900113, 'min_drone_dist_max': 550.6958703500783, 'min_obs_dist_mean': 483.4758908980049, 'min_obs_dist_min': 160.16396955911094, 'min_obs_dist_max': 824.2631166959086, 'explored_area_mean': 77652.0, 'explored_area_min': 72000.0, 'explored_area_max': 89200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 148 ---
+Mean Reward: -29.87
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 264.67456382805096, 'min_drone_dist_min': 12.2182018387103, 'min_drone_dist_max': 526.9518002464368, 'min_obs_dist_mean': 503.6359692648568, 'min_obs_dist_min': 206.2283869046487, 'min_obs_dist_max': 786.4685393390472, 'explored_area_mean': 77572.0, 'explored_area_min': 71600.0, 'explored_area_max': 92800.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 544.2713229533617, 'min_obs_dist': 770.3325000120163, 'explored_area': 72400}[32m [repeated 177x across cluster][0m
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 459.90838238533615, 'min_obs_dist': 6
+[36m(RolloutWorker pid=881259)[0m 97.0995484710554, 'explored_area': 73600}
+
+--- Iteration 149 ---
+Mean Reward: -29.23
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 272.56240300431085, 'min_drone_dist_min': 1.2943039375188297, 'min_drone_dist_max': 557.470676441857, 'min_obs_dist_mean': 517.7796725099982, 'min_obs_dist_min': 219.42624785794683, 'min_obs_dist_max': 827.1048681578324, 'explored_area_mean': 77660.0, 'explored_area_min': 71600.0, 'explored_area_max': 94000.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 150 ---
+Mean Reward: -33.01
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 282.8386222134794, 'min_drone_dist_min': 22.54343945557839, 'min_drone_dist_max': 574.3780356121371, 'min_obs_dist_mean': 525.0783295074747, 'min_obs_dist_min': 217.57351235881626, 'min_obs_dist_max': 834.9305090637098, 'explored_area_mean': 77224.0, 'explored_area_min': 70000.0, 'explored_area_max': 82400.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 179.50676390627135, 'min_obs_dist': 436.39915641272734, 'explored_area': 79200}[32m [repeated 176x across cluster][0m
+
+--- Iteration 151 ---
+Mean Reward: -30.45
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 277.99210080122157, 'min_drone_dist_min': 8.43141972508968, 'min_drone_dist_max': 543.574263508534, 'min_obs_dist_mean': 513.7469971562235, 'min_obs_dist_min': 171.09531309874347, 'min_obs_dist_max': 804.4577447420596, 'explored_area_mean': 77168.0, 'explored_area_min': 69600.0, 'explored_area_max': 87200.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+
+--- Iteration 152 ---
+Mean Reward: -31.16
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 271.09422322986006, 'min_drone_dist_min': 12.627656161551917, 'min_drone_dist_max': 555.4092784969254, 'min_obs_dist_mean': 510.23327747223414, 'min_obs_dist_min': 171.09531309874347, 'min_obs_dist_max': 814.3771591493377, 'explored_area_mean': 77720.0, 'explored_area_min': 72400.0, 'explored_area_max': 108400.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+[36m(RolloutWorker pid=881259)[0m final_info1: {'success': False, 'fatal_crash': True, 'min_drone_dist': 392.689110395712, 'min_obs_dist': 666.913965168424, 'explored_area': 79600}[32m [repeated 178x across cluster][0m
+
+--- Iteration 153 ---
+Mean Reward: -29.84
+>>> [디버깅] custom_metrics: {'min_drone_dist_mean': 250.43952315320422, 'min_drone_dist_min': 1.62974071190219, 'min_drone_dist_max': 551.9707189589867, 'min_obs_dist_mean': 487.7896161790093, 'min_obs_dist_min': 169.50881289517574, 'min_obs_dist_max': 814.3771591493377, 'explored_area_mean': 77584.0, 'explored_area_min': 72800.0, 'explored_area_max': 86400.0, 'success_rate_mean': 0.0, 'success_rate_min': 0.0, 'success_rate_max': 0.0, 'crash_rate_mean': 1.0, 'crash_rate_min': 1.0, 'crash_rate_max': 1.0}
+Traceback (most recent call last):
+  File "/home/choi/Desktop/hemac/src/train/train.py", line 174, in <module>
+    main()
+  File "/home/choi/Desktop/hemac/src/train/train.py", line 136, in main
+    result = algo.train()
+             ^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 321, in train
+    result = self.step()
+             ^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 1224, in step
+    ) = self._run_one_training_iteration_old_api_stack()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 4359, in _run_one_training_iteration_old_api_stack
+    training_step_results = self.training_step()
+                            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 394, in training_step
+    return self._training_step_old_api_stack()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 498, in _training_step_old_api_stack
+    train_results = train_one_step(self, train_batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/train_ops.py", line 59, in train_one_step
+    info = do_minibatch_sgd(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/sgd.py", line 130, in do_minibatch_sgd
+    local_worker.learn_on_batch(
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/rollout_worker.py", line 798, in learn_on_batch
+    info_out[pid] = policy.learn_on_batch(batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/threading.py", line 24, in wrapper
+    return func(self, *a, **k)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 626, in learn_on_batch
+    grads, fetches = self.compute_gradients(postprocessed_batch)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/threading.py", line 24, in wrapper
+    return func(self, *a, **k)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 839, in compute_gradients
+    grad_info.update(self.stats_fn(postprocessed_batch))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo_torch_policy.py", line 190, in stats_fn
+    torch.stack(self.get_tower_stats("mean_policy_loss"))
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/choi/Desktop/hemac/src/train/train.py", line 174, in <module>
+    main()
+  File "/home/choi/Desktop/hemac/src/train/train.py", line 136, in main
+    result = algo.train()
+             ^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/tune/trainable/trainable.py", line 321, in train
+    result = self.step()
+             ^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 1224, in step
+    ) = self._run_one_training_iteration_old_api_stack()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/algorithm.py", line 4359, in _run_one_training_iteration_old_api_stack
+    training_step_results = self.training_step()
+                            ^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 394, in training_step
+    return self._training_step_old_api_stack()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo.py", line 498, in _training_step_old_api_stack
+    train_results = train_one_step(self, train_batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/execution/train_ops.py", line 59, in train_one_step
+    info = do_minibatch_sgd(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/sgd.py", line 130, in do_minibatch_sgd
+    local_worker.learn_on_batch(
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/evaluation/rollout_worker.py", line 798, in learn_on_batch
+    info_out[pid] = policy.learn_on_batch(batch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/threading.py", line 24, in wrapper
+    return func(self, *a, **k)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 626, in learn_on_batch
+    grads, fetches = self.compute_gradients(postprocessed_batch)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/utils/threading.py", line 24, in wrapper
+    return func(self, *a, **k)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/policy/torch_policy_v2.py", line 839, in compute_gradients
+    grad_info.update(self.stats_fn(postprocessed_batch))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/choi/anaconda3/envs/hemac/lib/python3.11/site-packages/ray/rllib/algorithms/ppo/ppo_torch_policy.py", line 190, in stats_fn
+    torch.stack(self.get_tower_stats("mean_policy_loss"))
+KeyboardInterrupt
