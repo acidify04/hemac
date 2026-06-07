@@ -595,6 +595,10 @@ class HeMAC:
                 "explored_area": len(self.explored_grids) * 400,
             }
 
+    def is_outside_search_area(self, agent):
+        """Return whether an agent is outside the allowed search area."""
+        return not self.search_area.covers(Point((agent.x, agent.y)))
+
     def step(self, action, active_agent):
         """Execute a step."""
         if active_agent == self.agents[0]:
@@ -607,8 +611,9 @@ class HeMAC:
         # 1. 에이전트 업데이트 및 맵 이탈 체크
         agent.update(self.area, self.world, action)
         
-        # [안전 로직] 즉시 맵 이탈 확인
-        if agent.out_of_bound:
+        # [안전 로직] 탐색 범위를 벗어나면 즉시 종료
+        if agent.out_of_bound or self.is_outside_search_area(agent):
+            agent.out_of_bound = True
             self.collided = True
             reward -= 20
             self.terminate = True

@@ -1,0 +1,40 @@
+{
+  "os": "Linux-6.8.0-84-generic-x86_64-with-glibc2.35",
+  "python": "CPython 3.11.15",
+  "startedAt": "2026-06-07T08:18:37.996872Z",
+  "program": "/home/choi/Desktop/hemac/src/train/train.py",
+  "codePath": "src/train/train.py",
+  "codePathLocal": "train.py",
+  "git": {
+    "remote": "https://github.com/acidify04/hemac.git",
+    "commit": "af107215d65bf32c760998fc626a4df8d8625808"
+  },
+  "email": "choioy6532@naver.com",
+  "root": "/home/choi/Desktop/hemac/src/train",
+  "host": "choi",
+  "executable": "/home/choi/anaconda3/envs/hemac/bin/python",
+  "cpu_count": 8,
+  "cpu_count_logical": 16,
+  "gpu": "NVIDIA GeForce RTX 5070 Ti",
+  "gpu_count": 1,
+  "disk": {
+    "/": {
+      "total": "1006448865280",
+      "used": "749338632192"
+    }
+  },
+  "memory": {
+    "total": "32751316992"
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA GeForce RTX 5070 Ti",
+      "memoryTotal": "17094934528",
+      "cudaCores": 8960,
+      "architecture": "Blackwell",
+      "uuid": "GPU-d85d812d-4b19-38a1-d6c8-21497f0a9e02"
+    }
+  ],
+  "cudaVersion": "12.9",
+  "writerId": "1e9xsxhgt5n28koxd6uqfj123h87babs"
+}
