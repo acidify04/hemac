@@ -40,6 +40,7 @@ class Observer(BaseAgent):
         self.trajectory_len = 3
         self.trajectory = []
         self.last_goal_distance = None
+        self.last_base_distance = None
 
         self.time_factor = time_factor
         self.speed = speed  # fixed speed
@@ -76,6 +77,7 @@ class Observer(BaseAgent):
         self.goal_in_view = False
         self.goal_estimation = None
         self.last_goal_distance = None
+        self.last_base_distance = None
         self.orientation = 0.0
         self.trajectory = []
 
@@ -220,4 +222,3 @@ class Observer(BaseAgent):
 def dist(x1, y1, x2, y2):
     """Distance between two points."""
     return np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-
