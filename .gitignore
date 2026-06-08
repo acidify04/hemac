@@ -1,0 +1,11 @@
+./planner/downward
+
+# Training artifacts
+wandb/
+wandb_media/
+src/train/wandb_media/
+hemac_checkpoints/
+src/train/hemac_checkpoints/
+checkpoint*/
+src/train/wandb
+visualization/

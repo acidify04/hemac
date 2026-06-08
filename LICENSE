@@ -1,0 +1,87 @@
+Thales Non Production License Agreement
+
+
+1. Definitions
+
+The following terms, when capitalized, shall have the meanings set forth below or as defined elsewhere in this License Agreement, whether in the singular or plural.
+
+“Contribution” shall mean:
+    a) in the case of the initial Contributor, the initial code and documentation Distributed under this Agreement, and
+    b) in the case of each subsequent Contributor:
+        i) changes to the Program, and
+        ii) additions to the Program;
+where such changes and/or additions to the Program originate from and are Distributed by that particular Contributor. A Contribution 'originates' from a Contributor if it was added to the Program by such Contributor itself or anyone acting on such Contributor's behalf. Contributions do not include additions to the Program which: (i) are separate modules of software Distributed in conjunction with the Program under their own license agreement, and (ii) are not derivative works of the Program.
+
+“Contributor” shall mean Licensor and any individual or Legal Entity on behalf of whom a Contribution has been received by Licensor and subsequently incorporated within the Work.
+
+“Distribute”, “Distributed”, “Distributing” and “Distribution” shall mean providing or making available by any means a copy of the Contribution.
+
+“Legal Entity” shall mean the union of the acting entity and all other entities that Control, are Controlled by, or are under common Control with that entity. For the purposes of this definition, "Control" means (i) the power, direct or indirect, to cause the direction or management of such entity, whether by contract or otherwise, or (ii) ownership of fifty percent (50%) or more of the outstanding shares, or (iii) beneficial ownership of such entity.
+
+“License Agreement” shall mean this Non-Production License Agreement governing the access, use, Contribution and Distribution of the Program.
+
+“Licensor” shall mean the copyright owner or entity authorized by the copyright owner that is granting the License Agreement.
+
+“Non-Production Environment”: shall mean an environment used exclusively for purposes other than production, such as application for research, development, testing, training, demonstration purpose. Any use for commercial applications (e.g. live, real-world conditions, commercial operations, revenue-generating activities, or direct interactions with or impacts on end users) as well as internal use by employees in the context of a company’s business activities are explicitly prohibited.
+
+“Personal”: shall mean any use of a Contribution that is exclusively for personal, non-profit and non-commercial use not directly or indirectly connected to any commercial activities, business operation and shall explicitly exclude any activity that is intended to generate revenue, or that is performed on behalf of a commercial entity.
+
+“Program” shall mean the Contributions Distributed in accordance with this Agreement.
+
+“Thales” shall mean Thales S.A. and all other entities that Control, are Controlled by, or are under common Control with Thales S.A..
+
+“You” shall mean an individual or Legal entity exercising permissions granted by this License Agreement.
+
+
+2. License
+
+2.1 Rights granted
+Under this section rights are granted for the duration of the applicable copyright to the Program according to the applicable law.
+
+Each Contributor represents that to its knowledge it has sufficient copyright rights in its Contribution, if any, to grant the copyright license set forth in this License Agreement.
+
+    a) Subject to the terms of this License Agreement, each Contributor hereby grants You a non-exclusive, royalty-free, worldwide, non-sublicensable, non-transferable, limited license to use, copy, make Contributions, and Distribute the Program;
+
+    b) You may Distribute copies of the Program or your Contribution provided that You make available a copy of this License Agreement to third-party recipient of i) the Program ii) your Contribution.
+
+2.2 Limitations
+The rights granted to You under this License Agreement shall be limited by the following:
+
+    a) Your use of the Program shall be limited to testing, researching, Personal, or evaluation purposes in Non-Production Environments;
+
+    b) If you intend to use the Program for any purpose not explicitly permitted by this License Agreement, you are required to obtain a license from Thales. Thales may grant this license at its sole discretion. You may contact Thales via the following email address: trt@ca.thalesgroup.com;
+
+    c) Unless You explicitly state otherwise, any Contribution made and Distributed by You shall be governed by the terms of this License Agreement, without any additional terms or conditions. Notwithstanding the above, nothing herein shall supersede or modify the terms of any separate license agreement you may have executed with Licensor regarding such Contributions;
+
+    d) You understand that although each Contributor grants the licenses to its Contribution set forth herein, no assurances are provided by any Contributor that the Program does not infringe a patent or other intellectual property rights. Each Contributor disclaims any liability towards You for claims brought by any other third-party based on infringement of intellectual property rights or otherwise.
+
+
+3. Intellectual Property
+
+This License Agreement does not grant You any trademark licenses except as required for reasonable and customary use in describing the origin of the Program.
+
+You must not misrepresent or imply, through any means, that the Contribution made by or for You and/or any Contribution You Distribute under your name and responsibility is an official product of Thales or has been endorsed, approved or validated by Thales, unless You are authorized by Thales to do so in writing.
+
+This License Agreement does not grant You any patent licenses.
+
+
+4. Warranty
+
+EXCEPT AS EXPRESSLY SET FORTH IN THIS LICENSE AGREEMENT, THE PROGRAM IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED INCLUDING, WITHOUT LIMITATION, ANY WARRANTIES OR CONDITIONS OF TITLE, NON-INFRINGEMENT, MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE. You are solely responsible for determining the appropriateness of using and Distributing the Program according to this License Agreement and assume all risks associated with its exercise of rights under this License Agreement, including but not limited to the risks and costs of program errors, compliance with applicable laws, damage to or loss of data, programs or equipment, and unavailability or interruption of operations.
+
+
+5. Disclaimer of liability
+
+EXCEPT AS EXPRESSLY SET FORTH IN THIS LICENSE AGREEMENT CONTRIBUTORS SHALL NOT HAVE ANY LIABILITY FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING WITHOUT LIMITATION LOST PROFITS), HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OR DISTRIBUTION OF THE PROGRAM OR THE EXERCISE OF ANY RIGHTS GRANTED HEREUNDER, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+
+6. General provisions
+
+6.1. Governing laws.
+This License Agreement is governed by the laws of France.
+
+6.2. Competent jurisdiction.
+The courts of Paris shall have exclusive jurisdiction of any dispute arising out of this License Agreement.
+
+6.3. Severability.
+If any provision of this License Agreement is held to be invalid, illegal or unenforceable, the remaining provisions shall be unaffected thereby and remain valid as if such provision had not been set forth herein.

@@ -1,0 +1,75 @@
+scenario:
+  agents: { "drone": [ "1b_agent_1", "1b_agent_2", "1b_agent_3" ] }
+
+hemarl_config:
+  server_mode: true
+  port: 5351
+  position_origin:
+    latitude: 48.58619850014233
+    longitude: 2.323803514942938
+    altitude: 43
+
+HeMAC_config:
+  time_factor: 0.1  # seconds for a step
+  max_cycles: 9999
+  render_mode: 'human'
+  render_ratio: 1
+  render_fps: 30
+  observer_speed: 18
+  n_observers: 0
+  n_drones: 3
+  min_obstacles: 0
+  max_obstacles: 0
+  geofence:
+    coordinates_type: "geo" # could be geo or cardinal
+    area:
+      - [ 48.589454348843816, 2.333310845537113 ]  # scenario 3
+      - [ 48.590950025390384, 2.3366061235925883 ]  # scenario 3
+      - [ 48.59242311077432, 2.333469927925904 ]  # scenario 3
+      - [ 48.59276131309096, 2.332401803314923 ]  # scenario 3
+      - [ 48.59317466840457, 2.3285838259797913 ]  # scenario 3
+      - [ 48.593542927562055, 2.327788414035865 ]  # scenario 3
+      - [ 48.59312957526171, 2.327083906312879 ]  # scenario 3
+      - [ 48.589454348843816, 2.333310845537113 ]  # scenario 3
+  patrol:
+    benchmark: true
+    coordinates_type: "geo" # could be geo or cardinal
+    area:
+      - [ 48.58946110553129, 2.333295065539718 ]  # scenario 3
+      - [ 48.59094820082254, 2.336545441030198 ]  # scenario 3
+      - [ 48.59241217429823, 2.333457672514343 ]  # scenario 3
+      - [ 48.59274279853967, 2.332365079814049 ]  # scenario 3
+      - [ 48.59315204717195, 2.328639242143662 ]  # scenario 3
+      - [ 48.59263920702867, 2.327943727851363 ]  # scenario 3
+      - [ 48.58946110553129, 2.333295065539718 ]  # scenario 3
+  drone_config:
+    drone_max_speed: 16
+    drone_max_charge: 9999
+    drone_max_thrust: 4
+    drone_altitude: 43
+    drone_dimension: [ 32, 44 ]  # width, height in centimeters
+    drone_ui_dimension: 14  # width in pixels
+    drones_starting_pos:
+      - [ 48.593010508762944, 2.3280387002062923 ]  # scenario 3
+      - [ 48.59295655035908, 2.3282906014271987 ]  # scenario 3
+      - [ 48.59284106024879, 2.3281045380260252 ]  # scenario 3
+    starting_pos_coordinates_type: "geo" # could be geo or cardinal
+  poi:
+    - dimension: [ 8, 8 ]
+      speed: 1.38  # scenario 3
+      variable_speed: false
+      spawn_mode: "fixed"  # could be fixed or random
+      starting_pos_coordinates_type: "geo"  # could be geo or cardinal
+      starting_pos: [ 48.59101894125553, 2.3365196087718516 ]  # scenario 3
+      draw_expected_position: false
+      draw_uncertainty: false
+      waypoints_coordinates_type: "geo"  # could be geo or cardinal
+      waypoints:
+        - [ 48.59101894125553, 2.3365196087718516 ]  # scenario 3
+        - [ 48.592543437836895, 2.3318408867859546 ]  # scenario 3
+  drone_sensor:
+    model: "DownwardFacingCamera"
+    params:
+      hfov: 1.1763508319854736 # radians [0-2pi]
+      vfov: 0.71778750419616699 # radians [0-2pi]
+
