@@ -29,7 +29,6 @@ GOAL_CONFIG = {
 VIDEO_LOG_INTERVAL = 50
 VIDEO_FPS = 12
 VIDEO_SEED = 0
-VIDEO_EVAL_SEEDS = tuple(range(10))
 VIDEO_OUTPUT_DIR = Path("./wandb_media")
 
 
@@ -283,7 +282,19 @@ def main():
         .env_runners(num_env_runners=4) 
         .multi_agent(policies=policies, policy_mapping_fn=policy_mapping_fn)
         .resources(num_gpus=1)
-        .training(train_batch_size=8000, lr=1e-4, gamma=0.99, grad_clip=1.0, clip_param=0.2)
+        .training(
+            train_batch_size=8000, 
+            lr_schedule=[
+                [0, 1e-4],                 # 초기 스텝
+                [500 * 8000, 5e-5],        # 이터레이션 500 부근
+                [10000 * 8000, 1e-5]       # 최종 이터레이션 부근
+            ],
+            gamma=0.99, 
+            grad_clip=1.0, 
+            clip_param=0.2,
+            entropy_coeff=0.005,
+            kl_target=0.01,
+        )
         .debugging(log_level="WARN")
     )
 
@@ -340,18 +351,20 @@ def main():
 
         if (i + 1) % VIDEO_LOG_INTERVAL == 0:
             try:
+                current_eval_seeds = np.random.randint(0, 100000, size=10).tolist()
+                
                 eval_success_rate = collect_eval_success_rate(
                     algo,
-                    num_episodes=len(VIDEO_EVAL_SEEDS),
-                    seeds=VIDEO_EVAL_SEEDS,
+                    num_episodes=10,
+                    seeds=current_eval_seeds,
                     explore=False,
                 )
                 log_payload["metrics/eval_success_rate"] = eval_success_rate
 
                 eval_success_rate_stochastic = collect_eval_success_rate(
                     algo,
-                    num_episodes=len(VIDEO_EVAL_SEEDS),
-                    seeds=VIDEO_EVAL_SEEDS,
+                    num_episodes=10,
+                    seeds=current_eval_seeds,
                     explore=True,
                 )
                 log_payload["metrics/eval_success_rate_stochastic"] = eval_success_rate_stochastic
@@ -360,18 +373,20 @@ def main():
 
         if (i + 1) % VIDEO_LOG_INTERVAL == 0:
             try:
+                current_eval_seeds = np.random.randint(0, 100000, size=10).tolist()
+                
                 eval_drone_crash_rate = collect_eval_drone_crash_rate(
                     algo,
-                    num_episodes=len(VIDEO_EVAL_SEEDS),
-                    seeds=VIDEO_EVAL_SEEDS,
+                    num_episodes=10,
+                    seeds=current_eval_seeds,
                     explore=False,
                 )
                 log_payload["metrics/eval_drone_crash_rate"] = eval_drone_crash_rate
 
                 eval_drone_crash_rate_stochastic = collect_eval_drone_crash_rate(
                     algo,
-                    num_episodes=len(VIDEO_EVAL_SEEDS),
-                    seeds=VIDEO_EVAL_SEEDS,
+                    num_episodes=10,
+                    seeds=current_eval_seeds,
                     explore=True,
                 )
                 log_payload["metrics/eval_drone_crash_rate_stochastic"] = eval_drone_crash_rate_stochastic
