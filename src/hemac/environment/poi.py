@@ -49,6 +49,9 @@ class PointOfInterest:
             if poi_config and poi_config.get("waypoints_coordinates_type")
             else "geo",
             "waypoints": poi_config.get("waypoints") if poi_config and poi_config.get("waypoints") else [],
+            "boundary_margin": poi_config.get("boundary_margin")
+            if poi_config and poi_config.get("boundary_margin") is not None
+            else 140,
         }
         self.randomizer = randomizer
         self.rect = None
@@ -111,11 +114,13 @@ class PointOfInterest:
         attempts = 0
         inside_area = False
         no_collision = False
+        respects_boundary_margin = False
+        boundary_margin = max(float(self.config.get("boundary_margin", 0)), 0.0)
 
         # min_x, max_x = self.spawn_range["x_range"]
         # min_y, max_y = self.spawn_range["y_range"]
 
-        while not (inside_area and no_collision) and attempts < max_attempts:
+        while not (inside_area and no_collision and respects_boundary_margin) and attempts < max_attempts:
             attempts += 1
 
             if self.config.get("spawn_mode") == "random":
@@ -151,13 +156,17 @@ class PointOfInterest:
 
             # Check if POI is in area
             inside_area = area.contains(Point(goal_pos))
+            if self.config.get("spawn_mode") == "random":
+                respects_boundary_margin = area.boundary.distance(Point(goal_pos)) >= boundary_margin
+            else:
+                respects_boundary_margin = True
 
             # Check if POI collides with obstacles
             no_collision = not any(self.rect.colliderect(obstacle) for obstacle in (obstacles or []))
 
             # print(f"inside area: {inside_area}")
 
-        if not (inside_area and no_collision):
+        if not (inside_area and no_collision and respects_boundary_margin):
             print("POI could not be positioned after several attempts.")
 
         return pos

@@ -82,6 +82,7 @@ class Drone(BaseAgent):
         self.out_of_bound = False
         self.time_factor = time_factor
         self.starting_pos = None
+        self.has_custom_starting_pos = False
 
         ui_dims = 40
         dims = [1, 1]
@@ -113,8 +114,10 @@ class Drone(BaseAgent):
                             0,
                         )
                     )
+                    self.has_custom_starting_pos = True
                 else:
                     self.starting_pos = drone_config.get("drones_starting_pos")[drone_id]
+                    self.has_custom_starting_pos = True
             else:
                 self.starting_pos = [0, 0]  # computer random position
         else:
@@ -161,17 +164,12 @@ class Drone(BaseAgent):
         action space: [wanted vx, wanted vy, recharge] where recharge is mapped to a bool for trying to recharge.
         """
         self.observation_space = gymnasium.spaces.Box(
-            low=-10000, high=10000, shape=(17 + self.number_of_drones * 2,)
+            low=-1.0, high=1.0, shape=(17 + self.number_of_drones * 2,)
         )
         """
-        observation space: [x, y, charge, x_base, y_base, obs_x, obs_y, d1.. d4, agents_rel_pos] where
-        [x,y] are the relative coordinates (capped at 100) communicated by the observer,
-        [x_base y_base] are the relative coordinates to the base center, and charge is its own charge level.
-        [obs_x, obs_y] is the relative observer position,
-        [d1, d2, d3, d4] are the sensed distances to obstacles or boundaries
-        in the East-North-West-South directions (capped to sensing_range),
-        agent_rel_pos is a list of the relative [x,y] positions of the other drones in this form: [x1, y1, x2, y2, ...]
-        the final 6 values are the recent trajectory.
+        observation space: normalized relative quantities for goal/base/observer/frontier,
+        normalized distances to boundaries/obstacles, other-drone relative positions,
+        and recent relative trajectory offsets.
         """
         self.charge_level = self.max_charge
         self.charging = False
@@ -182,6 +180,7 @@ class Drone(BaseAgent):
         self.trajectory = []
         self.last_goal_distance = None
         self.last_observer_distance = None
+        self.last_boundary_distance = None
 
         self.is_broken = False
 
@@ -201,6 +200,7 @@ class Drone(BaseAgent):
         self.trajectory = []
         self.last_goal_distance = None
         self.last_observer_distance = None
+        self.last_boundary_distance = None
 
     def sync_pose_state(self):
         """Sync state derived from the current spawn pose."""
@@ -377,34 +377,61 @@ class Drone(BaseAgent):
 
     def observe(self, world, agents, poi) -> np.array:
         """Observe the world."""
+        minx, miny, maxx, maxy = world.search_area.bounds
+        area_width = max(maxx - minx, 1.0)
+        area_height = max(maxy - miny, 1.0)
+
         if world.goal_known:
             goal_x, goal_y = world.observer_communication
-            to_goal_x = np.clip((goal_x - self.x), -50, 50)
-            to_goal_y = np.clip((goal_y - self.y), -50, 50)
+            to_goal_x = np.clip((goal_x - self.x) / area_width, -1.0, 1.0)
+            to_goal_y = np.clip((goal_y - self.y) / area_height, -1.0, 1.0)
+            frontier_x = 0.0
+            frontier_y = 0.0
         else:
             to_goal_x = 0.0
             to_goal_y = 0.0
+            frontier_dx, frontier_dy = self.nearest_unexplored_vector(world)
+            frontier_x = np.clip(frontier_dx / area_width, -1.0, 1.0)
+            frontier_y = np.clip(frontier_dy / area_height, -1.0, 1.0)
 
         base_x, base_y = game_ref_to_world_ref(world.base.center, world.area)
-        to_base_x = np.clip((base_x - self.x), -50, 50)
-        to_base_y = np.clip((base_y - self.y), -50, 50)
+        to_base_x = np.clip((base_x - self.x) / area_width, -1.0, 1.0)
+        to_base_y = np.clip((base_y - self.y) / area_height, -1.0, 1.0)
 
         observer = next((agent for agent in agents if agent.__class__.__name__ == "Observer"), None)
         if observer is not None:
-            to_observer_x = np.clip((observer.x - self.x), -100, 100)
-            to_observer_y = np.clip((observer.y - self.y), -100, 100)
+            to_observer_x = np.clip((observer.x - self.x) / area_width, -1.0, 1.0)
+            to_observer_y = np.clip((observer.y - self.y) / area_height, -1.0, 1.0)
         else:
             to_observer_x = 0.0
             to_observer_y = 0.0
 
-        distances = self.obstacles_in_quadrants(Point(self.x, self.y), world.search_area, world.obstacles)
+        raw_distances = self.obstacles_in_quadrants(Point(self.x, self.y), world.search_area, world.obstacles)
+        distances = np.array(
+            [
+                np.clip(raw_distances[0] / area_width, 0.0, 1.0),
+                np.clip(raw_distances[1] / area_height, 0.0, 1.0),
+                np.clip(raw_distances[2] / area_width, 0.0, 1.0),
+                np.clip(raw_distances[3] / area_height, 0.0, 1.0),
+            ],
+            dtype=np.float32,
+        )
 
         agents_rel_pos = [
-            coord for agent in agents if isinstance(agent, Drone) for coord in (agent.x - self.x, agent.y - self.y)
+            np.clip(coord / area_width, -1.0, 1.0) if idx % 2 == 0 else np.clip(coord / area_height, -1.0, 1.0)
+            for agent in agents
+            if isinstance(agent, Drone) and agent is not self
+            for idx, coord in enumerate((agent.x - self.x, agent.y - self.y))
         ]
+        motion_scale = max(self.max_speed * self.time_factor * self.trajectory_len, 1.0)
         traj_obs = []
         for pos in self.trajectory:
-            traj_obs.extend([pos[0], pos[1]])
+            traj_obs.extend(
+                [
+                    np.clip((self.x - pos[0]) / motion_scale, -1.0, 1.0),
+                    np.clip((self.y - pos[1]) / motion_scale, -1.0, 1.0),
+                ]
+            )
 
         obs = np.array(
             [
@@ -415,23 +442,53 @@ class Drone(BaseAgent):
                 to_base_y,
                 to_observer_x,
                 to_observer_y,
+                frontier_x,
+                frontier_y,
             ],
-            np.float32,
+            dtype=np.float32,
         )
         obs = np.concatenate((obs, distances, agents_rel_pos, traj_obs), dtype=np.float32)
-        return obs
+        return np.clip(obs, -1.0, 1.0).astype(np.float32, copy=False)
+
+    def nearest_unexplored_vector(self, world):
+        """Return a relative vector toward the nearest unexplored exploration cell."""
+        search_grid_centers = getattr(world, "search_grid_centers", {})
+        explored_grids = getattr(world, "explored_grids", set())
+        observer_explored_grids = getattr(world, "observer_explored_grids", set())
+
+        nearest_dx = 0.0
+        nearest_dy = 0.0
+        nearest_dist_sq = float("inf")
+
+        for grid_key, (center_x, center_y) in search_grid_centers.items():
+            if grid_key in explored_grids or grid_key in observer_explored_grids:
+                continue
+
+            dx = center_x - self.x
+            dy = center_y - self.y
+            dist_sq = dx * dx + dy * dy
+            if dist_sq < nearest_dist_sq:
+                nearest_dist_sq = dist_sq
+                nearest_dx = dx
+                nearest_dy = dy
+
+        return nearest_dx, nearest_dy
 
     def obstacles_in_quadrants(self, point, area, obstacles):
         """Find distancs to obstacles in the 4 quadrants."""
         pygame_area = self.world.area  # Needed for coordinate conversion
         px, py = world_ref_to_game_ref((point.x, point.y), pygame_area)
 
-        # Initialize distances with sensing range
+        minx, miny, maxx, maxy = area.bounds
+
+        # Use true search-area edge distances so the drone always knows how much
+        # room remains in each direction, not only when a boundary is within
+        # the local sensing radius.
         distances = {
-            "right": self.sensing_range,
-            "up": self.sensing_range,
-            "left": self.sensing_range,
-            "down": self.sensing_range,
+            "right": maxx - point.x,
+            "up": maxy - point.y,
+            "left": point.x - minx,
+            "down": point.y - miny,
         }
 
         # --- Find closest point on each obstacle ---
@@ -448,21 +505,6 @@ class Drone(BaseAgent):
                     distances["left"] = min(distances["left"], distance)
                 if closest_y < py:
                     distances["up"] = min(distances["up"], distance)  # y is inverted in pygame
-
-        # --- Find closest point on the area boundary ---
-        closest_point = area.boundary.interpolate(area.boundary.project(point))
-        ax, ay = closest_point.x, closest_point.y
-        distance = np.hypot(ax - point.x, ay - point.y)
-
-        if distance < self.sensing_range:
-            if ax > point.x:
-                distances["right"] = min(distances["right"], distance)
-            if ay > point.y:
-                distances["up"] = min(distances["up"], distance)
-            if ax < point.x:
-                distances["left"] = min(distances["left"], distance)
-            if ay < point.y:
-                distances["down"] = min(distances["down"], distance)
 
         result = [dist for dist in distances.values()]
 

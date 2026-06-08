@@ -8,6 +8,14 @@ import wandb
 
 from hemac import HeMAC_v0
 
+
+DRONE_START_POSITIONS = [
+    [130.0, 870.0, 5.0],
+    [170.0, 870.0, 5.0],
+    [150.0, 830.0, 5.0],
+]
+
+
 class HeMACCallbacks(DefaultCallbacks):
     def on_episode_end(self, *, worker, base_env, policies, episode, env_index, **kwargs):
         final_info = {}
@@ -44,7 +52,9 @@ class HeMACCallbacks(DefaultCallbacks):
                         "min_obs_dist": float(curr.min_obs_dist),
                         "explored_area": float(len(curr.explored_grids) * 400),
                         "success": (float(curr.min_obs_dist) < 50),
-                        "fatal_crash": curr.collided
+                        "fatal_crash": curr.collided,
+                        "drone_crash": getattr(curr, "drone_crash", False),
+                        "observer_crash": getattr(curr, "observer_crash", False),
                     }
                     print(f'final_info2: {final_info}')
                     break
@@ -70,6 +80,8 @@ class HeMACCallbacks(DefaultCallbacks):
         episode.custom_metrics["explored_area"] = float(area)
         episode.custom_metrics["success_rate"] = 1.0 if final_info.get("success", False) else 0.0
         episode.custom_metrics["crash_rate"] = 1.0 if final_info.get("fatal_crash", False) else 0.0
+        episode.custom_metrics["drone_crash_rate"] = 1.0 if final_info.get("drone_crash", False) else 0.0
+        episode.custom_metrics["observer_crash_rate"] = 1.0 if final_info.get("observer_crash", False) else 0.0
 
 
 def env_creator(config):
@@ -78,14 +90,21 @@ def env_creator(config):
         "observer_speed": 5, 
         "n_drones": 3,
         "n_provisioners": 0,
+        "known_goals": True,
+        "max_cycles": 500,
         "drone_config": {
             "drone_max_speed": 25,
             "drone_max_thrust": 8,
-            "drones_starting_pos": [],
+            "drones_starting_pos": DRONE_START_POSITIONS,
         },
         "min_obstacles": 0,  # [추가] 확실한 통제를 위해 최소값 0 명시
         "max_obstacles": 0,  # [수정] 2 -> 0 (목표 도달을 먼저 학습시키기 위함)
-        "poi_config": [{"speed": 0}] 
+        "poi_config": [{
+            "speed": 0,
+            "spawn_mode": "fixed",
+            "starting_pos": [720.0, 760.0],
+            "boundary_margin": 140,
+        }]
     }
     return PettingZooEnv(HeMAC_v0.env(**env_config))
 
@@ -156,12 +175,14 @@ def main():
             "reward/drone_policy": policy_rewards.get("drone_policy", 0),
             "metrics/success_rate": custom_metrics.get("success_rate_mean", 0),
             "metrics/crash_rate": custom_metrics.get("crash_rate_mean", 0),
+            "metrics/drone_crash_rate": custom_metrics.get("drone_crash_rate_mean", 0),
+            "metrics/observer_crash_rate": custom_metrics.get("observer_crash_rate_mean", 0),
             "metrics/min_drone_dist": custom_metrics.get("min_drone_dist_mean", 0),
             "metrics/min_obs_dist": custom_metrics.get("min_obs_dist_mean", 0),
             "metrics/explored_area": custom_metrics.get("explored_area_mean", 0),
         })
         
-        if (i + 1) % 300 == 0:
+        if (i + 1) % 100 == 0:
             # i+1:05d는 숫자를 5자리(예: 00500)로 포맷팅하여 정렬이 잘 되게 합니다.
             iter_checkpoint_dir = os.path.join(checkpoint_dir, f"checkpoint_{i+1:05d}")
             algo.save(iter_checkpoint_dir)

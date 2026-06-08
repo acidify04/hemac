@@ -41,6 +41,7 @@ class Observer(BaseAgent):
         self.trajectory = []
         self.last_goal_distance = None
         self.last_base_distance = None
+        self.last_boundary_distance = None
 
         self.time_factor = time_factor
         self.speed = speed  # fixed speed
@@ -60,15 +61,12 @@ class Observer(BaseAgent):
         2D steering. 0: right, 1: left
         """
         self.observation_space = gymnasium.spaces.Box(
-            low=-10000, high=10000, shape=(11,)
+            low=-1.0, high=1.0, shape=(17,)
         )  # handling the presence and position of 1 POI for now
         """
-        [POI, x_g, y_g, theta, x, y, _...]: POI is treated as a bool corresponding to the
-        presence of in POI in the FOV (1000 = True, -1000 = False).
-        [x_g, y_g] are the goal's absolute coordinates
-        theta is the agent's absolute orientation
-        [x, y] is the agent's absolute position
-        _ is a placeholer to maintain consistent observation spaces between agents (when padding is required)
+        [goal_dx, goal_dy, goal_dist, goal_heading_error, theta, x, y, right, up, left, down, traj...]
+        All values are normalized. The trajectory tail is expressed as recent
+        relative offsets from the current position instead of absolute points.
         """
 
     def reset(self, seed=None, options=None):
@@ -78,6 +76,7 @@ class Observer(BaseAgent):
         self.goal_estimation = None
         self.last_goal_distance = None
         self.last_base_distance = None
+        self.last_boundary_distance = None
         self.orientation = 0.0
         self.trajectory = []
 
@@ -104,10 +103,8 @@ class Observer(BaseAgent):
         if self.discrete_action_space:
             action = self.discrete_to_continuous(action)
 
-        if action[0] < 0:
-            self.orientation += self.steering_angle
-        elif action[0] > 0:
-            self.orientation -= self.steering_angle
+        steering = float(np.clip(action[0], -1.0, 1.0))
+        self.orientation -= steering * self.steering_angle
         self.orientation = self.orientation % (2 * np.pi)
         self.x += self.speed * np.cos(self.orientation) * self.time_factor
         self.y += self.speed * np.sin(self.orientation) * self.time_factor
@@ -146,15 +143,15 @@ class Observer(BaseAgent):
     def discrete_to_continuous(self, action):
         """Convert discrete action to box space."""
         if action == 0:
-            out = [1, 0, 0]
+            out = [1.0, 0, 0]
         elif action == 1:
-            out = [-1, 0, 0]
+            out = [0.5, 0, 0]
         elif action == 2:
             out = [0, 0, 0]
         elif action == 3:
-            out = [0, 0, 0]
+            out = [-0.5, 0, 0]
         elif action == 4:
-            out = [0, 0, 0]
+            out = [-1.0, 0, 0]
         return out
 
     def process_collision(self, o_rect, o_speed):
@@ -200,19 +197,53 @@ class Observer(BaseAgent):
             else:
                 self.goal_in_view = False
 
+        minx, miny, maxx, maxy = world.search_area.bounds
+        area_width = max(maxx - minx, 1.0)
+        area_height = max(maxy - miny, 1.0)
+        area_diag = max(np.hypot(area_width, area_height), 1.0)
+
         if world.goal_known:
             goal_x, goal_y = world.observer_communication
+            goal_dx = goal_x - self.x
+            goal_dy = goal_y - self.y
+            goal_dist = np.hypot(goal_dx, goal_dy)
+            goal_heading = np.arctan2(goal_dy, goal_dx)
+            goal_heading_error = ((goal_heading - self.orientation + np.pi) % (2 * np.pi)) - np.pi
         else:
-            goal_x, goal_y = 0.0, 0.0
+            goal_dx, goal_dy = 0.0, 0.0
+            goal_dist = 0.0
+            goal_heading_error = 0.0
 
-        base_obs = [goal_x, goal_y, self.orientation, self.x, self.y]
+        boundary_obs = [
+            np.clip((maxx - self.x) / area_width, 0.0, 1.0),
+            np.clip((maxy - self.y) / area_height, 0.0, 1.0),
+            np.clip((self.x - minx) / area_width, 0.0, 1.0),
+            np.clip((self.y - miny) / area_height, 0.0, 1.0),
+        ]
 
+        orientation_wrapped = ((self.orientation + np.pi) % (2 * np.pi)) - np.pi
+        base_obs = [
+            np.clip(goal_dx / area_width, -1.0, 1.0),
+            np.clip(goal_dy / area_height, -1.0, 1.0),
+            np.clip(goal_dist / area_diag, 0.0, 1.0),
+            np.clip(goal_heading_error / np.pi, -1.0, 1.0),
+            np.clip(orientation_wrapped / np.pi, -1.0, 1.0),
+            np.clip(((self.x - minx) / area_width) * 2 - 1, -1.0, 1.0),
+            np.clip(((self.y - miny) / area_height) * 2 - 1, -1.0, 1.0),
+        ] + boundary_obs
+
+        motion_scale = max(self.speed * self.time_factor * self.trajectory_len, 1.0)
         traj_obs = []
         for pos in self.trajectory:
-            traj_obs.extend([pos[0], pos[1]])
+            traj_obs.extend(
+                [
+                    np.clip((self.x - pos[0]) / motion_scale, -1.0, 1.0),
+                    np.clip((self.y - pos[1]) / motion_scale, -1.0, 1.0),
+                ]
+            )
 
-        obs = base_obs + traj_obs
-        return np.array(obs, np.float32)
+        obs = np.array(base_obs + traj_obs, dtype=np.float32)
+        return np.clip(obs, -1.0, 1.0).astype(np.float32, copy=False)
 
     def observe(self, world, agents, goals):
         """Observe observer."""
