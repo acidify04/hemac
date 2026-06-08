@@ -157,7 +157,9 @@ class Drone(BaseAgent):
             self.action_space = gymnasium.spaces.Discrete(5)
             self.discrete_action_space = True
         else:
-            self.action_space = gymnasium.spaces.Box(low=-self.max_speed, high=self.max_speed, shape=(3,))
+            # self.action_space = gymnasium.spaces.Box(low=-self.max_speed, high=self.max_speed, shape=(3,))
+            # 드론과 옵저버 모두 동일하게 [-1.0, 1.0] 범위로 설정합니다.
+            self.action_space = gymnasium.spaces.Box(low=-1.0, high=1.0, shape=(3,))
             self.discrete_action_space = False
 
         """

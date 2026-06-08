@@ -673,6 +673,18 @@ class HeMAC:
                 action = 0
             else:
                 action = np.zeros(3, dtype=np.float32)
+        else:
+            if isinstance(action, np.ndarray):
+                # 1. 안전을 위해 [-1.0, 1.0]으로 클리핑
+                action = np.clip(action, -1.0, 1.0) 
+                
+                # 2. 에이전트 종류에 따라 스케일업 (각 에이전트의 max_speed 사용)
+                if "drone" in active_agent:
+                    # 드론의 원래 action space bound (예: 25)
+                    action = action * agent.max_speed  # 혹은 * 25.0
+                elif "observer" in active_agent:
+                    # 옵저버의 원래 action space bound (예: 100)
+                    action = action * agent.speed # 혹은 * 100.0
         
         # 1. 에이전트 업데이트 및 맵 이탈 체크
         agent.update(self.area, self.world, action)
