@@ -1,2 +1,15 @@
 ./planner/downward
+<<<<<<< HEAD
 ./src/train/wandb
+=======
+
+# Training artifacts
+wandb/
+wandb_media/
+src/train/wandb_media/
+hemac_checkpoints/
+src/train/hemac_checkpoints/
+checkpoint*/
+src/train/wandb
+visualization/
+>>>>>>> 22eb6d39052acd9823a740dd9e5e51df042104d9

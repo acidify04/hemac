@@ -164,12 +164,13 @@ class Drone(BaseAgent):
         action space: [wanted vx, wanted vy, recharge] where recharge is mapped to a bool for trying to recharge.
         """
         self.observation_space = gymnasium.spaces.Box(
-            low=-1.0, high=1.0, shape=(17 + self.number_of_drones * 2,)
+            low=-1.0, high=1.0, shape=(45 + self.number_of_drones * 2,)
         )
         """
         observation space: normalized relative quantities for goal/base/observer/frontier,
-        normalized distances to boundaries/obstacles, other-drone relative positions,
-        and recent relative trajectory offsets.
+        drone role features, a local explored-tile mask, normalized distances to
+        boundaries/obstacles, other-drone relative positions, and recent relative
+        trajectory offsets.
         """
         self.charge_level = self.max_charge
         self.charging = False
@@ -181,6 +182,8 @@ class Drone(BaseAgent):
         self.last_goal_distance = None
         self.last_observer_distance = None
         self.last_boundary_distance = None
+        self.last_frontier_distance = None
+        self.max_sector_progress = 0.0
 
         self.is_broken = False
 
@@ -201,6 +204,8 @@ class Drone(BaseAgent):
         self.last_goal_distance = None
         self.last_observer_distance = None
         self.last_boundary_distance = None
+        self.last_frontier_distance = None
+        self.max_sector_progress = 0.0
 
     def sync_pose_state(self):
         """Sync state derived from the current spawn pose."""
@@ -380,31 +385,37 @@ class Drone(BaseAgent):
         minx, miny, maxx, maxy = world.search_area.bounds
         area_width = max(maxx - minx, 1.0)
         area_height = max(maxy - miny, 1.0)
+        observer = next((agent for agent in agents if agent.__class__.__name__ == "Observer"), None)
 
         if world.goal_known:
             goal_x, goal_y = world.observer_communication
             to_goal_x = np.clip((goal_x - self.x) / area_width, -1.0, 1.0)
             to_goal_y = np.clip((goal_y - self.y) / area_height, -1.0, 1.0)
-            frontier_x = 0.0
-            frontier_y = 0.0
         else:
             to_goal_x = 0.0
             to_goal_y = 0.0
-            frontier_dx, frontier_dy = self.nearest_unexplored_vector(world)
-            frontier_x = np.clip(frontier_dx / area_width, -1.0, 1.0)
-            frontier_y = np.clip(frontier_dy / area_height, -1.0, 1.0)
+
+        frontier_dx, frontier_dy = self.nearest_unexplored_vector(world, observer)
+        frontier_x = np.clip(frontier_dx / area_width, -1.0, 1.0)
+        frontier_y = np.clip(frontier_dy / area_height, -1.0, 1.0)
 
         base_x, base_y = game_ref_to_world_ref(world.base.center, world.area)
         to_base_x = np.clip((base_x - self.x) / area_width, -1.0, 1.0)
         to_base_y = np.clip((base_y - self.y) / area_height, -1.0, 1.0)
 
-        observer = next((agent for agent in agents if agent.__class__.__name__ == "Observer"), None)
         if observer is not None:
             to_observer_x = np.clip((observer.x - self.x) / area_width, -1.0, 1.0)
             to_observer_y = np.clip((observer.y - self.y) / area_height, -1.0, 1.0)
         else:
             to_observer_x = 0.0
             to_observer_y = 0.0
+
+        patrol_pref_x, patrol_pref_y = self.preferred_patrol_vector(world, observer)
+        if self.number_of_drones > 1:
+            role_obs = np.clip((2.0 * self.id / (self.number_of_drones - 1)) - 1.0, -1.0, 1.0)
+        else:
+            role_obs = 0.0
+        local_mask = self.local_exploration_mask(world)
 
         raw_distances = self.obstacles_in_quadrants(Point(self.x, self.y), world.search_area, world.obstacles)
         distances = np.array(
@@ -444,21 +455,92 @@ class Drone(BaseAgent):
                 to_observer_y,
                 frontier_x,
                 frontier_y,
+                role_obs,
+                patrol_pref_x,
+                patrol_pref_y,
             ],
             dtype=np.float32,
         )
-        obs = np.concatenate((obs, distances, agents_rel_pos, traj_obs), dtype=np.float32)
+        obs = np.concatenate((obs, local_mask, distances, agents_rel_pos, traj_obs), dtype=np.float32)
         return np.clip(obs, -1.0, 1.0).astype(np.float32, copy=False)
 
-    def nearest_unexplored_vector(self, world):
-        """Return a relative vector toward the nearest unexplored exploration cell."""
+    def local_exploration_mask(self, world, radius=2):
+        """Return a local explored-tile mask around the drone."""
         search_grid_centers = getattr(world, "search_grid_centers", {})
         explored_grids = getattr(world, "explored_grids", set())
         observer_explored_grids = getattr(world, "observer_explored_grids", set())
+        shared_explored = explored_grids | observer_explored_grids
 
-        nearest_dx = 0.0
-        nearest_dy = 0.0
-        nearest_dist_sq = float("inf")
+        cell_size = getattr(self.world, "exploration_cell_size", 20)
+        center_gx = int(self.x // cell_size)
+        center_gy = int(self.y // cell_size)
+
+        mask = []
+        for gy in range(center_gy + radius, center_gy - radius - 1, -1):
+            for gx in range(center_gx - radius, center_gx + radius + 1):
+                grid_key = (gx, gy)
+                if grid_key not in search_grid_centers:
+                    mask.append(0.0)
+                elif grid_key in shared_explored:
+                    mask.append(1.0)
+                else:
+                    mask.append(-1.0)
+
+        return np.array(mask, dtype=np.float32)
+
+    def preferred_patrol_vector(self, world, observer=None):
+        """Return the unit vector of this drone's preferred scouting sector."""
+        minx, miny, maxx, maxy = world.search_area.bounds
+        search_center_x = (minx + maxx) * 0.5
+        search_center_y = (miny + maxy) * 0.5
+
+        if observer is not None:
+            origin_x, origin_y = observer.x, observer.y
+        else:
+            origin_x, origin_y = self.x, self.y
+
+        center_angle = math.atan2(search_center_y - origin_y, search_center_x - origin_x)
+        if self.number_of_drones <= 1:
+            patrol_angle = center_angle
+        else:
+            fan_angles = np.linspace(-np.deg2rad(60), np.deg2rad(60), self.number_of_drones)
+            patrol_angle = center_angle + float(fan_angles[self.id])
+
+        return float(np.cos(patrol_angle)), float(np.sin(patrol_angle))
+
+    def nearest_unexplored_vector(self, world, observer=None):
+        """Return a relative vector toward a coverage target inside this drone's sector."""
+        search_grid_centers = getattr(world, "search_grid_centers", {})
+        explored_grids = getattr(world, "explored_grids", set())
+        observer_explored_grids = getattr(world, "observer_explored_grids", set())
+        cell_size = float(getattr(world, "exploration_cell_size", 20))
+
+        patrol_pref_x, patrol_pref_y = self.preferred_patrol_vector(world, observer)
+        preferred_angle = math.atan2(patrol_pref_y, patrol_pref_x)
+        sector_half_width = np.deg2rad(30)
+        local_radius_sq = float((self.sensing_range * 1.75) ** 2)
+
+        if observer is not None:
+            origin_x, origin_y = observer.x, observer.y
+        else:
+            origin_x, origin_y = self.x, self.y
+
+        local_dx = 0.0
+        local_dy = 0.0
+        local_dist_sq = float("inf")
+        sector_weighted_x = 0.0
+        sector_weighted_y = 0.0
+        sector_weight_total = 0.0
+        fallback_weighted_x = 0.0
+        fallback_weighted_y = 0.0
+        fallback_weight_total = 0.0
+        unsafe_sector_weighted_x = 0.0
+        unsafe_sector_weighted_y = 0.0
+        unsafe_sector_weight_total = 0.0
+
+        minx, miny, maxx, maxy = world.search_area.bounds
+        search_span = max(maxx - minx, maxy - miny, 1.0)
+        safe_boundary_margin = max(self.sensing_range * 0.75, cell_size * 3.0)
 
         for grid_key, (center_x, center_y) in search_grid_centers.items():
             if grid_key in explored_grids or grid_key in observer_explored_grids:
@@ -467,12 +549,54 @@ class Drone(BaseAgent):
             dx = center_x - self.x
             dy = center_y - self.y
             dist_sq = dx * dx + dy * dy
-            if dist_sq < nearest_dist_sq:
-                nearest_dist_sq = dist_sq
-                nearest_dx = dx
-                nearest_dy = dy
+            if dist_sq < local_radius_sq and dist_sq < local_dist_sq:
+                local_dist_sq = dist_sq
+                local_dx = dx
+                local_dy = dy
 
-        return nearest_dx, nearest_dy
+            radial_dx = center_x - origin_x
+            radial_dy = center_y - origin_y
+            radial_dist = math.hypot(radial_dx, radial_dy)
+            radial_weight = 1.0 + (radial_dist / search_span)
+            boundary_clearance = min(center_x - minx, maxx - center_x, center_y - miny, maxy - center_y)
+            is_boundary_safe = boundary_clearance >= safe_boundary_margin
+
+            fallback_weighted_x += dx * radial_weight
+            fallback_weighted_y += dy * radial_weight
+            fallback_weight_total += radial_weight
+
+            sector_angle = math.atan2(center_y - origin_y, center_x - origin_x)
+            angle_error = ((sector_angle - preferred_angle + math.pi) % (2 * math.pi)) - math.pi
+            if abs(angle_error) > sector_half_width:
+                continue
+
+            alignment = math.cos(angle_error)
+            sector_weight = radial_weight * (1.0 + 0.5 * alignment)
+            if is_boundary_safe:
+                sector_weighted_x += dx * sector_weight
+                sector_weighted_y += dy * sector_weight
+                sector_weight_total += sector_weight
+            else:
+                unsafe_sector_weighted_x += dx * sector_weight
+                unsafe_sector_weighted_y += dy * sector_weight
+                unsafe_sector_weight_total += sector_weight
+
+        if local_dist_sq != float("inf"):
+            return local_dx, local_dy
+
+        if sector_weight_total > 0:
+            return sector_weighted_x / sector_weight_total, sector_weighted_y / sector_weight_total
+
+        if unsafe_sector_weight_total > 0:
+            return (
+                unsafe_sector_weighted_x / unsafe_sector_weight_total,
+                unsafe_sector_weighted_y / unsafe_sector_weight_total,
+            )
+
+        if fallback_weight_total > 0:
+            return fallback_weighted_x / fallback_weight_total, fallback_weighted_y / fallback_weight_total
+
+        return 0.0, 0.0
 
     def obstacles_in_quadrants(self, point, area, obstacles):
         """Find distancs to obstacles in the 4 quadrants."""

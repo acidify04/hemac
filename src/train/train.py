@@ -1,10 +1,15 @@
 import os
+from datetime import datetime
+from pathlib import Path
+
+import numpy as np
 import ray
 from ray.tune.registry import register_env
 from ray.rllib.env.wrappers.pettingzoo_env import PettingZooEnv
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 import wandb
+from PIL import Image
 
 from hemac import HeMAC_v0
 
@@ -15,55 +20,217 @@ DRONE_START_POSITIONS = [
     [150.0, 830.0, 5.0],
 ]
 
+GOAL_CONFIG = {
+    "speed": 0,
+    "spawn_mode": "random",
+    "boundary_margin": 140,
+}
+
+VIDEO_LOG_INTERVAL = 50
+VIDEO_FPS = 12
+VIDEO_SEED = 0
+VIDEO_EVAL_SEEDS = tuple(range(10))
+VIDEO_OUTPUT_DIR = Path("./wandb_media")
+
+
+def build_env_config(render_mode=None):
+    """Return the shared environment config for training and evaluation."""
+    env_config = {
+        "n_observers": 1,
+        "observer_speed": 5,
+        "n_drones": 3,
+        "n_provisioners": 0,
+        "known_goals": False,
+        "max_cycles": 500,
+        "drone_config": {
+            "drone_max_speed": 25,
+            "drone_max_thrust": 8,
+            "drones_starting_pos": DRONE_START_POSITIONS,
+        },
+        "min_obstacles": 0,
+        "max_obstacles": 0,
+        "poi_config": [GOAL_CONFIG],
+    }
+    if render_mode is not None:
+        env_config["render_mode"] = render_mode
+    return env_config
+
+
+def extract_final_info_from_wrapped_env(env):
+    """Extract final episode info from a wrapped PettingZoo environment."""
+    envs_to_check = [env]
+
+    while envs_to_check:
+        curr = envs_to_check.pop(0)
+
+        infos = getattr(curr, "infos", None)
+        if isinstance(infos, dict):
+            for info in infos.values():
+                if info and "success" in info:
+                    return info
+
+        if hasattr(curr, "min_drone_dist"):
+            return {
+                "min_drone_dist": float(curr.min_drone_dist),
+                "min_obs_dist": float(curr.min_obs_dist),
+                "explored_area": float(len(curr.explored_grids | curr.observer_explored_grids) * 400),
+                "success": bool(getattr(curr, "mission_success", False)),
+                "goal_found": bool(getattr(curr, "goal_found", False)),
+                "fatal_crash": getattr(curr, "collided", False),
+                "drone_crash": bool(getattr(curr, "drone_crash", False)),
+                "observer_crash": bool(getattr(curr, "observer_crash", False)),
+            }
+
+        if hasattr(curr, "env") and curr.env is not None:
+            envs_to_check.append(curr.env)
+        if hasattr(curr, "unwrapped") and curr.unwrapped is not curr:
+            envs_to_check.append(curr.unwrapped)
+
+    return {}
+
+
+def extract_final_info_from_episode(episode):
+    """Extract final per-episode info from RLlib's episode bookkeeping."""
+    agent_ids = []
+    if hasattr(episode, "get_agents"):
+        agent_ids = list(episode.get_agents())
+    elif hasattr(episode, "agent_rewards"):
+        agent_ids = [key[0] for key in episode.agent_rewards.keys()]
+
+    for agent_id in agent_ids:
+        info = episode.last_info_for(agent_id) or {}
+        if info and "success" in info:
+            return info
+
+    return {}
+
+
+def run_rollout(algo, seed, render_mode=None, capture_frames=False, explore=False):
+    """Run one rollout and return its final info plus optional frames."""
+    env = HeMAC_v0.env(**build_env_config(render_mode=render_mode))
+    env.reset(seed=seed)
+
+    frames = []
+    frame_stride = max(len(getattr(env, "possible_agents", [])), 1)
+    turn_idx = 0
+
+    try:
+        if capture_frames:
+            initial_frame = env.render()
+            if initial_frame is not None:
+                frames.append(initial_frame)
+
+        for agent_id in env.agent_iter():
+            observation, reward, termination, truncation, info = env.last()
+
+            if termination or truncation:
+                action = None
+            else:
+                if "observer" in agent_id:
+                    policy_id = "observer_policy"
+                elif "drone" in agent_id:
+                    policy_id = "drone_policy"
+                else:
+                    policy_id = None
+
+                if policy_id is None:
+                    action = env.action_space(agent_id).sample()
+                else:
+                    action = algo.compute_single_action(
+                        observation=observation,
+                        policy_id=policy_id,
+                        explore=explore,
+                    )
+
+            env.step(action)
+            turn_idx += 1
+
+            if capture_frames and turn_idx % frame_stride == 0:
+                frame = env.render()
+                if frame is not None:
+                    frames.append(frame)
+
+        final_info = extract_final_info_from_wrapped_env(env)
+    finally:
+        env.close()
+
+    return final_info, frames
+
+
+def save_frames_as_gif(frames, iteration):
+    """Save rollout frames as a GIF file and return its path."""
+    VIDEO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    gif_path = VIDEO_OUTPUT_DIR / f"policy_rollout_iter_{iteration:05d}_{timestamp}.gif"
+
+    pil_frames = [Image.fromarray(frame.astype(np.uint8)) for frame in frames]
+    pil_frames[0].save(
+        gif_path,
+        save_all=True,
+        append_images=pil_frames[1:],
+        duration=max(int(1000 / VIDEO_FPS), 1),
+        loop=0,
+    )
+    return gif_path
+
+
+def collect_visualization_video(algo, iteration, seed=VIDEO_SEED):
+    """Run one evaluation rollout and return a WandB-compatible video artifact."""
+    final_info, frames = run_rollout(
+        algo,
+        seed=seed,
+        render_mode="rgb_array",
+        capture_frames=True,
+        explore=False,
+    )
+
+    if not frames:
+        return None
+
+    gif_path = save_frames_as_gif(frames, iteration)
+    return wandb.Video(str(gif_path), format="gif")
+
+
+def collect_eval_success_rate(algo, num_episodes=5, seed=VIDEO_SEED, explore=False, seeds=None):
+    """Run evaluation episodes and return average success rate."""
+    successes = []
+    rollout_seeds = seeds if seeds is not None else [seed + episode_idx for episode_idx in range(num_episodes)]
+    for rollout_seed in rollout_seeds:
+        final_info, _ = run_rollout(
+            algo,
+            seed=rollout_seed,
+            render_mode=None,
+            capture_frames=False,
+            explore=explore,
+        )
+        successes.append(1.0 if final_info.get("success", False) else 0.0)
+    return float(np.mean(successes)) if successes else 0.0
+
+
+def collect_eval_drone_crash_rate(algo, num_episodes=5, seed=VIDEO_SEED, explore=False, seeds=None):
+    """Run evaluation episodes and return average drone-crash rate."""
+    crash_flags = []
+    rollout_seeds = seeds if seeds is not None else [seed + episode_idx for episode_idx in range(num_episodes)]
+    for rollout_seed in rollout_seeds:
+        final_info, _ = run_rollout(
+            algo,
+            seed=rollout_seed,
+            render_mode=None,
+            capture_frames=False,
+            explore=explore,
+        )
+        crash_flags.append(1.0 if final_info.get("drone_crash", False) else 0.0)
+    return float(np.mean(crash_flags)) if crash_flags else 0.0
+
 
 class HeMACCallbacks(DefaultCallbacks):
     def on_episode_end(self, *, worker, base_env, policies, episode, env_index, **kwargs):
-        final_info = {}
-        
-        # [방법 1] 정석적인 RLlib 데이터 추출
-        # AEC 환경에서는 마지막 턴을 수행한 에이전트(예: drone_2)의 info에 값이 들어갑니다.
-        # 따라서 현재 에피소드에 참여한 모든 에이전트의 info를 뒤져서 값을 찾습니다.
-        agents = []
-        if hasattr(episode, "get_agents"):
-            agents = episode.get_agents()
-        elif hasattr(episode, "agent_rewards"):
-            agents = [key[0] for key in episode.agent_rewards.keys()]
+        # Prefer RLlib's episode bookkeeping at episode end. The wrapped env may
+        # already be transitioning to the next reset by the time this callback runs.
+        final_info = extract_final_info_from_episode(episode)
 
-        for agent_id in agents:
-            info = episode.last_info_for(agent_id) or {}
-            if "min_drone_dist" in info:
-                final_info = info
-                break
-        print(f'final_info1: {final_info}')
-        
-        # [방법 2] 만약 위 방법으로 못 찾았다면, 래퍼를 완전히 뜯어보는 BFS 탐색을 수행합니다.
         if not final_info:
-            print(final_info)
-            env = base_env.get_sub_environments()[env_index]
-            envs_to_check = [env]
-            
-            while envs_to_check:
-                curr = envs_to_check.pop(0)
-                
-                # 우리가 찾는 원본 HeMAC 클래스인지 확인
-                if hasattr(curr, "min_drone_dist"):
-                    final_info = {
-                        "min_drone_dist": float(curr.min_drone_dist),
-                        "min_obs_dist": float(curr.min_obs_dist),
-                        "explored_area": float(len(curr.explored_grids) * 400),
-                        "success": (float(curr.min_obs_dist) < 50),
-                        "fatal_crash": curr.collided,
-                        "drone_crash": getattr(curr, "drone_crash", False),
-                        "observer_crash": getattr(curr, "observer_crash", False),
-                    }
-                    print(f'final_info2: {final_info}')
-                    break
-                
-                # 하위 래퍼 탐색 대기열 추가
-                if hasattr(curr, "env") and curr.env is not None:
-                    envs_to_check.append(curr.env)
-                if hasattr(curr, "unwrapped") and curr.unwrapped is not curr:
-                    envs_to_check.append(curr.unwrapped)
+            final_info = extract_final_info_from_wrapped_env(base_env.get_sub_environments()[env_index])
 
         # 최종 값 추출 (어느 방법으로든 찾지 못한 경우 99999.0 등 기본값)
         min_drone = final_info.get("min_drone_dist", 99999.0)
@@ -79,34 +246,14 @@ class HeMACCallbacks(DefaultCallbacks):
         episode.custom_metrics["min_obs_dist"] = float(min_obs)
         episode.custom_metrics["explored_area"] = float(area)
         episode.custom_metrics["success_rate"] = 1.0 if final_info.get("success", False) else 0.0
+        episode.custom_metrics["goal_found_rate"] = 1.0 if final_info.get("goal_found", False) else 0.0
         episode.custom_metrics["crash_rate"] = 1.0 if final_info.get("fatal_crash", False) else 0.0
         episode.custom_metrics["drone_crash_rate"] = 1.0 if final_info.get("drone_crash", False) else 0.0
         episode.custom_metrics["observer_crash_rate"] = 1.0 if final_info.get("observer_crash", False) else 0.0
 
 
 def env_creator(config):
-    env_config = {
-        "n_observers": 1,
-        "observer_speed": 5, 
-        "n_drones": 3,
-        "n_provisioners": 0,
-        "known_goals": True,
-        "max_cycles": 500,
-        "drone_config": {
-            "drone_max_speed": 25,
-            "drone_max_thrust": 8,
-            "drones_starting_pos": DRONE_START_POSITIONS,
-        },
-        "min_obstacles": 0,  # [추가] 확실한 통제를 위해 최소값 0 명시
-        "max_obstacles": 0,  # [수정] 2 -> 0 (목표 도달을 먼저 학습시키기 위함)
-        "poi_config": [{
-            "speed": 0,
-            "spawn_mode": "fixed",
-            "starting_pos": [720.0, 760.0],
-            "boundary_margin": 140,
-        }]
-    }
-    return PettingZooEnv(HeMAC_v0.env(**env_config))
+    return PettingZooEnv(HeMAC_v0.env(**build_env_config()))
 
 
 def main():
@@ -136,7 +283,7 @@ def main():
         .env_runners(num_env_runners=4) 
         .multi_agent(policies=policies, policy_mapping_fn=policy_mapping_fn)
         .resources(num_gpus=1)
-        .training(train_batch_size=4000, lr=5e-5, gamma=0.99, grad_clip=1.0, clip_param=0.2)
+        .training(train_batch_size=8000, lr=1e-4, gamma=0.99, grad_clip=1.0, clip_param=0.2)
         .debugging(log_level="WARN")
     )
 
@@ -168,19 +315,70 @@ def main():
 
         print(f">>> [디버깅] custom_metrics: {custom_metrics}")
 
-        wandb.log({
+        log_payload = {
             "iteration": i + 1,
             "reward/mean_reward": mean_reward,
             "reward/observer_policy": policy_rewards.get("observer_policy", 0),
             "reward/drone_policy": policy_rewards.get("drone_policy", 0),
-            "metrics/success_rate": custom_metrics.get("success_rate_mean", 0),
+            "metrics/rollout_success_rate": custom_metrics.get("success_rate_mean", 0),
+            "metrics/goal_found_rate": custom_metrics.get("goal_found_rate_mean", 0),
             "metrics/crash_rate": custom_metrics.get("crash_rate_mean", 0),
             "metrics/drone_crash_rate": custom_metrics.get("drone_crash_rate_mean", 0),
             "metrics/observer_crash_rate": custom_metrics.get("observer_crash_rate_mean", 0),
             "metrics/min_drone_dist": custom_metrics.get("min_drone_dist_mean", 0),
             "metrics/min_obs_dist": custom_metrics.get("min_obs_dist_mean", 0),
             "metrics/explored_area": custom_metrics.get("explored_area_mean", 0),
-        })
+        }
+
+        if (i + 1) % VIDEO_LOG_INTERVAL == 0:
+            try:
+                video = collect_visualization_video(algo, iteration=i + 1, seed=VIDEO_SEED)
+                if video is not None:
+                    log_payload["visualization/policy_rollout"] = video
+            except Exception as exc:
+                print(f"[warn] visualization logging skipped at iteration {i + 1}: {exc}")
+
+        if (i + 1) % VIDEO_LOG_INTERVAL == 0:
+            try:
+                eval_success_rate = collect_eval_success_rate(
+                    algo,
+                    num_episodes=len(VIDEO_EVAL_SEEDS),
+                    seeds=VIDEO_EVAL_SEEDS,
+                    explore=False,
+                )
+                log_payload["metrics/eval_success_rate"] = eval_success_rate
+
+                eval_success_rate_stochastic = collect_eval_success_rate(
+                    algo,
+                    num_episodes=len(VIDEO_EVAL_SEEDS),
+                    seeds=VIDEO_EVAL_SEEDS,
+                    explore=True,
+                )
+                log_payload["metrics/eval_success_rate_stochastic"] = eval_success_rate_stochastic
+            except Exception as exc:
+                print(f"[warn] eval success logging skipped at iteration {i + 1}: {exc}")
+
+        if (i + 1) % VIDEO_LOG_INTERVAL == 0:
+            try:
+                eval_drone_crash_rate = collect_eval_drone_crash_rate(
+                    algo,
+                    num_episodes=len(VIDEO_EVAL_SEEDS),
+                    seeds=VIDEO_EVAL_SEEDS,
+                    explore=False,
+                )
+                log_payload["metrics/eval_drone_crash_rate"] = eval_drone_crash_rate
+
+                eval_drone_crash_rate_stochastic = collect_eval_drone_crash_rate(
+                    algo,
+                    num_episodes=len(VIDEO_EVAL_SEEDS),
+                    seeds=VIDEO_EVAL_SEEDS,
+                    explore=True,
+                )
+                log_payload["metrics/eval_drone_crash_rate_stochastic"] = eval_drone_crash_rate_stochastic
+            except Exception as exc:
+                print(f"[warn] eval drone crash logging skipped at iteration {i + 1}: {exc}")
+
+        wandb.log(log_payload)
         
         if (i + 1) % 100 == 0:
             # i+1:05d는 숫자를 5자리(예: 00500)로 포맷팅하여 정렬이 잘 되게 합니다.

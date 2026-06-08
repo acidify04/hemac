@@ -312,7 +312,8 @@ class HeMAC:
 
         # self.world.observer_communication = [0, 0]
 
-        self.found_goal = False
+        self.goal_found = False
+        self.mission_success = False
         self.reinit()
 
         self.render_fps = render_fps
@@ -361,7 +362,8 @@ class HeMAC:
         self.world.observer_explored_grids = self.observer_explored_grids
         self.min_drone_dist = 99999.0 # 거리 초기화 필수
         self.min_obs_dist = 99999.0
-        self.found_goal = False
+        self.goal_found = False
+        self.mission_success = False
         self.drone_crash = False
         self.observer_crash = False
         
@@ -375,6 +377,7 @@ class HeMAC:
             first_goal = self.goals[0]
             first_goal.detected = True
             first_goal.detected_by_drone = True
+            self.goal_found = True
 
         if self.render_mode == "human":
             print("resetting world.")
@@ -638,7 +641,8 @@ class HeMAC:
             self.terminations[ag] = self.terminate
             self.truncations[ag] = self.truncate
             self.infos[ag] = {
-                "success": self.found_goal,
+                "success": self.mission_success,
+                "goal_found": self.goal_found,
                 "fatal_crash": self.collided,
                 "drone_crash": self.drone_crash,
                 "observer_crash": self.observer_crash,
@@ -671,11 +675,6 @@ class HeMAC:
                 action = np.zeros(3, dtype=np.float32)
         
         # 1. 에이전트 업데이트 및 맵 이탈 체크
-        # save previous pose so we can revert if needed
-        prev_x, prev_y = getattr(agent, "x", None), getattr(agent, "y", None)
-        prev_rect = agent.rect.copy() if hasattr(agent, "rect") else None
-
-        # update agent once
         agent.update(self.area, self.world, action)
         
         # [안전 로직] 탐색 범위를 벗어나면 즉시 종료
@@ -708,8 +707,52 @@ class HeMAC:
             if new_cells:
                 reward += min(0.015 * len(new_cells), 0.4)
                 self.explored_grids.update(covered_cells)
-            elif not self.world.goal_known:
+            else:
                 reward -= 0.02
+
+            frontier_dx, frontier_dy = agent.nearest_unexplored_vector(self.world, observer)
+            frontier_distance = float(np.hypot(frontier_dx, frontier_dy))
+            if frontier_distance > 0:
+                if agent.last_frontier_distance is not None:
+                    frontier_progress = agent.last_frontier_distance - frontier_distance
+                    reward += float(np.clip(frontier_progress * 0.004, -0.05, 0.12))
+                agent.last_frontier_distance = frontier_distance
+            else:
+                agent.last_frontier_distance = None
+
+            boundary_distance = self.distance_to_search_boundary(agent)
+            boundary_buffer = max(agent.sensing_range * 0.8, self.exploration_cell_size * 2)
+            if boundary_distance < boundary_buffer:
+                boundary_penalty = (boundary_buffer - boundary_distance) / max(boundary_buffer, 1.0)
+                reward -= float(np.clip(boundary_penalty * 0.08, 0.0, 0.08))
+                if agent.last_boundary_distance is not None:
+                    boundary_delta = boundary_distance - agent.last_boundary_distance
+                    reward += float(np.clip(boundary_delta * 0.01, -0.08, 0.08))
+            agent.last_boundary_distance = boundary_distance
+
+            if observer is not None:
+                patrol_pref_x, patrol_pref_y = agent.preferred_patrol_vector(self.world, observer)
+                sector_progress = (
+                    (agent.x - observer.x) * patrol_pref_x
+                    + (agent.y - observer.y) * patrol_pref_y
+                )
+                if sector_progress > agent.max_sector_progress:
+                    sector_gain = sector_progress - agent.max_sector_progress
+                    reward += float(np.clip(sector_gain * 0.0025, 0.0, 0.14))
+                    agent.max_sector_progress = sector_progress
+
+            if not self.world.goal_known:
+                peer_distances = [
+                    dist(other.x, other.y, agent.x, agent.y)
+                    for other in self.agents_list
+                    if other is not agent and other.__class__.__name__ == "Drone"
+                ]
+                if peer_distances:
+                    min_peer_dist = min(peer_distances)
+                    if min_peer_dist < 80:
+                        reward -= 0.05
+                    elif 140 <= min_peer_dist <= 320:
+                        reward += 0.025
 
             min_current_dist = min(
                 [dist(goal.x, goal.y, agent.x, agent.y)
@@ -723,6 +766,7 @@ class HeMAC:
                 d = dist(goal.x, goal.y, agent.x, agent.y)
                 if d < agent.sensing_range:
                     goal.detected = True
+                    self.goal_found = True
                     self.world.goal_known = True
                     self.world.observer_communication = [goal.x, goal.y]
                     if not goal.detected_by_drone:
@@ -734,23 +778,6 @@ class HeMAC:
         # Observer : 최종 도착 담당
         # =========================================================
         elif "observer" in active_agent and not self.collided:
-            # initialize forbidden flag
-            entered_forbidden = False
-            for goal in self.goals:
-                # use goal center distance and a threshold based on goal rect size
-                threshold = max(goal.rect.width, goal.rect.height) / 2.0 + 2.0
-                if dist(agent.x, agent.y, goal.x, goal.y) < threshold:
-                    entered_forbidden = True
-                    break
-
-            if entered_forbidden:  # revert pose
-                agent.x, agent.y = prev_x, prev_y
-                agent.rect = prev_rect
-                # update sensor polygon to match reverted position
-                if hasattr(agent, "sensor") and hasattr(agent.rect, "centerx"):
-                    agent.sensor.update_poly_points((agent.rect.centerx, agent.rect.centery), agent.orientation, agent.altitude)
-                # optional: mark as out_of_bound or log
-                agent.out_of_bound = False
             actual_min_dist = min(
                 [dist(goal.x, goal.y, agent.x, agent.y)
                 for goal in self.goals]
@@ -787,7 +814,7 @@ class HeMAC:
                     agent.last_goal_distance = current_dist
 
                 if current_dist < success_radius:
-                    self.found_goal = True
+                    self.mission_success = True
                     self.global_reward += 180 if self.known_goals else 120
                     self.terminate = True
             else:
