@@ -12,6 +12,11 @@ import wandb
 from PIL import Image
 
 from hemac import HeMAC_v0
+from hemac.rllib_policy import (
+    drone_policy_model_config,
+    get_policy_log_std_stats,
+    register_hemac_rllib_models,
+)
 
 
 DRONE_START_POSITIONS = [
@@ -30,6 +35,7 @@ VIDEO_LOG_INTERVAL = 50
 VIDEO_FPS = 12
 VIDEO_SEED = 0
 VIDEO_OUTPUT_DIR = Path("./wandb_media")
+PPO_ENTROPY_COEFF = 0.0015
 
 
 def build_env_config(render_mode=None):
@@ -55,39 +61,6 @@ def build_env_config(render_mode=None):
     return env_config
 
 
-def extract_final_info_from_wrapped_env(env):
-    """Extract final episode info from a wrapped PettingZoo environment."""
-    envs_to_check = [env]
-
-    while envs_to_check:
-        curr = envs_to_check.pop(0)
-
-        infos = getattr(curr, "infos", None)
-        if isinstance(infos, dict):
-            for info in infos.values():
-                if info and "success" in info:
-                    return info
-
-        if hasattr(curr, "min_drone_dist"):
-            return {
-                "min_drone_dist": float(curr.min_drone_dist),
-                "min_obs_dist": float(curr.min_obs_dist),
-                "explored_area": float(len(curr.explored_grids | curr.observer_explored_grids) * 400),
-                "success": bool(getattr(curr, "mission_success", False)),
-                "goal_found": bool(getattr(curr, "goal_found", False)),
-                "fatal_crash": getattr(curr, "collided", False),
-                "drone_crash": bool(getattr(curr, "drone_crash", False)),
-                "observer_crash": bool(getattr(curr, "observer_crash", False)),
-            }
-
-        if hasattr(curr, "env") and curr.env is not None:
-            envs_to_check.append(curr.env)
-        if hasattr(curr, "unwrapped") and curr.unwrapped is not curr:
-            envs_to_check.append(curr.unwrapped)
-
-    return {}
-
-
 def extract_final_info_from_episode(episode):
     """Extract final per-episode info from RLlib's episode bookkeeping."""
     agent_ids = []
@@ -98,8 +71,36 @@ def extract_final_info_from_episode(episode):
 
     for agent_id in agent_ids:
         info = episode.last_info_for(agent_id) or {}
-        if info and "success" in info:
+        if info and any(key in info for key in ("success", "fatal_crash", "timeout")):
             return info
+
+    return {}
+
+
+def extract_final_info_from_wrapped_env(env):
+    """Extract final info by walking through env wrappers when callbacks miss it."""
+    envs_to_check = [env]
+    visited = set()
+
+    while envs_to_check:
+        current = envs_to_check.pop(0)
+        if id(current) in visited:
+            continue
+        visited.add(id(current))
+
+        infos = getattr(current, "infos", None)
+        if isinstance(infos, dict):
+            for info in infos.values():
+                if info and any(key in info for key in ("success", "fatal_crash", "timeout")):
+                    return info
+
+        if hasattr(current, "build_episode_info"):
+            return current.build_episode_info()
+
+        if hasattr(current, "env") and current.env is not None:
+            envs_to_check.append(current.env)
+        if hasattr(current, "unwrapped") and current.unwrapped is not current:
+            envs_to_check.append(current.unwrapped)
 
     return {}
 
@@ -235,6 +236,11 @@ class HeMACCallbacks(DefaultCallbacks):
         min_drone = final_info.get("min_drone_dist", 99999.0)
         min_obs = final_info.get("min_obs_dist", 99999.0)
         area = final_info.get("explored_area", 0.0)
+        coverage_ratio = final_info.get("coverage_ratio", 0.0)
+        max_coverage_ratio = final_info.get("max_coverage_ratio", coverage_ratio)
+        goal_found_step = final_info.get("goal_found_step", 0.0)
+        success_step = final_info.get("success_step", 0.0)
+        steps_after_goal_found = final_info.get("steps_after_goal_found", 0.0)
         
         # 초기값 보정
         if min_drone == 99999.0: min_drone = 0.0
@@ -244,9 +250,18 @@ class HeMACCallbacks(DefaultCallbacks):
         episode.custom_metrics["min_drone_dist"] = float(min_drone)
         episode.custom_metrics["min_obs_dist"] = float(min_obs)
         episode.custom_metrics["explored_area"] = float(area)
+        episode.custom_metrics["coverage_ratio"] = float(coverage_ratio)
+        episode.custom_metrics["max_coverage_ratio"] = float(max_coverage_ratio)
+        episode.custom_metrics["goal_found_step"] = float(goal_found_step)
+        episode.custom_metrics["success_step"] = float(success_step)
+        episode.custom_metrics["steps_after_goal_found"] = float(steps_after_goal_found)
         episode.custom_metrics["success_rate"] = 1.0 if final_info.get("success", False) else 0.0
         episode.custom_metrics["goal_found_rate"] = 1.0 if final_info.get("goal_found", False) else 0.0
+        episode.custom_metrics["success_after_goal_found_rate"] = (
+            1.0 if final_info.get("success_after_goal_found", False) else 0.0
+        )
         episode.custom_metrics["crash_rate"] = 1.0 if final_info.get("fatal_crash", False) else 0.0
+        episode.custom_metrics["timeout_rate"] = 1.0 if final_info.get("timeout", False) else 0.0
         episode.custom_metrics["drone_crash_rate"] = 1.0 if final_info.get("drone_crash", False) else 0.0
         episode.custom_metrics["observer_crash_rate"] = 1.0 if final_info.get("observer_crash", False) else 0.0
 
@@ -257,6 +272,7 @@ def env_creator(config):
 
 def main():
     ray.init()
+    register_hemac_rllib_models()
     
     env_name = "hemac_asymmetric_env"
     register_env(env_name, env_creator)
@@ -267,7 +283,12 @@ def main():
 
     policies = {
         "observer_policy": (None, obs_space["observer_0"], act_space["observer_0"], {}),
-        "drone_policy": (None, obs_space["drone_0"], act_space["drone_0"], {}) 
+        "drone_policy": (
+            None,
+            obs_space["drone_0"],
+            act_space["drone_0"],
+            {"model": drone_policy_model_config()},
+        ),
     }
 
     def policy_mapping_fn(agent_id, episode, **kwargs):
@@ -277,6 +298,7 @@ def main():
     config = (
         PPOConfig()
         .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
+        .framework("torch")
         .callbacks(HeMACCallbacks)
         .environment(env=env_name)
         .env_runners(num_env_runners=4) 
@@ -285,14 +307,14 @@ def main():
         .training(
             train_batch_size=8000, 
             lr_schedule=[
-                [0, 1e-4],                 # 초기 스텝
-                [500 * 8000, 5e-5],        # 이터레이션 500 부근
-                [10000 * 8000, 1e-5]       # 최종 이터레이션 부근
+                [0, 1e-4],            
+                [500 * 8000, 5e-5], 
+                [10000 * 8000, 1e-5]
             ],
             gamma=0.99, 
             grad_clip=1.0, 
             clip_param=0.2,
-            entropy_coeff=0.005,
+            entropy_coeff=PPO_ENTROPY_COEFF,
             kl_target=0.01,
         )
         .debugging(log_level="WARN")
@@ -323,6 +345,7 @@ def main():
         policy_rewards = result.get('policy_reward_mean', {})
         if not policy_rewards:
             policy_rewards = result.get('env_runners', {}).get('policy_reward_mean', {})
+        drone_log_std_stats = get_policy_log_std_stats(algo, "drone_policy") or {}
 
         print(f">>> [디버깅] custom_metrics: {custom_metrics}")
 
@@ -331,6 +354,10 @@ def main():
             "reward/mean_reward": mean_reward,
             "reward/observer_policy": policy_rewards.get("observer_policy", 0),
             "reward/drone_policy": policy_rewards.get("drone_policy", 0),
+            "model/drone_log_std_mean": drone_log_std_stats.get("mean", 0.0),
+            "model/drone_log_std_min": drone_log_std_stats.get("min", 0.0),
+            "model/drone_log_std_max": drone_log_std_stats.get("max", 0.0),
+            "model/entropy_coeff": PPO_ENTROPY_COEFF,
             "metrics/rollout_success_rate": custom_metrics.get("success_rate_mean", 0),
             "metrics/goal_found_rate": custom_metrics.get("goal_found_rate_mean", 0),
             "metrics/crash_rate": custom_metrics.get("crash_rate_mean", 0),
@@ -339,6 +366,13 @@ def main():
             "metrics/min_drone_dist": custom_metrics.get("min_drone_dist_mean", 0),
             "metrics/min_obs_dist": custom_metrics.get("min_obs_dist_mean", 0),
             "metrics/explored_area": custom_metrics.get("explored_area_mean", 0),
+            "metrics/coverage_ratio": custom_metrics.get("coverage_ratio_mean", 0),
+            "metrics/max_coverage_ratio": custom_metrics.get("max_coverage_ratio_mean", 0),
+            "metrics/timeout_rate": custom_metrics.get("timeout_rate_mean", 0),
+            "metrics/success_after_goal_found_rate": custom_metrics.get("success_after_goal_found_rate_mean", 0),
+            "metrics/goal_found_step": custom_metrics.get("goal_found_step_mean", 0),
+            "metrics/success_step": custom_metrics.get("success_step_mean", 0),
+            "metrics/steps_after_goal_found": custom_metrics.get("steps_after_goal_found_mean", 0),
         }
 
         if (i + 1) % VIDEO_LOG_INTERVAL == 0:

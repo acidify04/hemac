@@ -7,6 +7,7 @@ from ray.rllib.algorithms.algorithm import Algorithm
 from ray.tune.registry import register_env
 from ray.rllib.env.wrappers.pettingzoo_env import PettingZooEnv
 from hemac import HeMAC_v0
+from hemac.rllib_policy import register_hemac_rllib_models
 import time
 import pygame
 from PIL import Image
@@ -152,6 +153,7 @@ def run_single_episode(env, algo, eval_seed):
 def run_trained_model_simulation():
     # 1. Ray 및 가상환경 내 초기화
     ray.init(ignore_reinit_error=True)
+    register_hemac_rllib_models()
 
     def env_creator(config):
         # 훈련 때 사용했던 동일한 스펙을 반환해야 합니다. (render_mode 제외)

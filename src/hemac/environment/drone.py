@@ -166,13 +166,13 @@ class Drone(BaseAgent):
         action space: [wanted vx, wanted vy, recharge] where recharge is mapped to a bool for trying to recharge.
         """
         self.observation_space = gymnasium.spaces.Box(
-            low=-1.0, high=1.0, shape=(45 + self.number_of_drones * 2,)
+            low=-1.0, high=1.0, shape=(53 + self.number_of_drones * 2,)
         )
         """
-        observation space: normalized relative quantities for goal/base/observer/frontier,
-        drone role features, a local explored-tile mask, normalized distances to
-        boundaries/obstacles, other-drone relative positions, and recent relative
-        trajectory offsets.
+        Observation space: mission-phase flag, normalized relative quantities for
+        goal/base/observer/frontier, compact vehicle state, local explored-tile
+        mask, normalized distances to boundaries/obstacles, other-drone relative
+        positions, and recent relative trajectory offsets.
         """
         self.charge_level = self.max_charge
         self.charging = False
@@ -387,19 +387,23 @@ class Drone(BaseAgent):
         minx, miny, maxx, maxy = world.search_area.bounds
         area_width = max(maxx - minx, 1.0)
         area_height = max(maxy - miny, 1.0)
+        area_diag = max(np.hypot(area_width, area_height), 1.0)
         observer = next((agent for agent in agents if agent.__class__.__name__ == "Observer"), None)
 
         if world.goal_known:
             goal_x, goal_y = world.observer_communication
+            goal_dist = np.hypot(goal_x - self.x, goal_y - self.y)
             to_goal_x = np.clip((goal_x - self.x) / area_width, -1.0, 1.0)
             to_goal_y = np.clip((goal_y - self.y) / area_height, -1.0, 1.0)
         else:
             to_goal_x = 0.0
             to_goal_y = 0.0
+            goal_dist = 0.0
 
         frontier_dx, frontier_dy = self.nearest_unexplored_vector(world, observer)
         frontier_x = np.clip(frontier_dx / area_width, -1.0, 1.0)
         frontier_y = np.clip(frontier_dy / area_height, -1.0, 1.0)
+        frontier_dist = np.hypot(frontier_dx, frontier_dy)
 
         base_x, base_y = game_ref_to_world_ref(world.base.center, world.area)
         to_base_x = np.clip((base_x - self.x) / area_width, -1.0, 1.0)
@@ -408,9 +412,11 @@ class Drone(BaseAgent):
         if observer is not None:
             to_observer_x = np.clip((observer.x - self.x) / area_width, -1.0, 1.0)
             to_observer_y = np.clip((observer.y - self.y) / area_height, -1.0, 1.0)
+            observer_dist = np.hypot(observer.x - self.x, observer.y - self.y)
         else:
             to_observer_x = 0.0
             to_observer_y = 0.0
+            observer_dist = 0.0
 
         patrol_pref_x, patrol_pref_y = self.preferred_patrol_vector(world, observer)
         if self.number_of_drones > 1:
@@ -418,6 +424,11 @@ class Drone(BaseAgent):
         else:
             role_obs = 0.0
         local_mask = self.local_exploration_mask(world)
+        coverage_ratio = (
+            float(len(getattr(world, "explored_grids", set()) | getattr(world, "observer_explored_grids", set())))
+            / float(max(len(getattr(world, "search_grid_centers", {})), 1))
+        )
+        boundary_clearance = min(maxx - self.x, maxy - self.y, self.x - minx, self.y - miny)
 
         raw_distances = self.obstacles_in_quadrants(Point(self.x, self.y), world.search_area, world.obstacles)
         distances = np.array(
@@ -448,18 +459,26 @@ class Drone(BaseAgent):
 
         obs = np.array(
             [
+                1.0 if world.goal_known else -1.0,
                 to_goal_x,
                 to_goal_y,
+                np.clip(goal_dist / area_diag, 0.0, 1.0),
                 self.charge_level / self.max_charge,
                 to_base_x,
                 to_base_y,
                 to_observer_x,
                 to_observer_y,
+                np.clip(observer_dist / area_diag, 0.0, 1.0),
                 frontier_x,
                 frontier_y,
+                np.clip(frontier_dist / area_diag, 0.0, 1.0),
                 role_obs,
                 patrol_pref_x,
                 patrol_pref_y,
+                np.clip(boundary_clearance / max(min(area_width, area_height), 1.0), 0.0, 1.0),
+                np.clip(coverage_ratio * 2.0 - 1.0, -1.0, 1.0),
+                np.clip(self.vx / max(self.max_speed, 1.0), -1.0, 1.0),
+                np.clip(self.vy / max(self.max_speed, 1.0), -1.0, 1.0),
             ],
             dtype=np.float32,
         )

@@ -42,6 +42,7 @@ class Observer(BaseAgent):
         self.last_goal_distance = None
         self.last_base_distance = None
         self.last_boundary_distance = None
+        self.last_frontier_distance = None
 
         self.time_factor = time_factor
         self.speed = speed  # fixed speed
@@ -63,12 +64,12 @@ class Observer(BaseAgent):
         2D steering. 0: right, 1: left
         """
         self.observation_space = gymnasium.spaces.Box(
-            low=-1.0, high=1.0, shape=(17,)
-        )  # handling the presence and position of 1 POI for now
+            low=-1.0, high=1.0, shape=(24,)
+        )
         """
-        [goal_dx, goal_dy, goal_dist, goal_heading_error, theta, x, y, right, up, left, down, traj...]
-        All values are normalized. The trajectory tail is expressed as recent
-        relative offsets from the current position instead of absolute points.
+        Observation contains the mission phase, goal/frontier vectors,
+        orientation as sin/cos, normalized position and boundary margins,
+        aggregate coverage, and recent relative trajectory offsets.
         """
 
     def reset(self, seed=None, options=None):
@@ -79,6 +80,7 @@ class Observer(BaseAgent):
         self.last_goal_distance = None
         self.last_base_distance = None
         self.last_boundary_distance = None
+        self.last_frontier_distance = None
         self.orientation = 0.0
         self.trajectory = []
 
@@ -190,7 +192,7 @@ class Observer(BaseAgent):
         """
         if len(goals) > 0:
             goal = goals[0]
-            if self.sensor.is_point_detected((goal.rect.x, goal.rect.y)):
+            if self.sensor.is_point_detected(goal.rect.center):
                 self.goal_in_view = True
                 goal.detected = True
                 self.goal_estimation = (goal.x, goal.y)
@@ -216,22 +218,35 @@ class Observer(BaseAgent):
             goal_dist = 0.0
             goal_heading_error = 0.0
 
+        frontier_dx, frontier_dy = self.nearest_unexplored_vector(world)
+        frontier_dist = np.hypot(frontier_dx, frontier_dy)
+
         boundary_obs = [
             np.clip((maxx - self.x) / area_width, 0.0, 1.0),
             np.clip((maxy - self.y) / area_height, 0.0, 1.0),
             np.clip((self.x - minx) / area_width, 0.0, 1.0),
             np.clip((self.y - miny) / area_height, 0.0, 1.0),
         ]
-
-        orientation_wrapped = ((self.orientation + np.pi) % (2 * np.pi)) - np.pi
+        boundary_clearance = min(maxx - self.x, maxy - self.y, self.x - minx, self.y - miny)
+        coverage_ratio = (
+            float(len(getattr(world, "explored_grids", set()) | getattr(world, "observer_explored_grids", set())))
+            / float(max(len(getattr(world, "search_grid_centers", {})), 1))
+        )
         base_obs = [
+            1.0 if world.goal_known else -1.0,
             np.clip(goal_dx / area_width, -1.0, 1.0),
             np.clip(goal_dy / area_height, -1.0, 1.0),
             np.clip(goal_dist / area_diag, 0.0, 1.0),
             np.clip(goal_heading_error / np.pi, -1.0, 1.0),
-            np.clip(orientation_wrapped / np.pi, -1.0, 1.0),
+            np.clip(frontier_dx / area_width, -1.0, 1.0),
+            np.clip(frontier_dy / area_height, -1.0, 1.0),
+            np.clip(frontier_dist / area_diag, 0.0, 1.0),
+            float(np.sin(self.orientation)),
+            float(np.cos(self.orientation)),
             np.clip(((self.x - minx) / area_width) * 2 - 1, -1.0, 1.0),
             np.clip(((self.y - miny) / area_height) * 2 - 1, -1.0, 1.0),
+            np.clip(boundary_clearance / max(min(area_width, area_height), 1.0), 0.0, 1.0),
+            np.clip(coverage_ratio * 2.0 - 1.0, -1.0, 1.0),
         ] + boundary_obs
 
         motion_scale = max(self.speed * self.time_factor * self.trajectory_len, 1.0)
@@ -250,6 +265,48 @@ class Observer(BaseAgent):
     def observe(self, world, agents, goals):
         """Observe observer."""
         return self.get_fov_obs(world, goals)
+
+    def nearest_unexplored_vector(self, world):
+        """Return a vector toward the next unexplored portion of the search grid."""
+        search_grid_centers = getattr(world, "search_grid_centers", {})
+        explored = getattr(world, "explored_grids", set())
+        observer_explored = getattr(world, "observer_explored_grids", set())
+        if not search_grid_centers:
+            return 0.0, 0.0
+
+        cell_size = float(getattr(world, "exploration_cell_size", 20))
+        local_radius_sq = float(max(self.speed * self.time_factor * 6.0, cell_size * 3.0) ** 2)
+
+        nearest_dx = 0.0
+        nearest_dy = 0.0
+        nearest_dist_sq = float("inf")
+        weighted_x = 0.0
+        weighted_y = 0.0
+        weight_total = 0.0
+
+        for grid_key, (center_x, center_y) in search_grid_centers.items():
+            if grid_key in explored or grid_key in observer_explored:
+                continue
+
+            dx = center_x - self.x
+            dy = center_y - self.y
+            dist_sq = dx * dx + dy * dy
+            if dist_sq < nearest_dist_sq:
+                nearest_dist_sq = dist_sq
+                nearest_dx = dx
+                nearest_dy = dy
+
+            distance = np.sqrt(dist_sq)
+            weight = 1.0 / max(distance, cell_size)
+            weighted_x += dx * weight
+            weighted_y += dy * weight
+            weight_total += weight
+
+        if nearest_dist_sq <= local_radius_sq:
+            return nearest_dx, nearest_dy
+        if weight_total > 0:
+            return weighted_x / weight_total, weighted_y / weight_total
+        return 0.0, 0.0
 
 
 def dist(x1, y1, x2, y2):
