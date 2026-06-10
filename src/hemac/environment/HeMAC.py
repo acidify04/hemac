@@ -45,9 +45,8 @@ from pettingzoo.utils.conversions import parallel_wrapper_fn
 from pymap3d import geodetic2enu
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
-from .world import world_ref_to_game_ref, game_ref_to_world_ref
+
 import hemac.environment.sensors as sensors
-import math
 from hemac.helpers.logger import LOGGER
 from .drone import Drone
 from .observer import Observer
@@ -82,8 +81,8 @@ class HeMAC:
         n_provisioners=1,
         provisioner_config: dict = None,
         provisioner_sensor: dict = None,  # TODO: move sensors in agent configs
-        min_obstacles=0,
-        max_obstacles=0,
+        min_obstacles=2,
+        max_obstacles=3,
         rescuing_targets=False,
         known_goals=False,
         geofence_config: dict = None,
@@ -135,6 +134,8 @@ class HeMAC:
         self.agents = self.agents + ["provisioner_" + str(i) for i in range(self.n_provisioners)]
         self.agent_name_mapping = dict(zip(self.agents, list(range(self.num_agents))))
         self.agents_list = []
+
+        self.old_dist_to_goal = 1000
 
         # Display screen
         self.render_ratio = render_ratio
@@ -201,14 +202,6 @@ class HeMAC:
                 )
             )
 
-        self.exploration_cell_size = 20
-        self.search_grid_rects = self._build_search_grid_cache(self.exploration_cell_size)
-        self.search_grid_centers = {
-            key: ((key[0] + 0.5) * self.exploration_cell_size, (key[1] + 0.5) * self.exploration_cell_size)
-            for key in self.search_grid_rects
-        }
-        self.total_search_cells = max(len(self.search_grid_centers), 1)
-
         # init POI
         if poi_spawn_range is None:
             minx, miny, maxx, maxy = self.search_area.bounds
@@ -233,10 +226,6 @@ class HeMAC:
             randomizer=randomizer,
             time_factor=self.time_factor,
         )
-        self.world.search_grid_centers = self.search_grid_centers
-        self.world.exploration_cell_size = self.exploration_cell_size
-        self.world.explored_grids = set()
-        self.world.observer_explored_grids = set()
 
         # init observers
         for i in range(self.n_observers):
@@ -313,8 +302,6 @@ class HeMAC:
 
         # self.world.observer_communication = [0, 0]
 
-        self.goal_found = False
-        self.mission_success = False
         self.reinit()
 
         self.render_fps = render_fps
@@ -351,47 +338,19 @@ class HeMAC:
         self.rewards = dict(zip(self.agents, [0.0] * len(self.agents)))
         self.terminations = dict(zip(self.agents, [False] * len(self.agents)))
         self.truncations = dict(zip(self.agents, [False] * len(self.agents)))
-        self.infos = {agent: {} for agent in self.agents}
+        self.infos = dict(zip(self.agents, [{}] * len(self.agents)))
         self.score = 0
 
     def reset(self, seed=None, options=None):
         """Reset the environment."""
         # reset goals
-        self.explored_grids = set() # 이거 안 지우면 다음 에피소드에서 정찰 보상 다 뺏김
-        self.observer_explored_grids = set()
-        self.world.explored_grids = self.explored_grids
-        self.world.observer_explored_grids = self.observer_explored_grids
-        self.min_drone_dist = 99999.0 # 거리 초기화 필수
-        self.min_obs_dist = 99999.0
-        self.goal_found = False
-        self.mission_success = False
-        self.drone_crash = False
-        self.observer_crash = False
-        self.goal_found_step = None
-        self.success_step = None
-        self.best_observer_goal_distance = float("inf")
-        self.max_coverage_ratio = 0.0
-        
-        # 2. 목표물 리셋
-        for goal in self.goals:
-            goal.detected_by_drone = False
         for goal in self.goals:
             goal.spawn_poi(self.search_area)
             goal.reset()
-        if self.known_goals and self.goals:
-            first_goal = self.goals[0]
-            first_goal.detected = True
-            first_goal.detected_by_drone = True
-            self.goal_found = True
-            self.goal_found_step = 0
 
         if self.render_mode == "human":
             print("resetting world.")
         self.world.reset(self.goals)
-        if self.known_goals and self.goals:
-            first_goal = self.goals[0]
-            self.world.goal_known = True
-            self.world.observer_communication = [first_goal.x, first_goal.y]
         self.world.clear_obstacles()  # Clear obstacles at the start of each episode
         self.detection_reward = 0
 
@@ -401,67 +360,20 @@ class HeMAC:
             self.world.generate_obstacles(num_obstacles)
 
         # reset agents to initial state
-        # ---------------------------------------------------------
-        # [수정 1] 유인기 및 무인기 동기화 스폰 로직
-        # ---------------------------------------------------------
-        observer_spawned = False
-        base_x, base_y = 0.0, 0.0
-
-        # 1. 유인기 스폰 (기지 중앙 좌표를 훔쳐옴)
-        for agent, name in zip(self.agents_list, self.agents):
-            if "observer" in name:
-                agent.reset()
-                
-                # 1) World에 있는 기지(Base)의 화면 좌표를 수학 좌표로 변환해 가져옴
-                [base_world_x, base_world_y] = game_ref_to_world_ref(self.world.base.center, self.area)
-                
-                agent.x = base_world_x
-                agent.y = base_world_y
-                agent.z = 5.0
-                
-                # 2) 시각적 껍데기도 기지(Base) 정중앙에 완벽하게 일치시킴
-                agent.rect.center = self.world.base.center
-                agent.sync_pose_state()
-                
-                base_x, base_y = agent.x, agent.y
-                observer_spawned = True
-                break
-
-        # 2. 무인기 스폰 (유인기를 중심으로 호위 대형)
-        drone_offsets = [(0, 50), (-50, -50), (50, -50), (0, -50)]
-        drone_idx = 0
-        
         for agent, name in zip(self.agents_list, self.agents):
             if "drone" in name:
-                agent.reset()
-                
-                if getattr(agent, "has_custom_starting_pos", False) and agent.starting_pos is not None:
-                    agent.x = agent.starting_pos[0]
-                    agent.y = agent.starting_pos[1]
-                    agent.z = agent.starting_pos[2] if len(agent.starting_pos) > 2 else 5.0
-
-                    rect_pos = world_ref_to_game_ref([agent.x, agent.y], self.area)
-                    agent.rect.centerx = rect_pos[0]
-                    agent.rect.centery = rect_pos[1]
-                elif observer_spawned:
-                    agent.x = base_x + drone_offsets[drone_idx % len(drone_offsets)][0]
-                    agent.y = base_y + drone_offsets[drone_idx % len(drone_offsets)][1]
-                    agent.z = 5.0
-                    
-                    rect_pos = world_ref_to_game_ref([agent.x, agent.y], self.area)
-                    agent.rect.centerx = rect_pos[0]
-                    agent.rect.centery = rect_pos[1]
-                else:
-                    self.world.spawn_asset(agent, self.agents_list, avoid_world_obstacles=True, set_real_coordinates=True)
-                agent.sync_pose_state()
-                
-                drone_idx += 1
+                self.world.spawn_asset(agent, self.agents_list, avoid_world_obstacles=True, set_real_coordinates=True)
+            elif "observer" in name:
+                self.world.spawn_asset(agent, self.agents_list, avoid_world_obstacles=False, set_real_coordinates=True)
+            agent.reset()
 
         self.terminate = False
         self.collided = False
         self.truncate = False
 
         self.num_frames = 0
+        self.old_dist_to_goal = 1000
+
         self.reinit()
 
         self.time = 1
@@ -509,456 +421,129 @@ class HeMAC:
         state = np.array([0, 0])
         return state
 
-    def _build_search_grid_cache(self, cell_size):
-        """Build a cache of renderable search-area grid cells."""
-        minx, miny, maxx, maxy = self.search_area.bounds
-        grid_rects = {}
-        for gx in range(int(minx // cell_size), int(maxx // cell_size) + 1):
-            for gy in range(int(miny // cell_size), int(maxy // cell_size) + 1):
-                world_center = ((gx + 0.5) * cell_size, (gy + 0.5) * cell_size)
-                if not self.search_area.covers(Point(world_center)):
-                    continue
-                world_top_left = (gx * cell_size, (gy + 1) * cell_size)
-                game_top_left = world_ref_to_game_ref(world_top_left, self.area)
-                grid_rects[(gx, gy)] = pygame.Rect(
-                    int(game_top_left[0]),
-                    int(game_top_left[1]),
-                    cell_size,
-                    cell_size,
-                )
-        return grid_rects
-
-    def draw_exploration_overlay(self):
-        """Draw explored vs unexplored search cells."""
-        overlay = pygame.Surface(self.area.size, pygame.SRCALPHA)
-        unexplored_color = (38, 57, 84, 60)
-        drone_color = (76, 196, 120, 110)
-        observer_color = (255, 191, 87, 105)
-        shared_color = (67, 201, 201, 130)
-        outline_color = (220, 235, 255, 25)
-
-        for grid_key, rect in self.search_grid_rects.items():
-            in_drone = grid_key in self.explored_grids
-            in_observer = grid_key in self.observer_explored_grids
-            if in_drone and in_observer:
-                cell_color = shared_color
-            elif in_drone:
-                cell_color = drone_color
-            elif in_observer:
-                cell_color = observer_color
-            else:
-                cell_color = unexplored_color
-            pygame.draw.rect(overlay, cell_color, rect)
-            pygame.draw.rect(overlay, outline_color, rect, width=1)
-
-        self.screen.blit(overlay, (0, 0))
-
-        legend_font = pygame.font.SysFont("Trebuchet MS", 16)
-        legend_bg = pygame.Surface((190, 104), pygame.SRCALPHA)
-        legend_bg.fill((8, 12, 16, 150))
-        self.screen.blit(legend_bg, (12, 40))
-
-        pygame.draw.rect(self.screen, drone_color, pygame.Rect(22, 50, 18, 18))
-        pygame.draw.rect(self.screen, observer_color, pygame.Rect(22, 74, 18, 18))
-        pygame.draw.rect(self.screen, shared_color, pygame.Rect(22, 98, 18, 18))
-        pygame.draw.rect(self.screen, unexplored_color, pygame.Rect(22, 122, 18, 18))
-
-        explored_label = legend_font.render("drone explored", True, (240, 248, 255))
-        observer_label = legend_font.render("observer explored", True, (240, 248, 255))
-        shared_label = legend_font.render("both explored", True, (240, 248, 255))
-        unexplored_label = legend_font.render("unexplored", True, (240, 248, 255))
-        self.screen.blit(explored_label, (48, 50))
-        self.screen.blit(observer_label, (48, 74))
-        self.screen.blit(shared_label, (48, 98))
-        self.screen.blit(unexplored_label, (48, 122))
-
     def draw(self):
         """Draw the environment."""
         pygame.event.pump()
         self.world.draw(self.screen)
-        self.draw_exploration_overlay()
         for agent in self.agents_list:
             agent.draw(self.screen)
         for goal in self.goals:
             goal.draw(self.screen)
-    def count_nearby_drones(self, agent, radius=100):
-        """특정 에이전트 주변의 드론 수를 셉니다."""
-        count = 0
-        for name, other_agent in zip(self.agents, self.agents_list):
-            if "drone" in name and other_agent != agent:
-                # 유클리드 거리 계산
-                d = math.sqrt((agent.x - other_agent.x)**2 + (agent.y - other_agent.y)**2)
-                if d < radius:
-                    count += 1
-        return count
-
-    def drone_spacing_penalty(self, agent, radius=90):
-        """Return a penalty when drones bunch up too tightly."""
-        penalty = 0.0
-        for name, other_agent in zip(self.agents, self.agents_list):
-            if "drone" not in name or other_agent == agent:
-                continue
-            separation = dist(agent.x, agent.y, other_agent.x, other_agent.y)
-            if separation < radius:
-                penalty += 0.03
-        return penalty
-
-    def get_drone_exploration_cells(self, agent):
-        """Return exploration-grid cells covered by a drone's circular sensing range."""
-        cell_size = self.exploration_cell_size
-        min_gx = int((agent.x - agent.sensing_range) // cell_size)
-        max_gx = int((agent.x + agent.sensing_range) // cell_size)
-        min_gy = int((agent.y - agent.sensing_range) // cell_size)
-        max_gy = int((agent.y + agent.sensing_range) // cell_size)
-        sensing_range_sq = agent.sensing_range ** 2
-
-        covered_cells = set()
-        for gx in range(min_gx, max_gx + 1):
-            for gy in range(min_gy, max_gy + 1):
-                grid_key = (gx, gy)
-                if grid_key not in self.search_grid_centers:
-                    continue
-                center_x, center_y = self.search_grid_centers[grid_key]
-                if (center_x - agent.x) ** 2 + (center_y - agent.y) ** 2 <= sensing_range_sq:
-                    covered_cells.add(grid_key)
-        return covered_cells
-
-    def get_observer_exploration_cells(self, agent):
-        """Return exploration-grid cells covered by the observer's FOV."""
-        covered_cells = set()
-        for grid_key, world_center in self.search_grid_centers.items():
-            game_center = world_ref_to_game_ref(world_center, self.area)
-            if agent.sensor.is_point_detected(game_center):
-                covered_cells.add(grid_key)
-        return covered_cells
-
-    def get_primary_observer(self):
-        """Return the first observer in the environment."""
-        for name, agent in zip(self.agents, self.agents_list):
-            if "observer" in name:
-                return agent
-        return None
-
-    def current_coverage_ratio(self):
-        """Return the explored-cell ratio inside the search area."""
-        explored_count = len(self.explored_grids | self.observer_explored_grids)
-        return float(explored_count) / float(self.total_search_cells)
-
-    def build_episode_info(self):
-        """Build a final-episode info dict for metrics and evaluation."""
-        coverage_ratio = self.current_coverage_ratio()
-        total_explored = len(self.explored_grids | self.observer_explored_grids) * (self.exploration_cell_size ** 2)
-
-        goal_found_step = self.goal_found_step if self.goal_found_step is not None else self.max_cycles
-        success_step = self.success_step if self.success_step is not None else self.max_cycles
-        if self.goal_found_step is None:
-            steps_after_goal_found = self.max_cycles
-        elif self.success_step is None:
-            steps_after_goal_found = self.num_frames - self.goal_found_step
-        else:
-            steps_after_goal_found = self.success_step - self.goal_found_step
-
-        return {
-            "success": bool(self.mission_success),
-            "goal_found": bool(self.goal_found),
-            "goal_known": bool(self.world.goal_known),
-            "fatal_crash": bool(self.collided),
-            "timeout": bool(self.truncate and not self.terminate),
-            "drone_crash": bool(self.drone_crash),
-            "observer_crash": bool(self.observer_crash),
-            "min_drone_dist": float(self.min_drone_dist),
-            "min_obs_dist": float(self.min_obs_dist),
-            "explored_area": float(total_explored),
-            "coverage_ratio": float(coverage_ratio),
-            "max_coverage_ratio": float(max(self.max_coverage_ratio, coverage_ratio)),
-            "goal_found_step": float(goal_found_step),
-            "success_step": float(success_step),
-            "steps_after_goal_found": float(max(steps_after_goal_found, 0)),
-            "success_after_goal_found": bool(self.mission_success and self.goal_found),
-        }
-
-    def finalize_episode(self):
-        """Propagate the current end-of-episode state to every agent."""
-        episode_info = self.build_episode_info()
-        for ag in self.agents:
-            self.rewards[ag] += self.global_reward
-            self.terminations[ag] = self.terminate
-            self.truncations[ag] = self.truncate
-            self.infos[ag] = dict(episode_info)
-
-    def is_outside_search_area(self, agent):
-        """Return whether an agent is outside the allowed search area."""
-        return not self.search_area.covers(Point((agent.x, agent.y)))
-
-    def distance_to_search_boundary(self, agent):
-        """Return the distance from an agent to the nearest search-area boundary."""
-        return self.search_area.boundary.distance(Point((agent.x, agent.y)))
 
     def step(self, action, active_agent):
         """Execute a step."""
         if active_agent == self.agents[0]:
             self.global_reward = 0
-            
+        found_goal = False
+        delivered_goal = False
         reward = 0
+
         agent = self.agents_list[self.agent_name_mapping[active_agent]]
-        observer = self.get_primary_observer()
-        coverage_before = self.current_coverage_ratio()
-
-        if self.known_goals and "drone" in active_agent:
-            if getattr(agent, "discrete_action_space", False):
-                action = 0
-            else:
-                action = np.zeros(3, dtype=np.float32)
-        else:
-            if isinstance(action, np.ndarray):
-                # 1. 안전을 위해 [-1.0, 1.0]으로 클리핑
-                action = np.clip(action, -1.0, 1.0) 
-                
-                # 2. 에이전트 종류에 따라 스케일업 (각 에이전트의 max_speed 사용)
-                if "drone" in active_agent:
-                    # 드론의 원래 action space bound (예: 25)
-                    action = action * agent.max_speed  # 혹은 * 25.0
-                elif "observer" in active_agent:
-                    # 옵저버의 원래 action space bound (예: 100)
-                    action = action * agent.speed # 혹은 * 100.0
-
-        prev_x, prev_y = agent.x, agent.y
-
-        # 1. 에이전트 업데이트 및 맵 이탈 체크
         agent.update(self.area, self.world, action)
-        step_dx = agent.x - prev_x
-        step_dy = agent.y - prev_y
-        step_distance = float(np.hypot(step_dx, step_dy))
-        
-        # [안전 로직] 탐색 범위를 벗어나면 즉시 종료
-        if agent.out_of_bound or self.is_outside_search_area(agent):
-            agent.out_of_bound = True
-            self.collided = True
-            if "drone" in active_agent:
-                self.drone_crash = True
-            elif "observer" in active_agent:
-                self.observer_crash = True
-            reward -= 8
-            self.global_reward -= 12
-            self.terminate = True
-            self.rewards[active_agent] = reward
-            self.finalize_episode()
-            return
 
-        # 목표 이동 (오브젝트 이동)
+        # Update position and uncertainty of objectives
         for goal in self.goals:
             goal.move(self.world.obstacles, self.search_area)
 
-        # ---------------------------------------------------------
-        # [협업 로직] 역할별 보상 부여
-        # ---------------------------------------------------------
-        
-        # Drone
-        if "drone" in active_agent and not self.collided:
-            reward -= 0.005
-            covered_cells = self.get_drone_exploration_cells(agent)
-            new_cells = covered_cells - (self.explored_grids | self.observer_explored_grids)
-            if new_cells:
-                self.explored_grids.update(covered_cells)
-                coverage_after = self.current_coverage_ratio()
-                coverage_gain = max(0.0, coverage_after - coverage_before)
-                self.max_coverage_ratio = max(self.max_coverage_ratio, coverage_after)
-                reward += min(0.012 * len(new_cells), 0.32)
-                reward += float(np.clip(coverage_gain * 18.0, 0.0, 0.25))
+        # Specific actions for UAVs
+        if "drone" in active_agent:
+            # Collision check and map limits
+            if agent.out_of_bound:
+                self.collided = True
+                reward -= 20  # Penalty for leaving the map
+                if self.render_mode == "human":
+                    LOGGER.info(f"drone went out of bounds! pos: {(agent.x, agent.y)}")
+            elif not self.search_area.covers(Point((agent.x, agent.y))):
+                self.collided = True
+                reward -= 10  # going outside of search area
+                if self.render_mode == "human" or self.render_mode == "rgb_array":
+                    LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
             else:
-                reward -= 0.04
+                for obstacle in self.world.obstacles:
+                    if agent.process_collision(obstacle, 0):
+                        self.collided = True
+                        reward -= 20  # Penalty for collision with an obstacle
+                        if self.render_mode == "human" or self.render_mode == "rgb_array":
+                            LOGGER.info(
+                                f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
+                            )
+            # POI tracking reward calculation
+            for goal in self.goals[:]:
+                if dist(goal.x, goal.y, agent.x, agent.y) < agent.sensing_range:
+                    if agent.carried_targets < agent.carrying_capacity:
+                        found_goal = True
+                        goal.spawn_poi(self.search_area)
+                        goal.reset()
+                        if self.rescuing_targets:
+                            agent.carried_targets += 1
 
-            frontier_dx, frontier_dy = agent.nearest_unexplored_vector(self.world, observer)
-            frontier_distance = float(np.hypot(frontier_dx, frontier_dy))
-            if frontier_distance > 0:
-                if step_distance > 1e-6:
-                    frontier_alignment = (
-                        (step_dx * frontier_dx + step_dy * frontier_dy)
-                        / max(step_distance * frontier_distance, 1e-6)
-                    )
-                    reward += float(np.clip(frontier_alignment * 0.05, -0.05, 0.05))
-                if agent.last_frontier_distance is not None:
-                    frontier_progress = agent.last_frontier_distance - frontier_distance
-                    reward += float(np.clip(frontier_progress * 0.002, -0.04, 0.08))
-                agent.last_frontier_distance = frontier_distance
+            if self.rescuing_targets and agent.carried_targets:
+                closest_point_to_base = closest_point_in_rect(self.world.base, agent.rect.center)
+                if (
+                    dist(closest_point_to_base[0], closest_point_to_base[1], agent.rect.x, agent.rect.y)
+                    < agent.sensing_range
+                ):
+                    delivered_goal = 1 * agent.carried_targets
+                    agent.carried_targets = 0
+                else:
+                    for friend in self.agents:
+                        if "provisioner" in friend:
+                            provisioner = self.agents_list[self.agent_name_mapping[friend]]
+                            if dist(provisioner.x, provisioner.y, agent.x, agent.y) < agent.sensing_range:
+                                delivered_goal = 1 * agent.carried_targets
+                                print(f"agent dropped {agent.carried_targets} targets!")
+                                agent.carried_targets = 0
+                                break
+            # global reward
+            if self.rescuing_targets:
+                self.global_reward += 10 * found_goal + 25 * delivered_goal
             else:
-                agent.last_frontier_distance = None
+                self.global_reward += 10 * found_goal
 
-            boundary_distance = self.distance_to_search_boundary(agent)
-            boundary_buffer = max(agent.sensing_range * 0.8, self.exploration_cell_size * 2)
-            if boundary_distance < boundary_buffer:
-                boundary_penalty = (boundary_buffer - boundary_distance) / max(boundary_buffer, 1.0)
-                reward -= float(np.clip(boundary_penalty * 0.08, 0.0, 0.08))
-                if agent.last_boundary_distance is not None:
-                    boundary_delta = boundary_distance - agent.last_boundary_distance
-                    reward += float(np.clip(boundary_delta * 0.01, -0.08, 0.08))
-            agent.last_boundary_distance = boundary_distance
+        elif "observer" in active_agent:
+            if agent.out_of_bound:
+                self.collided = True
+                reward -= 20  # Penalty for leaving the map
+                if self.render_mode == "human":
+                    LOGGER.info(f"observer went out of bounds! pos: {(agent.x, agent.y)}")
+            elif agent.goal_in_view:
+                reward = 0
 
-            if observer is not None:
-                patrol_pref_x, patrol_pref_y = agent.preferred_patrol_vector(self.world, observer)
-                sector_progress = (
-                    (agent.x - observer.x) * patrol_pref_x
-                    + (agent.y - observer.y) * patrol_pref_y
-                )
-                if sector_progress > agent.max_sector_progress:
-                    sector_gain = sector_progress - agent.max_sector_progress
-                    reward += float(np.clip(sector_gain * 0.0025, 0.0, 0.14))
-                    agent.max_sector_progress = sector_progress
-
-            if not self.world.goal_known:
-                peer_distances = [
-                    dist(other.x, other.y, agent.x, agent.y)
-                    for other in self.agents_list
-                    if other is not agent and other.__class__.__name__ == "Drone"
-                ]
-                if peer_distances:
-                    min_peer_dist = min(peer_distances)
-                    if min_peer_dist < 80:
-                        reward -= 0.05
-                    elif 140 <= min_peer_dist <= 320:
-                        reward += 0.025
-
-            if not new_cells and step_distance < max(agent.max_speed * agent.time_factor * 0.2, 1.0):
-                reward -= 0.03
-
-            min_current_dist = min(
-                [dist(goal.x, goal.y, agent.x, agent.y)
-                for goal in self.goals]
-            )
-            self.min_drone_dist = min(
-                self.min_drone_dist,
-                min_current_dist
-            )
-            for goal in self.goals:
-                d = dist(goal.x, goal.y, agent.x, agent.y)
-                if d < agent.sensing_range:
-                    goal.detected = True
-                    if not self.goal_found:
-                        self.goal_found_step = self.num_frames
-                    self.goal_found = True
-                    self.world.goal_known = True
-                    self.world.observer_communication = [goal.x, goal.y]
-                    if observer is not None and not np.isfinite(self.best_observer_goal_distance):
-                        self.best_observer_goal_distance = dist(goal.x, goal.y, observer.x, observer.y)
-                    if not goal.detected_by_drone:
-                        goal.detected_by_drone = True
-                        reward += 8.0
-                        self.global_reward += 12.0
-
-        # =========================================================
-        # Observer : 최종 도착 담당
-        # =========================================================
-        elif "observer" in active_agent and not self.collided:
-            reward -= 0.005
-            actual_min_dist = min(
-                [dist(goal.x, goal.y, agent.x, agent.y)
-                for goal in self.goals]
-            )
-            self.min_obs_dist = min(
-                self.min_obs_dist,
-                actual_min_dist
-            )
-
-            if self.world.goal_known:
-                if not self.goal_found:
-                    self.goal_found = True
-                    self.goal_found_step = self.num_frames
-                goal_x, goal_y = self.world.observer_communication
-                current_dist = dist(goal_x, goal_y, agent.x, agent.y)
-                success_radius = 80 if self.known_goals else 50
-                goal_heading = np.arctan2(goal_y - agent.y, goal_x - agent.x)
-                heading_error = ((goal_heading - agent.orientation + np.pi) % (2 * np.pi)) - np.pi
-                reward -= 0.015
-
-                if self.known_goals:
-                    reward -= 0.01
-                    reward += 0.12 * np.cos(heading_error)
-                else:
-                    reward += 0.03 * np.cos(heading_error)
-
-                if agent.last_goal_distance is None:
-                    agent.last_goal_distance = current_dist
-                else:
-                    delta = agent.last_goal_distance - current_dist
-                    if self.known_goals:
-                        reward += np.clip(delta * 0.12, -1.0, 1.5)
-                    else:
-                        if delta > 0:
-                            reward += min(delta * 0.08, 1.0)
-                        else:
-                            reward -= min(abs(delta) * 0.04, 0.5)
-                    agent.last_goal_distance = current_dist
-
-                if not np.isfinite(self.best_observer_goal_distance):
-                    self.best_observer_goal_distance = current_dist
-                elif current_dist < self.best_observer_goal_distance:
-                    best_improvement = self.best_observer_goal_distance - current_dist
-                    reward += float(np.clip(best_improvement * 0.06, 0.0, 0.9))
-                    self.best_observer_goal_distance = current_dist
-
-                if current_dist < success_radius:
-                    self.mission_success = True
-                    self.success_step = self.num_frames
-                    self.global_reward += 180 if self.known_goals else 120
-                    self.terminate = True
-            else:
-                covered_cells = self.get_observer_exploration_cells(agent)
-                new_cells = covered_cells - (self.explored_grids | self.observer_explored_grids)
-                self.observer_explored_grids.update(covered_cells)
-                if new_cells:
-                    coverage_after = self.current_coverage_ratio()
-                    coverage_gain = max(0.0, coverage_after - coverage_before)
-                    self.max_coverage_ratio = max(self.max_coverage_ratio, coverage_after)
-                    reward += min(0.008 * len(new_cells), 0.28)
-                    reward += float(np.clip(coverage_gain * 16.0, 0.0, 0.22))
-                else:
-                    reward -= 0.03
-
-                frontier_dx, frontier_dy = agent.nearest_unexplored_vector(self.world)
-                frontier_distance = float(np.hypot(frontier_dx, frontier_dy))
-                if frontier_distance > 0:
-                    if step_distance > 1e-6:
-                        frontier_alignment = (
-                            (step_dx * frontier_dx + step_dy * frontier_dy)
-                            / max(step_distance * frontier_distance, 1e-6)
-                        )
-                        reward += float(np.clip(frontier_alignment * 0.06, -0.05, 0.06))
-                    if agent.last_frontier_distance is not None:
-                        frontier_progress = agent.last_frontier_distance - frontier_distance
-                        reward += float(np.clip(frontier_progress * 0.002, -0.04, 0.08))
-                    agent.last_frontier_distance = frontier_distance
-                else:
-                    agent.last_frontier_distance = None
-
-                boundary_distance = self.distance_to_search_boundary(agent)
-                boundary_buffer = max(self.exploration_cell_size * 3, 60.0)
-                if boundary_distance < boundary_buffer:
-                    boundary_penalty = (boundary_buffer - boundary_distance) / max(boundary_buffer, 1.0)
-                    reward -= float(np.clip(boundary_penalty * 0.05, 0.0, 0.05))
-                agent.last_boundary_distance = boundary_distance
-
-                agent.last_goal_distance = None
-                agent.last_base_distance = None
-
-        # 최종 보상 합산
+        # individual reward
         self.rewards[active_agent] = reward
 
-        if self.terminate:
-            self.finalize_episode()
-            return
-
-        # 에피소드 종료/Truncation 처리
+        # Update environment and check end of episode
         if agent == self.agents_list[-1]:
             if self.collided:
                 self.terminate = True
+                if self.render_mode == "human":
+                    LOGGER.info(f"BOOM! episode length: {self.num_frames + 1}")
+                    self.render()
+                    time.sleep(2)
 
             self.world.update(self.area)
+
+            # Termination or continuation of the episode
             if not self.terminate:
                 self.num_frames += 1
                 self.truncate = self.num_frames >= self.max_cycles
 
             if self.terminate or self.truncate:
-                self.finalize_episode()
+                pass
+
+            # Distribution of awards and information to agents
+            for i, ag in enumerate(self.agents):
+                self.rewards[ag] += self.global_reward
+                self.terminations[ag] = self.terminate
+                self.truncations[ag] = self.truncate
+                self.infos[ag] = {"success": found_goal}
+
+            if self.render_mode is not None:
+                self.render()
+                if self.render_mode == "human":
+                    # input()  # Toggle: slow down simulation to make prints more readable
+                    pass
+
 
 def env(**kwargs):
     """Env."""
