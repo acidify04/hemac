@@ -174,12 +174,19 @@ class Drone(BaseAgent):
         self.charging_point = (0, 0)
         self.goto_pos = [0, 0]
 
+        self.trajectory_len = 3
+
     def reset(self, seed=None, options=None):
         """Reset drone."""
         self.charge_level = self.max_charge
         self.charging = False
         self.out_of_bound = False
         self.carried_targets = 0
+        self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
+
+    def sync_pose_state(self):
+        """Sync state derived from the current spawn pose."""
+        self.trajectory = [(self.x, self.y)] * self.trajectory_len
         self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
 
     def draw(self, screen):

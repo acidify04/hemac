@@ -45,6 +45,7 @@ from pettingzoo.utils.conversions import parallel_wrapper_fn
 from pymap3d import geodetic2enu
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
+from .world import world_ref_to_game_ref, game_ref_to_world_ref
 
 import hemac.environment.sensors as sensors
 from hemac.helpers.logger import LOGGER
@@ -302,6 +303,7 @@ class HeMAC:
 
         # self.world.observer_communication = [0, 0]
 
+        self.mission_success = False
         self.reinit()
 
         self.render_fps = render_fps
@@ -344,6 +346,8 @@ class HeMAC:
     def reset(self, seed=None, options=None):
         """Reset the environment."""
         # reset goals
+        self.success_step = None
+        self.mission_success = False
         for goal in self.goals:
             goal.spawn_poi(self.search_area)
             goal.reset()
@@ -360,12 +364,58 @@ class HeMAC:
             self.world.generate_obstacles(num_obstacles)
 
         # reset agents to initial state
+        observer_spawned = False
+        base_x, base_y = 0.0, 0.0
+
+        # 1. 유인기 스폰 (기지 중앙 좌표를 훔쳐옴)
+        for agent, name in zip(self.agents_list, self.agents):
+            if "observer" in name:
+                agent.reset()
+                
+                # 1) World에 있는 기지(Base)의 화면 좌표를 수학 좌표로 변환해 가져옴
+                [base_world_x, base_world_y] = game_ref_to_world_ref(self.world.base.center, self.area)
+                
+                agent.x = base_world_x
+                agent.y = base_world_y
+                agent.z = 5.0
+                
+                # 2) 시각적 껍데기도 기지(Base) 정중앙에 완벽하게 일치시킴
+                agent.rect.center = self.world.base.center
+                agent.sync_pose_state()
+                
+                base_x, base_y = agent.x, agent.y
+                observer_spawned = True
+                break
+
+        # 2. 무인기 스폰 (유인기를 중심으로 호위 대형)
+        drone_offsets = [(0, 50), (-50, -50), (50, -50), (0, -50)]
+        drone_idx = 0
+        
         for agent, name in zip(self.agents_list, self.agents):
             if "drone" in name:
-                self.world.spawn_asset(agent, self.agents_list, avoid_world_obstacles=True, set_real_coordinates=True)
-            elif "observer" in name:
-                self.world.spawn_asset(agent, self.agents_list, avoid_world_obstacles=False, set_real_coordinates=True)
-            agent.reset()
+                agent.reset()
+                
+                if getattr(agent, "has_custom_starting_pos", False) and agent.starting_pos is not None:
+                    agent.x = agent.starting_pos[0]
+                    agent.y = agent.starting_pos[1]
+                    agent.z = agent.starting_pos[2] if len(agent.starting_pos) > 2 else 5.0
+
+                    rect_pos = world_ref_to_game_ref([agent.x, agent.y], self.area)
+                    agent.rect.centerx = rect_pos[0]
+                    agent.rect.centery = rect_pos[1]
+                elif observer_spawned:
+                    agent.x = base_x + drone_offsets[drone_idx % len(drone_offsets)][0]
+                    agent.y = base_y + drone_offsets[drone_idx % len(drone_offsets)][1]
+                    agent.z = 5.0
+                    
+                    rect_pos = world_ref_to_game_ref([agent.x, agent.y], self.area)
+                    agent.rect.centerx = rect_pos[0]
+                    agent.rect.centery = rect_pos[1]
+                else:
+                    self.world.spawn_asset(agent, self.agents_list, avoid_world_obstacles=True, set_real_coordinates=True)
+                agent.sync_pose_state()
+                
+                drone_idx += 1
 
         self.terminate = False
         self.collided = False
@@ -429,6 +479,48 @@ class HeMAC:
             agent.draw(self.screen)
         for goal in self.goals:
             goal.draw(self.screen)
+
+    def build_episode_info(self):
+        """Build a final-episode info dict for metrics and evaluation."""
+        # coverage_ratio = self.current_coverage_ratio()
+        # total_explored = len(self.explored_grids | self.observer_explored_grids) * (self.exploration_cell_size ** 2)
+
+        # goal_found_step = self.goal_found_step if self.goal_found_step is not None else self.max_cycles
+        success_step = self.success_step if self.success_step is not None else self.max_cycles
+        # if self.goal_found_step is None:
+        #     steps_after_goal_found = self.max_cycles
+        # elif self.success_step is None:
+        #     steps_after_goal_found = self.num_frames - self.goal_found_step
+        # else:
+        #     steps_after_goal_found = self.success_step - self.goal_found_step
+
+        return {
+            "success": bool(self.mission_success),
+            # "goal_found": bool(self.goal_found),
+            # "goal_known": bool(self.world.goal_known),
+            # "fatal_crash": bool(self.collided),
+            # "timeout": bool(self.truncate and not self.terminate),
+            # "drone_crash": bool(self.drone_crash),
+            # "observer_crash": bool(self.observer_crash),
+            # "min_drone_dist": float(self.min_drone_dist),
+            # "min_obs_dist": float(self.min_obs_dist),
+            # "explored_area": float(total_explored),
+            # "coverage_ratio": float(coverage_ratio),
+            # "max_coverage_ratio": float(max(self.max_coverage_ratio, coverage_ratio)),
+            # "goal_found_step": float(goal_found_step),
+            "success_step": float(success_step),
+            # "steps_after_goal_found": float(max(steps_after_goal_found, 0)),
+            # "success_after_goal_found": bool(self.mission_success and self.goal_found),
+        }
+
+    def finalize_episode(self):
+        """Propagate the current end-of-episode state to every agent."""
+        episode_info = self.build_episode_info()
+        for ag in self.agents:
+            self.rewards[ag] += self.global_reward
+            self.terminations[ag] = self.terminate
+            self.truncations[ag] = self.truncate
+            self.infos[ag] = dict(episode_info)
 
     def step(self, action, active_agent):
         """Execute a step."""
@@ -509,8 +601,19 @@ class HeMAC:
             elif agent.goal_in_view:
                 reward = 0
 
+            goal_x, goal_y = self.world.observer_communication
+            current_dist = dist(goal_x, goal_y, agent.x, agent.y)
+            success_radius = 80 if self.known_goals else 50
+
+            if current_dist < success_radius:
+                self.mission_success = True
+                self.success_step = self.num_frames
+                self.global_reward += 180 if self.known_goals else 120
+                self.terminate = True
+
         # individual reward
         self.rewards[active_agent] = reward
+        self.finalize_episode()
 
         # Update environment and check end of episode
         if agent == self.agents_list[-1]:

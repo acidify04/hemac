@@ -28,6 +28,8 @@ class Observer(BaseAgent):
         self.goal_estimation = None
         self.comm_range = comm_range
 
+        self.trajectory_len = 3
+
         self.time_factor = time_factor
         self.speed = speed  # fixed speed
         # rad, positive angle counter-clockwise (note that the world referential is the opposite: y-axis down)
@@ -64,6 +66,11 @@ class Observer(BaseAgent):
         self.goal_estimation = None
         pass
 
+    def sync_pose_state(self):
+        """Sync state derived from the current spawn pose."""
+        self.trajectory = [(self.x, self.y)] * self.trajectory_len
+        self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
+
     def draw(self, screen):
         """Draw observer."""
         # draw observer
@@ -98,7 +105,7 @@ class Observer(BaseAgent):
         # communication only possible if near a building
         if self.goal_estimation is not None:
             if not world.obstacles:
-                print(f"no obstacles! infinite comm range")
+                # print(f"no obstacles! infinite comm range")
                 world.observer_communication = self.goal_estimation
             else:
                 for obstacle in world.obstacles:
