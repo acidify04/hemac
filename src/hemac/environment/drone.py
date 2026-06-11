@@ -227,31 +227,32 @@ class Drone(BaseAgent):
             action = self.discrete_to_continuous(action)
 
         if action[2] > 0:  # drone tries to recharge
-            self.closest_point_in_base = closest_point_in_rect(world.base, self.rect.center)
-            can_charge = self.charging_distance > dist(
-                self.rect.x,
-                self.rect.y,
-                self.closest_point_in_base[0],
-                self.closest_point_in_base[1],
-            )
-            if can_charge:
-                if (self.closest_point_in_base == self.rect.center).all():
-                    self.charging_point = world.base.center
-                else:
-                    self.charging_point = self.closest_point_in_base  # game ref
-                self.charging = True
-                self.charge_level += 9
-                if self.charge_level > self.max_charge:
-                    self.charge_level = self.max_charge
-                # print("charging at base!")
-            else:  # check if provisioner near
-                for id, coords in world.provisioners.items():
-                    if self.charging_distance > dist(self.x, self.y, coords[0], coords[1]):
-                        self.charging_point = world_ref_to_game_ref(coords, area)
-                        self.charging = True
-                        self.charge_level += 9
-                        if self.charge_level > self.max_charge:
-                            self.charge_level = self.max_charge
+            # self.closest_point_in_base = closest_point_in_rect(world.base, self.rect.center)
+            # can_charge = self.charging_distance > dist(
+            #     self.rect.x,
+            #     self.rect.y,
+            #     self.closest_point_in_base[0],
+            #     self.closest_point_in_base[1],
+            # )
+            # if can_charge:
+            #     if (self.closest_point_in_base == self.rect.center).all():
+            #         self.charging_point = world.base.center
+            #     else:
+            #         self.charging_point = self.closest_point_in_base  # game ref
+            #     self.charging = True
+            #     self.charge_level += 9
+            #     if self.charge_level > self.max_charge:
+            #         self.charge_level = self.max_charge
+            #     # print("charging at base!")
+            # else:  # check if provisioner near
+            #     for id, coords in world.provisioners.items():
+            #         if self.charging_distance > dist(self.x, self.y, coords[0], coords[1]):
+            #             self.charging_point = world_ref_to_game_ref(coords, area)
+            #             self.charging = True
+            #             self.charge_level += 9
+            #             if self.charge_level > self.max_charge:
+            #                 self.charge_level = self.max_charge
+            pass
         else:
             self.charging = False
 
