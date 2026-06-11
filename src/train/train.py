@@ -247,23 +247,23 @@ class HeMACCallbacks(DefaultCallbacks):
         if min_obs == 99999.0: min_obs = 0.0
 
         # wandb 및 터미널 출력용 custom_metrics 할당
-        episode.custom_metrics["min_drone_dist"] = float(min_drone)
-        episode.custom_metrics["min_obs_dist"] = float(min_obs)
-        episode.custom_metrics["explored_area"] = float(area)
-        episode.custom_metrics["coverage_ratio"] = float(coverage_ratio)
-        episode.custom_metrics["max_coverage_ratio"] = float(max_coverage_ratio)
-        episode.custom_metrics["goal_found_step"] = float(goal_found_step)
+        # episode.custom_metrics["min_drone_dist"] = float(min_drone)
+        # episode.custom_metrics["min_obs_dist"] = float(min_obs)
+        # episode.custom_metrics["explored_area"] = float(area)
+        # episode.custom_metrics["coverage_ratio"] = float(coverage_ratio)
+        # episode.custom_metrics["max_coverage_ratio"] = float(max_coverage_ratio)
+        # episode.custom_metrics["goal_found_step"] = float(goal_found_step)
         episode.custom_metrics["success_step"] = float(success_step)
-        episode.custom_metrics["steps_after_goal_found"] = float(steps_after_goal_found)
+        # episode.custom_metrics["steps_after_goal_found"] = float(steps_after_goal_found)
         episode.custom_metrics["success_rate"] = 1.0 if final_info.get("success", False) else 0.0
-        episode.custom_metrics["goal_found_rate"] = 1.0 if final_info.get("goal_found", False) else 0.0
-        episode.custom_metrics["success_after_goal_found_rate"] = (
-            1.0 if final_info.get("success_after_goal_found", False) else 0.0
-        )
-        episode.custom_metrics["crash_rate"] = 1.0 if final_info.get("fatal_crash", False) else 0.0
-        episode.custom_metrics["timeout_rate"] = 1.0 if final_info.get("timeout", False) else 0.0
-        episode.custom_metrics["drone_crash_rate"] = 1.0 if final_info.get("drone_crash", False) else 0.0
-        episode.custom_metrics["observer_crash_rate"] = 1.0 if final_info.get("observer_crash", False) else 0.0
+        # episode.custom_metrics["goal_found_rate"] = 1.0 if final_info.get("goal_found", False) else 0.0
+        # episode.custom_metrics["success_after_goal_found_rate"] = (
+        #     1.0 if final_info.get("success_after_goal_found", False) else 0.0
+        # )
+        # episode.custom_metrics["crash_rate"] = 1.0 if final_info.get("fatal_crash", False) else 0.0
+        # episode.custom_metrics["timeout_rate"] = 1.0 if final_info.get("timeout", False) else 0.0
+        # episode.custom_metrics["drone_crash_rate"] = 1.0 if final_info.get("drone_crash", False) else 0.0
+        # episode.custom_metrics["observer_crash_rate"] = 1.0 if final_info.get("observer_crash", False) else 0.0
 
 
 def env_creator(config):
