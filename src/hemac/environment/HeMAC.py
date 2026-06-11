@@ -540,6 +540,7 @@ class HeMAC:
         # Specific actions for UAVs
         if "drone" in active_agent:
             # Collision check and map limits
+            reward -= 0.1  # Small step penalty to encourage efficiency
             if agent.out_of_bound:
                 self.collided = True
                 reward -= 20  # Penalty for leaving the map
@@ -564,8 +565,9 @@ class HeMAC:
                 if dist(goal.x, goal.y, agent.x, agent.y) < agent.sensing_range:
                     if agent.carried_targets < agent.carrying_capacity:
                         found_goal = True
-                        goal.spawn_poi(self.search_area)
-                        goal.reset()
+                        reward += 20  # Reward for finding a goal
+                        # goal.spawn_poi(self.search_area)
+                        # goal.reset()
                         if self.rescuing_targets:
                             agent.carried_targets += 1
 
@@ -593,6 +595,7 @@ class HeMAC:
                 self.global_reward += 10 * found_goal
 
         elif "observer" in active_agent:
+            reward -= 0.1  # Small step penalty to encourage efficiency
             if agent.out_of_bound:
                 self.collided = True
                 reward -= 20  # Penalty for leaving the map
@@ -607,6 +610,7 @@ class HeMAC:
 
             if current_dist < success_radius:
                 self.mission_success = True
+                reward += 100 # Task completion reward
                 self.success_step = self.num_frames
                 self.global_reward += 180 if self.known_goals else 120
                 self.terminate = True
