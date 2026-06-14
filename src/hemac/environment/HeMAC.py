@@ -37,6 +37,7 @@ import gymnasium
 import gymnasium.spaces
 import numpy as np
 import pygame
+import math
 from gymnasium.utils import EzPickle, seeding
 from pettingzoo import AECEnv
 from pettingzoo.utils import wrappers
@@ -562,7 +563,9 @@ class HeMAC:
                             )
             # POI tracking reward calculation
             for goal in self.goals[:]:
-                if dist(goal.x, goal.y, agent.x, agent.y) < agent.sensing_range:
+                goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
+                reward -= math.exp(math.sqrt(math.sqrt(goal_dist))) - 1  # Exponential reward based on distance to the goal, encourages getting closer
+                if goal_dist < agent.sensing_range:
                     if agent.carried_targets < agent.carrying_capacity:
                         found_goal = True
                         reward += 20  # Reward for finding a goal
@@ -606,6 +609,7 @@ class HeMAC:
 
             goal_x, goal_y = self.world.observer_communication
             current_dist = dist(goal_x, goal_y, agent.x, agent.y)
+            reward -= math.exp(math.sqrt(math.sqrt(current_dist))) - 1  # Exponential reward based on distance to the goal, encourages getting closer
             success_radius = 80 if self.known_goals else 50
 
             if current_dist < success_radius:
