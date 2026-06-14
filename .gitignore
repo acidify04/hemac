@@ -1,7 +1,4 @@
 ./planner/downward
-<<<<<<< HEAD
-./src/train/wandb
-=======
 
 # Training artifacts
 wandb/
@@ -12,4 +9,4 @@ src/train/hemac_checkpoints/
 checkpoint*/
 src/train/wandb
 visualization/
->>>>>>> 22eb6d39052acd9823a740dd9e5e51df042104d9
+src/train/old

@@ -361,7 +361,7 @@ class Drone(BaseAgent):
             coord for agent in agents if isinstance(agent, Drone) for coord in (agent.x - self.x, agent.y - self.y)
         ]
 
-        obs = np.array([to_goal_x, to_goal_y, self.charge_level / self.max_charge, to_base_x, to_base_y], np.float32)
+        obs = np.array([goal_x, goal_y, self.charge_level / self.max_charge, to_base_x, to_base_y], np.float32)
         obs = np.concatenate((obs, distances, agents_rel_pos), dtype=np.float32)
         return obs
 

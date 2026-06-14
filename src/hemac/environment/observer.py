@@ -171,17 +171,18 @@ class Observer(BaseAgent):
         obs = [-1000, 0, 0, self.orientation, self.x, self.y, 0, 0, 0, 0, 0]
         # print(f"observer obs: {obs}")
         for goal in goals:
-            if self.sensor.is_point_detected((goal.rect.x, goal.rect.y)):
-                self.goal_in_view = True
-                goal.detected = True  # seen at least once
-                self.goal_estimation = (
-                    goal.x,
-                    goal.y,
-                )  # hardcoded communication for now
-                obs = [1000, goal.x, goal.y, self.orientation, self.x, self.y, 0, 0, 0, 0, 0]
-                return np.array(obs, np.float32)
-            else:
-                self.goal_in_view = False
+            obs = [1000, goal.x, goal.y, self.orientation, self.x, self.y, 0, 0, 0, 0, 0]
+            # if self.sensor.is_point_detected((goal.rect.x, goal.rect.y)):
+            #     self.goal_in_view = True
+            #     goal.detected = True  # seen at least once
+            #     self.goal_estimation = (
+            #         goal.x,
+            #         goal.y,
+            #     )  # hardcoded communication for now
+            #     obs = [1000, goal.x, goal.y, self.orientation, self.x, self.y, 0, 0, 0, 0, 0]
+            #     return np.array(obs, np.float32)
+            # else:
+                # self.goal_in_view = False
         return np.array(obs, np.float32)
 
     def observe(self, world, agents, goals):

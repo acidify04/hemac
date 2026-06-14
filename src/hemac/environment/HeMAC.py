@@ -544,12 +544,12 @@ class HeMAC:
             reward -= 0.1  # Small step penalty to encourage efficiency
             if agent.out_of_bound:
                 self.collided = True
-                reward -= 20  # Penalty for leaving the map
+                reward -= 40  # Penalty for leaving the map
                 if self.render_mode == "human":
                     LOGGER.info(f"drone went out of bounds! pos: {(agent.x, agent.y)}")
             elif not self.search_area.covers(Point((agent.x, agent.y))):
                 self.collided = True
-                reward -= 10  # going outside of search area
+                reward -= 40  # going outside of search area
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
                     LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
             else:
@@ -564,7 +564,7 @@ class HeMAC:
             # POI tracking reward calculation
             for goal in self.goals[:]:
                 goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
-                reward -= math.exp(math.sqrt(math.sqrt(goal_dist))) - 1  # Exponential reward based on distance to the goal, encourages getting closer
+                reward -= math.sqrt(math.sqrt(math.sqrt(goal_dist)))  # Exponential reward based on distance to the goal, encourages getting closer
                 if goal_dist < agent.sensing_range:
                     if agent.carried_targets < agent.carrying_capacity:
                         found_goal = True
@@ -601,7 +601,7 @@ class HeMAC:
             reward -= 0.1  # Small step penalty to encourage efficiency
             if agent.out_of_bound:
                 self.collided = True
-                reward -= 20  # Penalty for leaving the map
+                reward -= 40  # Penalty for leaving the map
                 if self.render_mode == "human":
                     LOGGER.info(f"observer went out of bounds! pos: {(agent.x, agent.y)}")
             elif agent.goal_in_view:
@@ -609,7 +609,7 @@ class HeMAC:
 
             goal_x, goal_y = self.world.observer_communication
             current_dist = dist(goal_x, goal_y, agent.x, agent.y)
-            reward -= math.exp(math.sqrt(math.sqrt(current_dist))) - 1  # Exponential reward based on distance to the goal, encourages getting closer
+            reward -= math.sqrt(math.sqrt(current_dist))  # Exponential reward based on distance to the goal, encourages getting closer
             success_radius = 80 if self.known_goals else 50
 
             if current_dist < success_radius:
