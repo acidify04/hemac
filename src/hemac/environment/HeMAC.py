@@ -569,7 +569,7 @@ class HeMAC:
                 if goal_dist < agent.sensing_range:
                     if agent.carried_targets < agent.carrying_capacity:
                         found_goal = True
-                        reward += 20  # Reward for finding a goal
+                        reward += 100  # Reward for finding a goal
                         # goal.spawn_poi(self.search_area)
                         # goal.reset()
                         if self.rescuing_targets:
@@ -616,12 +616,12 @@ class HeMAC:
 
             goal_x, goal_y = self.world.observer_communication
             current_dist = dist(goal_x, goal_y, agent.x, agent.y)
-            reward -= math.sqrt(math.sqrt(current_dist))  # Exponential reward based on distance to the goal, encourages getting closer
+            reward -= math.sqrt(math.sqrt(math.sqrt(current_dist)))  # Exponential reward based on distance to the goal, encourages getting closer
             success_radius = 80 if self.known_goals else 50
 
             if current_dist < success_radius:
                 self.mission_success = True
-                reward += 100 # Task completion reward
+                reward += 200 # Task completion reward
                 self.success_step = self.num_frames
                 self.global_reward += 180 if self.known_goals else 120
                 self.terminate = True
