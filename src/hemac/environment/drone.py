@@ -143,6 +143,7 @@ class Drone(BaseAgent):
         self.orientation = 0.0
         self.carried_targets = 0
         self.carrying_capacity = 1
+        self.detected = set()
 
         self.world = world
         self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
@@ -290,6 +291,7 @@ class Drone(BaseAgent):
                 self.y += dy
                 newpos = self.rect.copy()
                 rect_pos = world_ref_to_game_ref([self.x, self.y], world.area)
+                self.detected.add((int(self.x), int(self.y)))
                 newpos.centerx = rect_pos[0]
                 newpos.centery = rect_pos[1]
 
@@ -361,7 +363,7 @@ class Drone(BaseAgent):
             coord for agent in agents if isinstance(agent, Drone) for coord in (agent.x - self.x, agent.y - self.y)
         ]
 
-        obs = np.array([goal_x, goal_y, self.charge_level / self.max_charge, to_base_x, to_base_y], np.float32)
+        obs = np.array([goal_x, goal_y, self.charge_level / self.max_charge, self.x, self.y], np.float32)
         obs = np.concatenate((obs, distances, agents_rel_pos), dtype=np.float32)
         return obs
 

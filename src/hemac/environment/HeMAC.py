@@ -136,6 +136,7 @@ class HeMAC:
         self.agents = self.agents + ["provisioner_" + str(i) for i in range(self.n_provisioners)]
         self.agent_name_mapping = dict(zip(self.agents, list(range(self.num_agents))))
         self.agents_list = []
+        self.detected = set()
 
         self.old_dist_to_goal = 1000
 
@@ -591,6 +592,12 @@ class HeMAC:
                                 print(f"agent dropped {agent.carried_targets} targets!")
                                 agent.carried_targets = 0
                                 break
+            new_detected = self.detected.union(agent.detected)
+            if len(self.detected) < len(new_detected):
+                reward += 5 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
+                self.detected = new_detected
+                # print(f'drone detected: {self.detected}')
+
             # global reward
             if self.rescuing_targets:
                 self.global_reward += 10 * found_goal + 25 * delivered_goal
@@ -618,6 +625,12 @@ class HeMAC:
                 self.success_step = self.num_frames
                 self.global_reward += 180 if self.known_goals else 120
                 self.terminate = True
+            
+            new_detected = self.detected.union(agent.detected)
+            if len(self.detected) < len(new_detected):
+                reward += 5 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
+                self.detected = new_detected
+                # print(f'observer detected: {self.detected}')
 
         # individual reward
         self.rewards[active_agent] = reward

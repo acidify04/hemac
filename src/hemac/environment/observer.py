@@ -27,6 +27,7 @@ class Observer(BaseAgent):
         self.goal_in_view = False
         self.goal_estimation = None
         self.comm_range = comm_range
+        self.detected = set()
 
         self.trajectory_len = 3
 
@@ -96,6 +97,7 @@ class Observer(BaseAgent):
         self.orientation = self.orientation % (2 * np.pi)
         self.x += self.speed * np.cos(self.orientation) * self.time_factor
         self.y += self.speed * np.sin(self.orientation) * self.time_factor
+        self.detected.add((int(self.x), int(self.y)))
 
         newpos = self.rect.copy()
         rect_pos = world_ref_to_game_ref([self.x, self.y], world.area)
