@@ -159,10 +159,10 @@ class Drone(BaseAgent):
             self.action_space = gymnasium.spaces.Box(low=-self.max_speed, high=self.max_speed, shape=(3,))
             self.discrete_action_space = False
 
-        # observation vector: [goal_x, goal_y, self.x, self.y] (4)
-        # + distances in 4 quadrants (4) => 8 base entries
+        # observation vector produced by observe():
+        # [rel_goal_x, rel_goal_y] (2) + distances in 4 quadrants (4) => 6 base entries
         # + relative positions for each drone (2 * number_of_drones)
-        obs_len = 8 + self.number_of_drones * 2
+        obs_len = 6 + self.number_of_drones * 2
         # normalized observations in [-1, 1]
         self.observation_space = gymnasium.spaces.Box(low=-1.0, high=1.0, shape=(obs_len,), dtype=np.float32)
 
@@ -365,31 +365,27 @@ class Drone(BaseAgent):
         rel_goal_x = float(np.clip((goal_x - self.x) / norm, -1.0, 1.0))
         rel_goal_y = float(np.clip((goal_y - self.y) / norm, -1.0, 1.0))
 
-        # self position relative to search-area center
-        try:
-            cx = (minx + maxx) / 2.0
-            cy = (miny + maxy) / 2.0
-        except Exception:
-            cx, cy = 0.0, 0.0
-        rel_self_x = float(np.clip((self.x - cx) / norm, -1.0, 1.0))
-        rel_self_y = float(np.clip((self.y - cy) / norm, -1.0, 1.0))
-
         # boundary / obstacle distances normalized by sensing_range (0..1)
         distances = self.obstacles_in_quadrants(Point(self.x, self.y), world.search_area, world.obstacles)
         norm_dists = [float(np.clip(d / max(self.sensing_range, 1e-6), 0.0, 1.0)) for d in distances]
 
         # swarm observation normalized by map diag (includes self -> zeros)
         agents_rel_pos = []
+        index = 0
         for ag in agents:
             if isinstance(ag, Drone):
                 dx = float(np.clip((ag.x - self.x) / norm, -1.0, 1.0))
                 dy = float(np.clip((ag.y - self.y) / norm, -1.0, 1.0))
+                if index == 0 and dx == 0 and dy == 0:
+                    index += 1
+                    continue
                 agents_rel_pos.extend([dx, dy])
 
         # assemble observation and pad if needed to match obs_len
-        obs_raw = [rel_goal_x, rel_goal_y, rel_self_x, rel_self_y] + norm_dists + agents_rel_pos
+        obs_raw = [rel_goal_x, rel_goal_y] + norm_dists + agents_rel_pos
         obs = np.array(obs_raw, dtype=np.float32)
-        expected_len = 8 + self.number_of_drones * 2
+        # expected length: 2 (rel goal) + 4 distances + 2*N drone rel positions
+        expected_len = 6 + self.number_of_drones * 2
         if obs.size < expected_len:
             obs = np.pad(obs, (0, expected_len - obs.size), mode="constant", constant_values=0.0)
         elif obs.size > expected_len:

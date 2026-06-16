@@ -10,6 +10,8 @@ import gymnasium
 from .sensors import ForwardFacingCamera, Sensor
 from .world import world_ref_to_game_ref
 
+from shapely.geometry import Point
+
 
 class Observer(BaseAgent):
     """Observer class."""
@@ -202,18 +204,13 @@ class Observer(BaseAgent):
         rel_goal_x = float(np.clip((goal_x - self.x) / norm, -1.0, 1.0))
         rel_goal_y = float(np.clip((goal_y - self.y) / norm, -1.0, 1.0))
 
-        try:
-            cx = (minx + maxx) / 2.0
-            cy = (miny + maxy) / 2.0
-        except Exception:
-            cx, cy = 0.0, 0.0
-        rel_x = float(np.clip((self.x - cx) / norm, -1.0, 1.0))
-        rel_y = float(np.clip((self.y - cy) / norm, -1.0, 1.0))
+        distances = self.obstacles_in_quadrants(Point(self.x, self.y), world.search_area, world.obstacles, world)
+        norm_dists = [float(np.clip(d / max(50, 1e-6), 0.0, 1.0)) for d in distances]
 
         # orientation normalized from [0, 2pi) to [-1,1]
         orient_norm = float(((self.orientation % (2 * np.pi)) / np.pi) - 1.0)
 
-        obs_vec = [poi_flag, rel_goal_x, rel_goal_y, orient_norm, rel_x, rel_y]
+        obs_vec = [rel_goal_x, rel_goal_y, orient_norm] + norm_dists
         # pad to fixed size 11
         while len(obs_vec) < 11:
             obs_vec.append(0.0)
@@ -223,7 +220,53 @@ class Observer(BaseAgent):
     def observe(self, world, agents, goals):
         """Observe observer."""
         return self.get_fov_obs(world, goals)
+    
+    def obstacles_in_quadrants(self, point, area, obstacles, world):
+        """Find distances to obstacles in the 4 quadrants."""
+        pygame_area = world.area  # Needed for coordinate conversion
+        px, py = world_ref_to_game_ref((point.x, point.y), pygame_area)
 
+        # Initialize distances with sensing range
+        distances = {
+            "right": 50,
+            "up": 50,
+            "left": 50,
+            "down": 50,
+        }
+
+        # --- Find closest point on each obstacle ---
+        for obstacle in obstacles:
+            closest_x, closest_y = obstacle.clamp(pygame.Rect(px, py, 0, 0)).topleft  # Closest point on rect
+            distance = np.hypot(closest_x - px, closest_y - py)
+
+            if distance < 50:
+                if closest_x > px:
+                    distances["right"] = min(distances["right"], distance)
+                if closest_y > py:
+                    distances["down"] = min(distances["down"], distance)  # y is inverted in pygame
+                if closest_x < px:
+                    distances["left"] = min(distances["left"], distance)
+                if closest_y < py:
+                    distances["up"] = min(distances["up"], distance)  # y is inverted in pygame
+
+        # --- Find closest point on the area boundary ---
+        closest_point = area.boundary.interpolate(area.boundary.project(point))
+        ax, ay = closest_point.x, closest_point.y
+        distance = np.hypot(ax - point.x, ay - point.y)
+
+        if distance < 50:
+            if ax > point.x:
+                distances["right"] = min(distances["right"], distance)
+            if ay > point.y:
+                distances["up"] = min(distances["up"], distance)
+            if ax < point.x:
+                distances["left"] = min(distances["left"], distance)
+            if ay < point.y:
+                distances["down"] = min(distances["down"], distance)
+
+        result = [dist for dist in distances.values()]
+
+        return result
 
 def dist(x1, y1, x2, y2):
     """Distance between two points."""

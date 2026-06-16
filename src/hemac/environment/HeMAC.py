@@ -583,14 +583,14 @@ class HeMAC:
                     # if agent.carried_targets < agent.carrying_capacity:
                     agent.found_goal = True
                     self.found_goal = True
-                    reward += 100  # Reward for finding a goal
+                    reward += 200  # Reward for finding a goal
                     # goal.spawn_poi(self.search_area)
                     # goal.reset()
                     # if self.rescuing_targets:
                     #     agent.carried_targets += 1
             new_detected = self.detected.union(agent.detected)
             if len(self.detected) < len(new_detected):
-                reward += 0.5 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
+                reward += 5.0 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
                 self.detected = new_detected
 
             # if self.rescuing_targets and agent.carried_targets:
@@ -699,7 +699,7 @@ class HeMAC:
                 if goal_dist < 50: # goal까지의 거리가 sensing range보다 가까워지면 발견
                     agent.found_goal = True
                     self.found_goal = True
-                    self.global_reward += 200  # Reward for finding a goal
+                    self.global_reward += 500  # Reward for finding a goal
                         # goal.spawn_poi(self.search_area)
                         # goal.reset()
                     self.success_step = self.num_frames
@@ -709,7 +709,7 @@ class HeMAC:
 
             new_detected = self.detected.union(agent.detected)
             if len(self.detected) < len(new_detected):
-                reward += 0.5 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
+                reward += 5.0 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
                 self.detected = new_detected
 
         # individual reward
