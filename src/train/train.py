@@ -262,8 +262,8 @@ class HeMACCallbacks(DefaultCallbacks):
         )
         episode.custom_metrics["crash_rate"] = 1.0 if final_info.get("fatal_crash", False) else 0.0
         # episode.custom_metrics["timeout_rate"] = 1.0 if final_info.get("timeout", False) else 0.0
-        # episode.custom_metrics["drone_crash_rate"] = 1.0 if final_info.get("drone_crash", False) else 0.0
-        # episode.custom_metrics["observer_crash_rate"] = 1.0 if final_info.get("observer_crash", False) else 0.0
+        episode.custom_metrics["drone_crash_rate"] = 1.0 if final_info.get("drone_crash", False) else 0.0
+        episode.custom_metrics["observer_crash_rate"] = 1.0 if final_info.get("observer_crash", False) else 0.0
 
 
 def env_creator(config):

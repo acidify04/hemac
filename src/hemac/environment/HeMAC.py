@@ -745,6 +745,8 @@ class HeMAC:
                     "goal_found": self.found_goal, 
                     "success_after_goal_found": self.mission_success,
                     "fatal_crash": self.collided,
+                    "drone_crash": self.drone_crash,
+                    "observer_crash": self.observer_crash,
                 }
 
             if self.render_mode is not None:
