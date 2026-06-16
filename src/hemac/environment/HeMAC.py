@@ -566,7 +566,7 @@ class HeMAC:
                                 f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
                             )
             boundary_dist = self.search_area.boundary.distance(Point((agent.x, agent.y)))
-            # reward += 0.5 * boundary_dist  # Reward for being farther from the boundary, encourages staying in the center of the search area
+            reward += 0.5 * boundary_dist  # Reward for being farther from the boundary, encourages staying in the center of the search area
 
             # POI tracking reward calculation
             for goal in self.goals[:]:
@@ -613,42 +613,90 @@ class HeMAC:
 
         elif "observer" in active_agent:
             reward -= 0.1  # Small step penalty to encourage efficiency
+            # if agent.out_of_bound:
+            #     self.collided = True
+            #     reward -= 100  # Penalty for leaving the map
+            #     if self.render_mode == "human":
+            #         LOGGER.info(f"observer went out of bounds! pos: {(agent.x, agent.y)}")
+            # elif agent.goal_in_view:
+            #     reward = 0
+
+            # if agent.out_of_bound:
+            #     self.collided = True
+            #     reward -= 100  # Penalty for leaving the map
+            #     if self.render_mode == "human":
+            #         LOGGER.info(f"observer went out of bounds! pos: {(agent.x, agent.y)}")
+            # elif agent.goal_in_view:
+            #     reward = 0
+
+            # goal_x, goal_y = self.world.observer_communication
+            # current_dist = dist(goal_x, goal_y, agent.x, agent.y)
+            # # if not self.found_goal:
+            # #     reward -= math.sqrt(math.sqrt(math.sqrt(current_dist))) 
+            # # else:
+            # #     reward -= math.sqrt(math.sqrt(current_dist))
+            # goal_heading = np.arctan2(goal_y - agent.y, goal_x - agent.x)
+            # heading_error = ((goal_heading - agent.orientation + np.pi) % (2 * np.pi)) - np.pi
+            # success_radius = 80 if self.known_goals else 50
+
+            # if self.known_goals:
+            #     reward -= 0.01
+            #     reward += 0.12 * np.cos(heading_error)
+            # else:
+            #     reward += 0.03 * np.cos(heading_error)
+
+            # if current_dist < success_radius:
+            #     self.mission_success = True
+            #     reward += 200 # Task completion reward
+            #     self.success_step = self.num_frames
+            #     self.global_reward += 180 if self.known_goals else 120
+            #     self.terminate = True
+            
+            # new_detected = self.detected.union(agent.detected)
+            # if len(self.detected) < len(new_detected):
+            #     reward += 5 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
+            #     self.detected = new_detected
+            #     # print(f'observer detected: {self.detected}')
+
+            # boundary_dist = self.search_area.boundary.distance(Point((agent.x, agent.y)))
+            # reward += 0.5 * boundary_dist  # Reward for being farther from the boundary
             if agent.out_of_bound:
                 self.collided = True
                 reward -= 100  # Penalty for leaving the map
                 if self.render_mode == "human":
-                    LOGGER.info(f"observer went out of bounds! pos: {(agent.x, agent.y)}")
-            elif agent.goal_in_view:
-                reward = 0
-
-            goal_x, goal_y = self.world.observer_communication
-            current_dist = dist(goal_x, goal_y, agent.x, agent.y)
-            # if not self.found_goal:
-            #     reward -= math.sqrt(math.sqrt(math.sqrt(current_dist))) 
-            # else:
-            #     reward -= math.sqrt(math.sqrt(current_dist))
-            goal_heading = np.arctan2(goal_y - agent.y, goal_x - agent.x)
-            heading_error = ((goal_heading - agent.orientation + np.pi) % (2 * np.pi)) - np.pi
-            success_radius = 80 if self.known_goals else 50
-
-            if self.known_goals:
-                reward -= 0.01
-                reward += 0.12 * np.cos(heading_error)
+                    LOGGER.info(f"drone went out of bounds! pos: {(agent.x, agent.y)}")
+            elif not self.search_area.covers(Point((agent.x, agent.y))):
+                self.collided = True
+                reward -= 100  # going outside of search area
+                if self.render_mode == "human" or self.render_mode == "rgb_array":
+                    LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
             else:
-                reward += 0.03 * np.cos(heading_error)
+                for obstacle in self.world.obstacles:
+                    if agent.process_collision(obstacle, 0):
+                        self.collided = True
+                        reward -= 20  # Penalty for collision with an obstacle
+                        if self.render_mode == "human" or self.render_mode == "rgb_array":
+                            LOGGER.info(
+                                f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
+                            )
+            boundary_dist = self.search_area.boundary.distance(Point((agent.x, agent.y)))
+            reward += 0.5 * boundary_dist  # Reward for being farther from the boundary, encourages staying in the center of the search area
 
-            if current_dist < success_radius:
-                self.mission_success = True
-                reward += 200 # Task completion reward
-                self.success_step = self.num_frames
-                self.global_reward += 180 if self.known_goals else 120
-                self.terminate = True
-            
+            # POI tracking reward calculation
+            for goal in self.goals[:]:
+                goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
+                reward -= math.sqrt(math.sqrt(math.sqrt(goal_dist)))  # Exponential reward based on distance to the goal, encourages getting closer
+                if goal_dist < 50: # goal까지의 거리가 sensing range보다 가까워지면 발견
+                    agent.found_goal = True
+                    self.found_goal = True
+                    reward += 100  # Reward for finding a goal
+                        # goal.spawn_poi(self.search_area)
+                        # goal.reset()
+
             new_detected = self.detected.union(agent.detected)
             if len(self.detected) < len(new_detected):
                 reward += 5 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
                 self.detected = new_detected
-                # print(f'observer detected: {self.detected}')
 
         # individual reward
         self.rewards[active_agent] = reward

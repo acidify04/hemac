@@ -5,6 +5,7 @@ import os
 import pygame
 from .base_agent import BaseAgent
 import numpy as np
+import math
 import gymnasium
 from .sensors import ForwardFacingCamera, Sensor
 from .world import world_ref_to_game_ref
@@ -48,9 +49,9 @@ class Observer(BaseAgent):
         """
         2D steering. 0: right, 1: left
         """
-        self.observation_space = gymnasium.spaces.Box(
-            low=-10000, high=10000, shape=(11,)
-        )  # handling the presence and position of 1 POI for now
+        # normalized observation space in [-1,1]
+        # fields: [poi_flag, rel_goal_x, rel_goal_y, orient_norm, rel_x, rel_y, pad...]
+        self.observation_space = gymnasium.spaces.Box(low=-1.0, high=1.0, shape=(11,), dtype=np.float32)
         """
         [POI, x_g, y_g, theta, x, y, _...]: POI is treated as a bool corresponding to the
         presence of in POI in the FOV (1000 = True, -1000 = False).
@@ -171,22 +172,53 @@ class Observer(BaseAgent):
             list: Observations.
 
         """
-        obs = [-1000, 0, 0, self.orientation, self.x, self.y, 0, 0, 0, 0, 0]
-        # print(f"observer obs: {obs}")
-        for goal in goals:
-            obs = [1000, goal.x, goal.y, self.orientation, self.x, self.y, 0, 0, 0, 0, 0]
-            # if self.sensor.is_point_detected((goal.rect.x, goal.rect.y)):
-            #     self.goal_in_view = True
-            #     goal.detected = True  # seen at least once
-            #     self.goal_estimation = (
-            #         goal.x,
-            #         goal.y,
-            #     )  # hardcoded communication for now
-            #     obs = [1000, goal.x, goal.y, self.orientation, self.x, self.y, 0, 0, 0, 0, 0]
-            #     return np.array(obs, np.float32)
-            # else:
-                # self.goal_in_view = False
-        return np.array(obs, np.float32)
+        # default values
+        poi_flag = -1.0
+        goal_x = 0.0
+        goal_y = 0.0
+
+        # if any goal is in list, take the first as estimation
+        if goals:
+            goal = goals[0]
+            goal_x = goal.x
+            goal_y = goal.y
+            # if sensor sees it, mark as seen
+            if self.sensor and hasattr(self.sensor, "is_point_detected"):
+                if self.sensor.is_point_detected((goal.rect.x, goal.rect.y)):
+                    self.goal_in_view = True
+                    goal.detected = True
+                    self.goal_estimation = (goal.x, goal.y)
+                    poi_flag = 1.0
+
+        # normalization based on search area diagonal
+        try:
+            minx, miny, maxx, maxy = world.search_area.bounds
+            norm = (maxx - minx) ** 2 + (maxy - miny) ** 2
+            norm = float(math.sqrt(norm)) if norm > 0 else 1.0
+        except Exception:
+            norm = 1.0
+
+        # relative goal and self position normalized to [-1,1]
+        rel_goal_x = float(np.clip((goal_x - self.x) / norm, -1.0, 1.0))
+        rel_goal_y = float(np.clip((goal_y - self.y) / norm, -1.0, 1.0))
+
+        try:
+            cx = (minx + maxx) / 2.0
+            cy = (miny + maxy) / 2.0
+        except Exception:
+            cx, cy = 0.0, 0.0
+        rel_x = float(np.clip((self.x - cx) / norm, -1.0, 1.0))
+        rel_y = float(np.clip((self.y - cy) / norm, -1.0, 1.0))
+
+        # orientation normalized from [0, 2pi) to [-1,1]
+        orient_norm = float(((self.orientation % (2 * np.pi)) / np.pi) - 1.0)
+
+        obs_vec = [poi_flag, rel_goal_x, rel_goal_y, orient_norm, rel_x, rel_y]
+        # pad to fixed size 11
+        while len(obs_vec) < 11:
+            obs_vec.append(0.0)
+
+        return np.array(obs_vec, dtype=np.float32)
 
     def observe(self, world, agents, goals):
         """Observe observer."""
