@@ -566,13 +566,13 @@ class HeMAC:
                                 f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
                             )
             boundary_dist = self.search_area.boundary.distance(Point((agent.x, agent.y)))
-            reward += 0.5 * boundary_dist  # Reward for being farther from the boundary, encourages staying in the center of the search area
+            reward += 0.05 * boundary_dist  # Reward for being farther from the boundary, encourages staying in the center of the search area
 
             # POI tracking reward calculation
             for goal in self.goals[:]:
                 goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
-                reward -= math.sqrt(math.sqrt(math.sqrt(goal_dist)))  # Exponential reward based on distance to the goal, encourages getting closer
-                if goal_dist < agent.sensing_range:
+                reward -= math.sqrt(goal_dist)  # Exponential reward based on distance to the goal, encourages getting closer
+                if goal_dist < agent.sensing_range and not self.found_goal:
                     if agent.carried_targets < agent.carrying_capacity:
                         agent.found_goal = True
                         self.found_goal = True
@@ -601,7 +601,7 @@ class HeMAC:
                                 break
             new_detected = self.detected.union(agent.detected)
             if len(self.detected) < len(new_detected):
-                reward += 5 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
+                reward += 0.1 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
                 self.detected = new_detected
                 # print(f'drone detected: {self.detected}')
 
@@ -680,13 +680,13 @@ class HeMAC:
                                 f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
                             )
             boundary_dist = self.search_area.boundary.distance(Point((agent.x, agent.y)))
-            reward += 0.5 * boundary_dist  # Reward for being farther from the boundary, encourages staying in the center of the search area
+            reward += 0.05 * boundary_dist  # Reward for being farther from the boundary, encourages staying in the center of the search area
 
             # POI tracking reward calculation
             for goal in self.goals[:]:
                 goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
-                reward -= math.sqrt(math.sqrt(math.sqrt(goal_dist)))  # Exponential reward based on distance to the goal, encourages getting closer
-                if goal_dist < 50: # goal까지의 거리가 sensing range보다 가까워지면 발견
+                reward -= math.sqrt(goal_dist) # Exponential reward based on distance to the goal, encourages getting closer
+                if goal_dist < 50 and not self.found_goal: # goal까지의 거리가 sensing range보다 가까워지면 발견
                     agent.found_goal = True
                     self.found_goal = True
                     reward += 100  # Reward for finding a goal
@@ -695,7 +695,7 @@ class HeMAC:
 
             new_detected = self.detected.union(agent.detected)
             if len(self.detected) < len(new_detected):
-                reward += 5 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
+                reward += 0.1 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
                 self.detected = new_detected
 
         # individual reward
