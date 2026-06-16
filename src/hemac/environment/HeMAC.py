@@ -138,6 +138,9 @@ class HeMAC:
         self.agents_list = []
         self.detected = set()
         self.found_goal = False
+        self.finished = False
+        self.drone_crash = False
+        self.observer_crash = False
 
         self.old_dist_to_goal = 1000
 
@@ -425,6 +428,8 @@ class HeMAC:
         self.truncate = False
         self.found_goal = False
         self.detected = set()
+        self.drone_crash = False
+        self.observer_crash = False
 
         self.num_frames = 0
         self.old_dist_to_goal = 1000
@@ -501,12 +506,12 @@ class HeMAC:
 
         return {
             "success": bool(self.mission_success),
-            # "goal_found": bool(self.goal_found),
+            "goal_found": bool(self.found_goal),
             # "goal_known": bool(self.world.goal_known),
-            # "fatal_crash": bool(self.collided),
+            "fatal_crash": bool(self.collided),
             # "timeout": bool(self.truncate and not self.terminate),
-            # "drone_crash": bool(self.drone_crash),
-            # "observer_crash": bool(self.observer_crash),
+            "drone_crash": bool(self.drone_crash),
+            "observer_crash": bool(self.observer_crash),
             # "min_drone_dist": float(self.min_drone_dist),
             # "min_obs_dist": float(self.min_obs_dist),
             # "explored_area": float(total_explored),
@@ -515,7 +520,7 @@ class HeMAC:
             # "goal_found_step": float(goal_found_step),
             "success_step": float(success_step),
             # "steps_after_goal_found": float(max(steps_after_goal_found, 0)),
-            # "success_after_goal_found": bool(self.mission_success and self.goal_found),
+            "success_after_goal_found": bool(self.mission_success),
         }
 
     def finalize_episode(self):
@@ -553,6 +558,7 @@ class HeMAC:
             #         LOGGER.info(f"drone went out of bounds! pos: {(agent.x, agent.y)}")
             if not self.search_area.covers(Point((agent.x, agent.y))):
                 self.collided = True
+                self.drone_crash = True
                 self.terminate = True
                 reward -= 100  # going outside of search area
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
@@ -669,6 +675,7 @@ class HeMAC:
             #         LOGGER.info(f"drone went out of bounds! pos: {(agent.x, agent.y)}")
             if not self.search_area.covers(Point((agent.x, agent.y))):
                 self.collided = True
+                self.observer_crash = True
                 self.terminate = True
                 reward -= 300  # going outside of search area
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
@@ -696,6 +703,7 @@ class HeMAC:
                         # goal.spawn_poi(self.search_area)
                         # goal.reset()
                     self.success_step = self.num_frames
+                    self.mission_success = True
                     # self.global_reward += 180 if self.known_goals else 120
                     self.terminate = True
 
@@ -732,7 +740,12 @@ class HeMAC:
                 self.rewards[ag] += self.global_reward
                 self.terminations[ag] = self.terminate
                 self.truncations[ag] = self.truncate
-                self.infos[ag] = {"success": self.found_goal}
+                self.infos[ag] = {
+                    "success": self.found_goal, 
+                    "goal_found": self.found_goal, 
+                    "success_after_goal_found": self.mission_success,
+                    "fatal_crash": self.collided,
+                }
 
             if self.render_mode is not None:
                 self.render()
