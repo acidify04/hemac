@@ -560,7 +560,7 @@ class HeMAC:
                 self.collided = True
                 self.drone_crash = True
                 self.terminate = True
-                reward -= 100  # going outside of search area
+                reward -= 500  # going outside of search area
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
                     LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
             else:
@@ -578,7 +578,7 @@ class HeMAC:
             # POI tracking reward calculation
             for goal in self.goals[:]:
                 goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
-                reward -= math.sqrt(goal_dist)  # Exponential reward based on distance to the goal, encourages getting closer
+                reward -= math.sqrt(math.sqrt(goal_dist))  # Exponential reward based on distance to the goal, encourages getting closer
                 if goal_dist < agent.sensing_range and not self.found_goal:
                     # if agent.carried_targets < agent.carrying_capacity:
                     agent.found_goal = True
@@ -590,7 +590,7 @@ class HeMAC:
                     #     agent.carried_targets += 1
             new_detected = self.detected.union(agent.detected)
             if len(self.detected) < len(new_detected):
-                reward += 0.1 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
+                reward += 0.5 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
                 self.detected = new_detected
 
             # if self.rescuing_targets and agent.carried_targets:
@@ -677,7 +677,7 @@ class HeMAC:
                 self.collided = True
                 self.observer_crash = True
                 self.terminate = True
-                reward -= 300  # going outside of search area
+                reward -= 500  # going outside of search area
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
                     LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
             else:
@@ -695,7 +695,7 @@ class HeMAC:
             # POI tracking reward calculation
             for goal in self.goals[:]:
                 goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
-                reward -= math.sqrt(goal_dist) # Exponential reward based on distance to the goal, encourages getting closer
+                reward -= math.sqrt(math.sqrt(goal_dist)) # Exponential reward based on distance to the goal, encourages getting closer
                 if goal_dist < 50: # goal까지의 거리가 sensing range보다 가까워지면 발견
                     agent.found_goal = True
                     self.found_goal = True
@@ -709,7 +709,7 @@ class HeMAC:
 
             new_detected = self.detected.union(agent.detected)
             if len(self.detected) < len(new_detected):
-                reward += 0.1 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
+                reward += 0.5 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
                 self.detected = new_detected
 
         # individual reward
