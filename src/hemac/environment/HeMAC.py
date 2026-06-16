@@ -137,6 +137,7 @@ class HeMAC:
         self.agent_name_mapping = dict(zip(self.agents, list(range(self.num_agents))))
         self.agents_list = []
         self.detected = set()
+        self.found_goal = False
 
         self.old_dist_to_goal = 1000
 
@@ -422,6 +423,8 @@ class HeMAC:
         self.terminate = False
         self.collided = False
         self.truncate = False
+        self.found_goal = False
+        self.detected = set()
 
         self.num_frames = 0
         self.old_dist_to_goal = 1000
@@ -533,7 +536,7 @@ class HeMAC:
         reward = 0
 
         agent = self.agents_list[self.agent_name_mapping[active_agent]]
-        agent.update(self.area, self.world, action)
+        agent.update(self.area, self.world, action, self.found_goal)
 
         # Update position and uncertainty of objectives
         for goal in self.goals:
@@ -545,12 +548,12 @@ class HeMAC:
             reward -= 0.1  # Small step penalty to encourage efficiency
             if agent.out_of_bound:
                 self.collided = True
-                reward -= 40  # Penalty for leaving the map
+                reward -= 100  # Penalty for leaving the map
                 if self.render_mode == "human":
                     LOGGER.info(f"drone went out of bounds! pos: {(agent.x, agent.y)}")
             elif not self.search_area.covers(Point((agent.x, agent.y))):
                 self.collided = True
-                reward -= 40  # going outside of search area
+                reward -= 100  # going outside of search area
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
                     LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
             else:
@@ -562,13 +565,17 @@ class HeMAC:
                             LOGGER.info(
                                 f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
                             )
+            boundary_dist = self.search_area.boundary.distance(Point((agent.x, agent.y)))
+            # reward += 0.5 * boundary_dist  # Reward for being farther from the boundary, encourages staying in the center of the search area
+
             # POI tracking reward calculation
             for goal in self.goals[:]:
                 goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
                 reward -= math.sqrt(math.sqrt(math.sqrt(goal_dist)))  # Exponential reward based on distance to the goal, encourages getting closer
                 if goal_dist < agent.sensing_range:
                     if agent.carried_targets < agent.carrying_capacity:
-                        found_goal = True
+                        agent.found_goal = True
+                        self.found_goal = True
                         reward += 100  # Reward for finding a goal
                         # goal.spawn_poi(self.search_area)
                         # goal.reset()
@@ -600,15 +607,15 @@ class HeMAC:
 
             # global reward
             if self.rescuing_targets:
-                self.global_reward += 10 * found_goal + 25 * delivered_goal
+                self.global_reward += 10 * self.found_goal + 25 * delivered_goal
             else:
-                self.global_reward += 10 * found_goal
+                self.global_reward += 10 * self.found_goal
 
         elif "observer" in active_agent:
             reward -= 0.1  # Small step penalty to encourage efficiency
             if agent.out_of_bound:
                 self.collided = True
-                reward -= 40  # Penalty for leaving the map
+                reward -= 100  # Penalty for leaving the map
                 if self.render_mode == "human":
                     LOGGER.info(f"observer went out of bounds! pos: {(agent.x, agent.y)}")
             elif agent.goal_in_view:
@@ -616,8 +623,19 @@ class HeMAC:
 
             goal_x, goal_y = self.world.observer_communication
             current_dist = dist(goal_x, goal_y, agent.x, agent.y)
-            reward -= math.sqrt(math.sqrt(math.sqrt(current_dist)))  # Exponential reward based on distance to the goal, encourages getting closer
+            # if not self.found_goal:
+            #     reward -= math.sqrt(math.sqrt(math.sqrt(current_dist))) 
+            # else:
+            #     reward -= math.sqrt(math.sqrt(current_dist))
+            goal_heading = np.arctan2(goal_y - agent.y, goal_x - agent.x)
+            heading_error = ((goal_heading - agent.orientation + np.pi) % (2 * np.pi)) - np.pi
             success_radius = 80 if self.known_goals else 50
+
+            if self.known_goals:
+                reward -= 0.01
+                reward += 0.12 * np.cos(heading_error)
+            else:
+                reward += 0.03 * np.cos(heading_error)
 
             if current_dist < success_radius:
                 self.mission_success = True
@@ -660,7 +678,7 @@ class HeMAC:
                 self.rewards[ag] += self.global_reward
                 self.terminations[ag] = self.terminate
                 self.truncations[ag] = self.truncate
-                self.infos[ag] = {"success": found_goal}
+                self.infos[ag] = {"success": self.found_goal}
 
             if self.render_mode is not None:
                 self.render()

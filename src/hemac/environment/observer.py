@@ -65,6 +65,7 @@ class Observer(BaseAgent):
         self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
         self.out_of_bound = False
         self.goal_estimation = None
+        self.detected = set()
         pass
 
     def sync_pose_state(self):
@@ -84,7 +85,7 @@ class Observer(BaseAgent):
         screen.blit(self.img, self.rect)
         self.sensor.draw_sensor(screen)
 
-    def update(self, area, world, action):
+    def update(self, area, world, action, found_goal):
         """Update observer."""
         # action: > 0 : turn right, < 0 : turn left, 0: straight
         if self.discrete_action_space:

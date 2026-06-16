@@ -144,6 +144,7 @@ class Drone(BaseAgent):
         self.carried_targets = 0
         self.carrying_capacity = 1
         self.detected = set()
+        self.found_goal = False
 
         self.world = world
         self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
@@ -183,6 +184,8 @@ class Drone(BaseAgent):
         self.charging = False
         self.out_of_bound = False
         self.carried_targets = 0
+        self.found_goal = False
+        self.detected = set()
         self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
 
     def sync_pose_state(self):
@@ -222,8 +225,10 @@ class Drone(BaseAgent):
         if self.charging:
             pygame.draw.line(screen, (155, 255, 255), self.rect.center, self.charging_point, width=3)
 
-    def update(self, area, world, action):
+    def update(self, area, world, action, found_goal):
         """Update drone."""
+        if self.found_goal or found_goal:
+            return
         if self.discrete_action_space:
             action = self.discrete_to_continuous(action)
 
