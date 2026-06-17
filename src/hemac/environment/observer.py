@@ -41,6 +41,7 @@ class Observer(BaseAgent):
         self.altitude = 100
         self.steering_angle = np.pi / 10  # angular velocity
         self.sensor = sensor
+        self.sensing_range = sensor.sensing_range
 
         if discrete_action_space:
             self.action_space = gymnasium.spaces.Discrete(5)
@@ -101,7 +102,7 @@ class Observer(BaseAgent):
         self.orientation = self.orientation % (2 * np.pi)
         self.x += self.speed * np.cos(self.orientation) * self.time_factor
         self.y += self.speed * np.sin(self.orientation) * self.time_factor
-        self.detected.add((int(self.x), int(self.y)))
+        self.update_detected_area(self.sensing_range)
 
         newpos = self.rect.copy()
         rect_pos = world_ref_to_game_ref([self.x, self.y], world.area)
@@ -205,12 +206,13 @@ class Observer(BaseAgent):
         rel_goal_y = float(np.clip((goal_y - self.y) / norm, -1.0, 1.0))
 
         distances = self.obstacles_in_quadrants(Point(self.x, self.y), world.search_area, world.obstacles, world)
-        norm_dists = [float(np.clip(d / max(50, 1e-6), 0.0, 1.0)) for d in distances]
+        norm_dists = [float(np.clip(d / max(self.sensing_range, 1e-6), 0.0, 1.0)) for d in distances]
 
         # orientation normalized from [0, 2pi) to [-1,1]
         orient_norm = float(((self.orientation % (2 * np.pi)) / np.pi) - 1.0)
 
-        obs_vec = [rel_goal_x, rel_goal_y, orient_norm] + norm_dists
+        # obs_vec = [rel_goal_x, rel_goal_y, orient_norm] + norm_dists
+        obs_vec = [orient_norm] + norm_dists
         # pad to fixed size 11
         while len(obs_vec) < 11:
             obs_vec.append(0.0)
@@ -228,10 +230,10 @@ class Observer(BaseAgent):
 
         # Initialize distances with sensing range
         distances = {
-            "right": 50,
-            "up": 50,
-            "left": 50,
-            "down": 50,
+            "right": self.sensing_range,
+            "up": self.sensing_range,
+            "left": self.sensing_range,
+            "down": self.sensing_range,
         }
 
         # --- Find closest point on each obstacle ---
@@ -239,7 +241,7 @@ class Observer(BaseAgent):
             closest_x, closest_y = obstacle.clamp(pygame.Rect(px, py, 0, 0)).topleft  # Closest point on rect
             distance = np.hypot(closest_x - px, closest_y - py)
 
-            if distance < 50:
+            if distance < self.sensing_range:
                 if closest_x > px:
                     distances["right"] = min(distances["right"], distance)
                 if closest_y > py:
@@ -254,7 +256,7 @@ class Observer(BaseAgent):
         ax, ay = closest_point.x, closest_point.y
         distance = np.hypot(ax - point.x, ay - point.y)
 
-        if distance < 50:
+        if distance < self.sensing_range:
             if ax > point.x:
                 distances["right"] = min(distances["right"], distance)
             if ay > point.y:
@@ -271,4 +273,3 @@ class Observer(BaseAgent):
 def dist(x1, y1, x2, y2):
     """Distance between two points."""
     return np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-

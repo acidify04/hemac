@@ -528,6 +528,7 @@ class HeMAC:
         episode_info = self.build_episode_info()
         for ag in self.agents:
             self.rewards[ag] += self.global_reward
+            # LOGGER.info(f"final reward for {ag}: {self.rewards[ag]}")
             self.terminations[ag] = self.terminate
             self.truncations[ag] = self.truncate
             self.infos[ag] = dict(episode_info)
@@ -539,6 +540,8 @@ class HeMAC:
         found_goal = False
         delivered_goal = False
         reward = 0
+        reward_dict = dict(zip(self.agents, [[] for _ in self.agents]))
+        # LOGGER.info(f'reward_dict: {reward_dict}')
 
         agent = self.agents_list[self.agent_name_mapping[active_agent]]
         agent.update(self.area, self.world, action, self.found_goal)
@@ -551,6 +554,7 @@ class HeMAC:
         if "drone" in active_agent:
             # Collision check and map limits
             reward -= 0.1  # Small step penalty to encourage efficiency
+            reward_dict[active_agent].append(-0.1)
             # if agent.out_of_bound:
             #     self.collided = True
             #     reward -= 100  # Penalty for leaving the map
@@ -561,6 +565,7 @@ class HeMAC:
                 self.drone_crash = True
                 self.terminate = True
                 reward -= 500  # going outside of search area
+                reward_dict[active_agent].append(-500)
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
                     LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
             else:
@@ -568,6 +573,7 @@ class HeMAC:
                     if agent.process_collision(obstacle, 0):
                         self.collided = True
                         reward -= 20  # Penalty for collision with an obstacle
+                        reward_dict[active_agent].append(-20)
                         if self.render_mode == "human" or self.render_mode == "rgb_array":
                             LOGGER.info(
                                 f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
@@ -579,18 +585,21 @@ class HeMAC:
             for goal in self.goals[:]:
                 goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
                 reward -= math.sqrt(math.sqrt(goal_dist))  # Exponential reward based on distance to the goal, encourages getting closer
+                reward_dict[active_agent].append(-math.sqrt(math.sqrt(goal_dist)))
                 if goal_dist < agent.sensing_range and not self.found_goal:
                     # if agent.carried_targets < agent.carrying_capacity:
                     agent.found_goal = True
                     self.found_goal = True
                     reward += 200  # Reward for finding a goal
+                    reward_dict[active_agent].append(200)
                     # goal.spawn_poi(self.search_area)
                     # goal.reset()
                     # if self.rescuing_targets:
                     #     agent.carried_targets += 1
             new_detected = self.detected.union(agent.detected)
             if len(self.detected) < len(new_detected):
-                reward += 5.0 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
+                reward += math.sqrt(math.sqrt(len(new_detected) - len(self.detected)))  # Reward for newly detected goals
+                reward_dict[active_agent].append(math.sqrt(math.sqrt(len(new_detected) - len(self.detected))))
                 self.detected = new_detected
 
             # if self.rescuing_targets and agent.carried_targets:
@@ -621,6 +630,7 @@ class HeMAC:
 
         elif "observer" in active_agent:
             reward -= 0.1  # Small step penalty to encourage efficiency
+            reward_dict[active_agent].append(-0.1)
             # if agent.out_of_bound:
             #     self.collided = True
             #     reward -= 100  # Penalty for leaving the map
@@ -678,6 +688,7 @@ class HeMAC:
                 self.observer_crash = True
                 self.terminate = True
                 reward -= 500  # going outside of search area
+                reward_dict[active_agent].append(-500)
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
                     LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
             else:
@@ -685,6 +696,7 @@ class HeMAC:
                     if agent.process_collision(obstacle, 0):
                         self.collided = True
                         reward -= 20  # Penalty for collision with an obstacle
+                        reward_dict[active_agent].append(-20)
                         if self.render_mode == "human" or self.render_mode == "rgb_array":
                             LOGGER.info(
                                 f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
@@ -696,7 +708,8 @@ class HeMAC:
             for goal in self.goals[:]:
                 goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
                 reward -= math.sqrt(math.sqrt(goal_dist)) # Exponential reward based on distance to the goal, encourages getting closer
-                if goal_dist < 50: # goal까지의 거리가 sensing range보다 가까워지면 발견
+                reward_dict[active_agent].append(-math.sqrt(math.sqrt(goal_dist)))
+                if goal_dist < agent.sensing_range: # goal까지의 거리가 sensing range보다 가까워지면 발견
                     agent.found_goal = True
                     self.found_goal = True
                     self.global_reward += 500  # Reward for finding a goal
@@ -709,11 +722,13 @@ class HeMAC:
 
             new_detected = self.detected.union(agent.detected)
             if len(self.detected) < len(new_detected):
-                reward += 5.0 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
+                reward += math.sqrt(math.sqrt(len(new_detected) - len(self.detected)))  # Reward for newly detected goals
+                reward_dict[active_agent].append(math.sqrt(math.sqrt(len(new_detected) - len(self.detected))))
                 self.detected = new_detected
 
         # individual reward
         self.rewards[active_agent] = reward
+        LOGGER.info(f"reward for {active_agent} at step {self.num_frames}: {reward_dict[active_agent]}")
         self.finalize_episode()
 
         # Update environment and check end of episode

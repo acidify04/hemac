@@ -10,3 +10,4 @@ checkpoint*/
 src/train/wandb
 visualization/
 src/train/old
+src/train/trained_checkpoints/

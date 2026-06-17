@@ -225,8 +225,8 @@ class Drone(BaseAgent):
 
     def update(self, area, world, action, found_goal):
         """Update drone."""
-        if self.found_goal or found_goal:
-            return
+        # if self.found_goal or found_goal:
+        #     return
         if self.discrete_action_space:
             action = self.discrete_to_continuous(action)
 
@@ -294,7 +294,7 @@ class Drone(BaseAgent):
                 self.y += dy
                 newpos = self.rect.copy()
                 rect_pos = world_ref_to_game_ref([self.x, self.y], world.area)
-                self.detected.add((int(self.x), int(self.y)))
+                self.update_detected_area(self.sensing_range)
                 newpos.centerx = rect_pos[0]
                 newpos.centery = rect_pos[1]
 
@@ -382,7 +382,8 @@ class Drone(BaseAgent):
                 agents_rel_pos.extend([dx, dy])
 
         # assemble observation and pad if needed to match obs_len
-        obs_raw = [rel_goal_x, rel_goal_y] + norm_dists + agents_rel_pos
+        # obs_raw = [rel_goal_x, rel_goal_y] + norm_dists + agents_rel_pos
+        obs_raw = norm_dists + agents_rel_pos
         obs = np.array(obs_raw, dtype=np.float32)
         # expected length: 2 (rel goal) + 4 distances + 2*N drone rel positions
         expected_len = 6 + self.number_of_drones * 2
