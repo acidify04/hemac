@@ -159,12 +159,14 @@ class Drone(BaseAgent):
             self.action_space = gymnasium.spaces.Box(low=-self.max_speed, high=self.max_speed, shape=(3,))
             self.discrete_action_space = False
 
-        # observation vector produced by observe():
-        # [rel_goal_x, rel_goal_y] (2) + distances in 4 quadrants (4) => 6 base entries
-        # + relative positions for each drone (2 * number_of_drones)
-        obs_len = 6 + self.number_of_drones * 2
-        # normalized observations in [-1, 1]
-        self.observation_space = gymnasium.spaces.Box(low=-1.0, high=1.0, shape=(obs_len,), dtype=np.float32)
+        base_obs_len = 6 + self.number_of_drones * 2
+        sector_obs_len = self.GRID_RESOLUTION * self.GRID_RESOLUTION + 4
+        self.observation_space = gymnasium.spaces.Box(
+            low=-1.0,
+            high=19.0,
+            shape=(base_obs_len + sector_obs_len,),
+            dtype=np.float32,
+        )
 
         """
         action space: [wanted vx, wanted vy, recharge] where recharge is mapped to a bool for trying to recharge.
@@ -184,6 +186,7 @@ class Drone(BaseAgent):
         self.carried_targets = 0
         self.found_goal = False
         self.detected = set()
+        self.latest_detected = set()
         self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
 
     def sync_pose_state(self):
@@ -349,10 +352,6 @@ class Drone(BaseAgent):
 
     def observe(self, world, agents, poi) -> np.array:
         """Observe the world."""
-        # goal and base observation (normalized)
-        goal_x, goal_y = world.observer_communication
-
-        # normalization factor based on search area diagonal
         try:
             minx, miny, maxx, maxy = world.search_area.bounds
             norm = math.hypot(maxx - minx, maxy - miny)
@@ -361,15 +360,9 @@ class Drone(BaseAgent):
         if norm <= 0:
             norm = 1.0
 
-        # relative goal vector normalized by map size
-        rel_goal_x = float(np.clip((goal_x - self.x) / norm, -1.0, 1.0))
-        rel_goal_y = float(np.clip((goal_y - self.y) / norm, -1.0, 1.0))
-
-        # boundary / obstacle distances normalized by sensing_range (0..1)
         distances = self.obstacles_in_quadrants(Point(self.x, self.y), world.search_area, world.obstacles)
         norm_dists = [float(np.clip(d / max(self.sensing_range, 1e-6), 0.0, 1.0)) for d in distances]
 
-        # swarm observation normalized by map diag (includes self -> zeros)
         agents_rel_pos = []
         index = 0
         for ag in agents:
@@ -381,18 +374,15 @@ class Drone(BaseAgent):
                     continue
                 agents_rel_pos.extend([dx, dy])
 
-        # assemble observation and pad if needed to match obs_len
-        # obs_raw = [rel_goal_x, rel_goal_y] + norm_dists + agents_rel_pos
         obs_raw = norm_dists + agents_rel_pos
         obs = np.array(obs_raw, dtype=np.float32)
-        # expected length: 2 (rel goal) + 4 distances + 2*N drone rel positions
         expected_len = 6 + self.number_of_drones * 2
         if obs.size < expected_len:
             obs = np.pad(obs, (0, expected_len - obs.size), mode="constant", constant_values=0.0)
         elif obs.size > expected_len:
             obs = obs[:expected_len]
 
-        return obs
+        return np.concatenate((obs, self.build_sector_features(world))).astype(np.float32, copy=False)
 
     def obstacles_in_quadrants(self, point, area, obstacles):
         """Find distancs to obstacles in the 4 quadrants."""

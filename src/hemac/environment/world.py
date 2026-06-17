@@ -46,6 +46,14 @@ class World(pygame.sprite.Sprite):
         self.simulation_start_time = datetime.now(UTC).timestamp()  # set to current timestamp
         self.observer_communication = [0.0, 0.0]
         self.goal_known = False
+        self.goal_position = None
+        self.coverage_grid_size = 20
+        self.coverage_cell_width = self.area.width / self.coverage_grid_size
+        self.coverage_cell_height = self.area.height / self.coverage_grid_size
+        self.coverage_cell_area = self.coverage_cell_width * self.coverage_cell_height
+        self.detected = set()
+        self.coverage_counts = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.int32)
+        self.coverage_map = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
 
         # Road network data TODO: random generation
         nodes = {
@@ -68,6 +76,10 @@ class World(pygame.sprite.Sprite):
         self.timestep = 0
         self.observer_communication = [0.0, 0.0]
         self.goal_known = False
+        self.goal_position = None
+        self.detected.clear()
+        self.coverage_counts.fill(0)
+        self.coverage_map.fill(0.0)
         self.base.center = (150, 150)
         # collision = True
         # while collision:
@@ -81,6 +93,29 @@ class World(pygame.sprite.Sprite):
         #         if collision:
         #             break
         # TODO: re spawn base, roads and obstacles here?
+
+    def register_detected_points(self, points):
+        """Update the cached coverage map with newly detected coordinates."""
+        cell_updates = {}
+        for x, y in points:
+            point = (int(x), int(y))
+            if point in self.detected:
+                continue
+            if not (0 <= point[0] < self.area.width and 0 <= point[1] < self.area.height):
+                continue
+
+            self.detected.add(point)
+            grid_x = min(int(point[0] / self.coverage_cell_width), self.coverage_grid_size - 1)
+            grid_y = min(int(point[1] / self.coverage_cell_height), self.coverage_grid_size - 1)
+            key = (grid_y, grid_x)
+            cell_updates[key] = cell_updates.get(key, 0) + 1
+
+        for (grid_y, grid_x), count in cell_updates.items():
+            new_total = self.coverage_counts[grid_y, grid_x] + count
+            self.coverage_counts[grid_y, grid_x] = new_total
+            self.coverage_map[grid_y, grid_x] = min(new_total / self.coverage_cell_area, 1.0)
+
+        return len(self.detected)
 
     def clear_obstacles(self):
         """Remove all obstacles from the world."""

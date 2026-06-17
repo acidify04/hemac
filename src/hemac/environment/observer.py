@@ -52,9 +52,14 @@ class Observer(BaseAgent):
         """
         2D steering. 0: right, 1: left
         """
-        # normalized observation space in [-1,1]
-        # fields: [poi_flag, rel_goal_x, rel_goal_y, orient_norm, rel_x, rel_y, pad...]
-        self.observation_space = gymnasium.spaces.Box(low=-1.0, high=1.0, shape=(11,), dtype=np.float32)
+        base_obs_len = 11
+        sector_obs_len = self.GRID_RESOLUTION * self.GRID_RESOLUTION + 4
+        self.observation_space = gymnasium.spaces.Box(
+            low=-1.0,
+            high=19.0,
+            shape=(base_obs_len + sector_obs_len,),
+            dtype=np.float32,
+        )
         """
         [POI, x_g, y_g, theta, x, y, _...]: POI is treated as a bool corresponding to the
         presence of in POI in the FOV (1000 = True, -1000 = False).
@@ -70,6 +75,7 @@ class Observer(BaseAgent):
         self.out_of_bound = False
         self.goal_estimation = None
         self.detected = set()
+        self.latest_detected = set()
         pass
 
     def sync_pose_state(self):
@@ -175,49 +181,26 @@ class Observer(BaseAgent):
             list: Observations.
 
         """
-        # default values
-        poi_flag = -1.0
-        goal_x = 0.0
-        goal_y = 0.0
-
-        # if any goal is in list, take the first as estimation
         if goals:
             goal = goals[0]
-            goal_x = goal.x
-            goal_y = goal.y
-            # if sensor sees it, mark as seen
             if self.sensor and hasattr(self.sensor, "is_point_detected"):
                 if self.sensor.is_point_detected((goal.rect.x, goal.rect.y)):
                     self.goal_in_view = True
                     goal.detected = True
                     self.goal_estimation = (goal.x, goal.y)
-                    poi_flag = 1.0
-
-        # normalization based on search area diagonal
-        try:
-            minx, miny, maxx, maxy = world.search_area.bounds
-            norm = (maxx - minx) ** 2 + (maxy - miny) ** 2
-            norm = float(math.sqrt(norm)) if norm > 0 else 1.0
-        except Exception:
-            norm = 1.0
-
-        # relative goal and self position normalized to [-1,1]
-        rel_goal_x = float(np.clip((goal_x - self.x) / norm, -1.0, 1.0))
-        rel_goal_y = float(np.clip((goal_y - self.y) / norm, -1.0, 1.0))
+                    world.goal_position = (goal.x, goal.y)
 
         distances = self.obstacles_in_quadrants(Point(self.x, self.y), world.search_area, world.obstacles, world)
         norm_dists = [float(np.clip(d / max(self.sensing_range, 1e-6), 0.0, 1.0)) for d in distances]
 
-        # orientation normalized from [0, 2pi) to [-1,1]
         orient_norm = float(((self.orientation % (2 * np.pi)) / np.pi) - 1.0)
 
-        # obs_vec = [rel_goal_x, rel_goal_y, orient_norm] + norm_dists
         obs_vec = [orient_norm] + norm_dists
-        # pad to fixed size 11
         while len(obs_vec) < 11:
             obs_vec.append(0.0)
 
-        return np.array(obs_vec, dtype=np.float32)
+        obs = np.array(obs_vec, dtype=np.float32)
+        return np.concatenate((obs, self.build_sector_features(world))).astype(np.float32, copy=False)
 
     def observe(self, world, agents, goals):
         """Observe observer."""

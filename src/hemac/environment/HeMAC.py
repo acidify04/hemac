@@ -474,12 +474,24 @@ class HeMAC:
         """Observe the agent."""
         current_agent = self.agents_list[self.agent_name_mapping[agent]]
         observation = current_agent.observe(self.world, self.agents_list, self.goals)
+        LOGGER.info(f"observation for {agent}: {observation}")
         return observation
 
     def state(self):
         """Return an observation of the global environment."""
         state = np.array([0, 0])
         return state
+
+    def _update_detected_cache(self, agent):
+        """Merge newly detected coordinates into the shared coverage cache."""
+        latest_points = getattr(agent, "latest_detected", agent.detected)
+        new_points = latest_points.difference(self.detected)
+        if not new_points:
+            return 0
+
+        self.detected.update(new_points)
+        self.world.register_detected_points(new_points)
+        return len(new_points)
 
     def draw(self):
         """Draw the environment."""
@@ -590,17 +602,18 @@ class HeMAC:
                     # if agent.carried_targets < agent.carrying_capacity:
                     agent.found_goal = True
                     self.found_goal = True
+                    self.world.goal_position = (goal.x, goal.y)
                     reward += 200  # Reward for finding a goal
                     reward_dict[active_agent].append(200)
                     # goal.spawn_poi(self.search_area)
                     # goal.reset()
                     # if self.rescuing_targets:
                     #     agent.carried_targets += 1
-            new_detected = self.detected.union(agent.detected)
-            if len(self.detected) < len(new_detected):
-                reward += math.sqrt(math.sqrt(len(new_detected) - len(self.detected)))  # Reward for newly detected goals
-                reward_dict[active_agent].append(math.sqrt(math.sqrt(len(new_detected) - len(self.detected))))
-                self.detected = new_detected
+            newly_detected_count = self._update_detected_cache(agent)
+            if newly_detected_count > 0:
+                detection_reward = math.sqrt(math.sqrt(newly_detected_count))
+                reward += detection_reward
+                reward_dict[active_agent].append(detection_reward)
 
             # if self.rescuing_targets and agent.carried_targets:
             #     closest_point_to_base = closest_point_in_rect(self.world.base, agent.rect.center)
@@ -712,6 +725,7 @@ class HeMAC:
                 if goal_dist < agent.sensing_range: # goal까지의 거리가 sensing range보다 가까워지면 발견
                     agent.found_goal = True
                     self.found_goal = True
+                    self.world.goal_position = (goal.x, goal.y)
                     self.global_reward += 500  # Reward for finding a goal
                         # goal.spawn_poi(self.search_area)
                         # goal.reset()
@@ -720,11 +734,11 @@ class HeMAC:
                     # self.global_reward += 180 if self.known_goals else 120
                     self.terminate = True
 
-            new_detected = self.detected.union(agent.detected)
-            if len(self.detected) < len(new_detected):
-                reward += math.sqrt(math.sqrt(len(new_detected) - len(self.detected)))  # Reward for newly detected goals
-                reward_dict[active_agent].append(math.sqrt(math.sqrt(len(new_detected) - len(self.detected))))
-                self.detected = new_detected
+            newly_detected_count = self._update_detected_cache(agent)
+            if newly_detected_count > 0:
+                detection_reward = math.sqrt(math.sqrt(newly_detected_count))
+                reward += detection_reward
+                reward_dict[active_agent].append(detection_reward)
 
         # individual reward
         self.rewards[active_agent] = reward
