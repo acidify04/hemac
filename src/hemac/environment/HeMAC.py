@@ -141,6 +141,7 @@ class HeMAC:
         self.finished = False
         self.drone_crash = False
         self.observer_crash = False
+        self.max_coverage_ratio = 0.0
 
         self.old_dist_to_goal = 1000
 
@@ -208,6 +209,8 @@ class HeMAC:
                     self.research_area.bottomleft,
                 )
             )
+        
+        self.search_grid_rects = {}
 
         # init POI
         if poi_spawn_range is None:
@@ -233,6 +236,7 @@ class HeMAC:
             randomizer=randomizer,
             time_factor=self.time_factor,
         )
+        self.search_grid_rects = self._build_search_grid_cache()
 
         # init observers
         for i in range(self.n_observers):
@@ -357,6 +361,10 @@ class HeMAC:
         for goal in self.goals:
             goal.spawn_poi(self.search_area)
             goal.reset()
+        self.explored_grids = set() # 이거 안 지우면 다음 에피소드에서 정찰 보상 다 뺏김
+        self.observer_explored_grids = set()
+        self.world.explored_grids = self.explored_grids
+        self.world.observer_explored_grids = self.observer_explored_grids
 
         if self.render_mode == "human":
             print("resetting world.")
@@ -430,6 +438,7 @@ class HeMAC:
         self.detected = set()
         self.drone_crash = False
         self.observer_crash = False
+        self.max_coverage_ratio = 0.0
 
         self.num_frames = 0
         self.old_dist_to_goal = 1000
@@ -492,20 +501,83 @@ class HeMAC:
         self.detected.update(new_points)
         self.world.register_detected_points(new_points)
         return len(new_points)
+    
+    def _build_search_grid_cache(self):
+        """Build renderable search-area cells aligned to the shared coverage grid."""
+        cell_width = self.world.coverage_cell_width
+        cell_height = self.world.coverage_cell_height
+        grid_rects = {}
+        for grid_x in range(self.world.coverage_grid_size):
+            for grid_y in range(self.world.coverage_grid_size):
+                world_center = ((grid_x + 0.5) * cell_width, (grid_y + 0.5) * cell_height)
+                if not self.search_area.covers(Point(world_center)):
+                    continue
+                left = int(round(grid_x * cell_width))
+                right = int(round((grid_x + 1) * cell_width))
+                top = int(round(self.area.height - (grid_y + 1) * cell_height))
+                bottom = int(round(self.area.height - grid_y * cell_height))
+                grid_rects[(grid_y, grid_x)] = pygame.Rect(
+                    left,
+                    top,
+                    max(right - left, 1),
+                    max(bottom - top, 1),
+                )
+        return grid_rects
+
+    def draw_exploration_overlay(self):
+        """Draw explored vs unexplored search cells."""
+        overlay = pygame.Surface(self.area.size, pygame.SRCALPHA)
+        unexplored_color = (38, 57, 84, 70)
+        explored_base = (76, 196, 120)
+        outline_color = (220, 235, 255, 25)
+
+        for grid_key, rect in self.search_grid_rects.items():
+            coverage_value = float(self.world.coverage_map[grid_key])
+            if coverage_value > 0.0:
+                explored_alpha = 80 + int(140 * min(coverage_value, 1.0))
+                cell_color = (*explored_base, explored_alpha)
+            else:
+                cell_color = unexplored_color
+            pygame.draw.rect(overlay, cell_color, rect)
+            pygame.draw.rect(overlay, outline_color, rect, width=1)
+
+        self.screen.blit(overlay, (0, 0))
+
+        legend_font = pygame.font.SysFont("Trebuchet MS", 16)
+        legend_bg = pygame.Surface((190, 80), pygame.SRCALPHA)
+        legend_bg.fill((8, 12, 16, 150))
+        self.screen.blit(legend_bg, (12, 40))
+
+        pygame.draw.rect(self.screen, (*explored_base, 220), pygame.Rect(22, 50, 18, 18))
+        pygame.draw.rect(self.screen, unexplored_color, pygame.Rect(22, 74, 18, 18))
+
+        explored_label = legend_font.render("explored", True, (240, 248, 255))
+        unexplored_label = legend_font.render("unexplored", True, (240, 248, 255))
+        self.screen.blit(explored_label, (48, 50))
+        self.screen.blit(unexplored_label, (48, 74))
 
     def draw(self):
         """Draw the environment."""
         pygame.event.pump()
         self.world.draw(self.screen)
+        self.draw_exploration_overlay()
         for agent in self.agents_list:
             agent.draw(self.screen)
         for goal in self.goals:
             goal.draw(self.screen)
+    
+    def current_coverage_ratio(self):
+        """Return the explored ratio over the full map."""
+        total_map_area = self.area.width * self.area.height
+        if total_map_area <= 0:
+            return 0.0
+        return min(float(len(self.world.detected)) / float(total_map_area), 1.0)
 
     def build_episode_info(self):
         """Build a final-episode info dict for metrics and evaluation."""
-        # coverage_ratio = self.current_coverage_ratio()
-        # total_explored = len(self.explored_grids | self.observer_explored_grids) * (self.exploration_cell_size ** 2)
+        coverage_ratio = self.current_coverage_ratio()
+        total_explored = float(len(self.world.detected))
+        self.max_coverage_ratio = max(self.max_coverage_ratio, coverage_ratio)
 
         # goal_found_step = self.goal_found_step if self.goal_found_step is not None else self.max_cycles
         success_step = self.success_step if self.success_step is not None else self.max_cycles
@@ -526,9 +598,10 @@ class HeMAC:
             "observer_crash": bool(self.observer_crash),
             # "min_drone_dist": float(self.min_drone_dist),
             # "min_obs_dist": float(self.min_obs_dist),
-            # "explored_area": float(total_explored),
-            # "coverage_ratio": float(coverage_ratio),
-            # "max_coverage_ratio": float(max(self.max_coverage_ratio, coverage_ratio)),
+            "explored_area": total_explored,
+            "total_explored": total_explored,
+            "coverage_ratio": float(coverage_ratio),
+            "max_coverage_ratio": float(self.max_coverage_ratio),
             # "goal_found_step": float(goal_found_step),
             "success_step": float(success_step),
             # "steps_after_goal_found": float(max(steps_after_goal_found, 0)),
@@ -736,7 +809,10 @@ class HeMAC:
 
             newly_detected_count = self._update_detected_cache(agent)
             if newly_detected_count > 0:
-                detection_reward = math.sqrt(math.sqrt(newly_detected_count))
+                if not self.found_goal:
+                    detection_reward = math.sqrt(math.sqrt(newly_detected_count))
+                else:
+                    detection_reward = math.sqrt(math.sqrt(math.sqrt(newly_detected_count))) # goal을 찾았으면 탐색 reward를 줄임
                 reward += detection_reward
                 reward_dict[active_agent].append(detection_reward)
 
