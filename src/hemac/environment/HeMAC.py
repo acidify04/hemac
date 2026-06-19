@@ -649,8 +649,8 @@ class HeMAC:
                 self.collided = True
                 self.drone_crash = True
                 self.terminate = True
-                reward -= 250  # going outside of search area
-                reward_dict[active_agent].append(-250)
+                reward -= 300  # going outside of search area
+                reward_dict[active_agent].append(-300)
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
                     LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
             else:
@@ -679,8 +679,8 @@ class HeMAC:
                     agent.found_goal = True
                     self.found_goal = True
                     self.world.goal_position = (goal.x, goal.y)
-                    reward += 30  # Reward for finding a goal
-                    reward_dict[active_agent].append(30)
+                    reward += 100  # Reward for finding a goal
+                    reward_dict[active_agent].append(100)
                     # goal.spawn_poi(self.search_area)
                     # goal.reset()
                     # if self.rescuing_targets:
@@ -776,8 +776,8 @@ class HeMAC:
                 self.collided = True
                 self.observer_crash = True
                 self.terminate = True
-                reward -= 250  # going outside of search area
-                reward_dict[active_agent].append(-250)
+                reward -= 300  # going outside of search area
+                reward_dict[active_agent].append(-300)
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
                     LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
             else:
@@ -806,8 +806,8 @@ class HeMAC:
                     self.found_goal = True
                     self.world.goal_position = (goal.x, goal.y)
                     # self.global_reward += 100  # Reward for finding a goal
-                    reward += 200  # Reward for finding a goal
-                    reward_dict[active_agent].append(200)
+                    reward += 300  # Reward for finding a goal
+                    reward_dict[active_agent].append(300)
                     # goal.spawn_poi(self.search_area)
                         # goal.reset()
                     self.success_step = self.num_frames
