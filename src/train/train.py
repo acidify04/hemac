@@ -36,7 +36,7 @@ VIDEO_LOG_INTERVAL = 50
 VIDEO_FPS = 12
 VIDEO_SEED = 0
 VIDEO_OUTPUT_DIR = Path("./wandb_media")
-PPO_ENTROPY_COEFF = 0.0015
+PPO_ENTROPY_COEFF = 0.0005
 
 
 def build_env_config(render_mode=None):

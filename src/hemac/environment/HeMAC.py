@@ -679,7 +679,7 @@ class HeMAC:
                 if dist(other_agent.x, other_agent.y, agent.x, agent.y) < agent.sensing_range:
                     nearby_drone_count += 1
             if nearby_drone_count > 0:
-                drone_proximity_penalty = float(nearby_drone_count)
+                drone_proximity_penalty = float(nearby_drone_count) * 0.2
                 reward -= drone_proximity_penalty
                 reward_dict[active_agent].append(-drone_proximity_penalty)
 

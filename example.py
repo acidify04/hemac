@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 import random
+import math
 import ray
 from ray.rllib.algorithms.algorithm import Algorithm
 from ray.tune.registry import register_env
@@ -89,6 +90,20 @@ def save_gif(frames, eval_seed):
     return gif_path
 
 
+def wait_for_spacebar():
+    """Block until the user presses space, or stop on window close/escape."""
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return False
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    return True
+                if event.key in (pygame.K_ESCAPE, pygame.K_q):
+                    return False
+        time.sleep(0.01)
+
+
 def _extract_observation_debug(observation):
     """Split an observation into base features and sector-based features."""
     if isinstance(observation, dict):
@@ -158,12 +173,18 @@ def _format_action(action):
     return "[" + ", ".join(f"{float(v):.2f}" for v in values) + "]"
 
 
-def draw_observation_overlay(agent_id, observation, reward, action, termination, truncation):
-    """Draw the current agent observation on top of the pygame window."""
-    surface = pygame.display.get_surface()
-    if surface is None:
-        return
-
+def draw_observation_panel(
+    surface,
+    agent_id,
+    observation,
+    reward,
+    action,
+    termination,
+    truncation,
+    panel_rect,
+    is_active=False,
+):
+    """Draw one agent observation panel."""
     obs_debug = _extract_observation_debug(observation)
     base_obs = obs_debug["base_obs"]
     coverage_map = obs_debug["coverage_map"]
@@ -171,23 +192,20 @@ def draw_observation_overlay(agent_id, observation, reward, action, termination,
     self_sector = obs_debug.get("self_sector")
     valid_mask = obs_debug.get("valid_mask")
     is_relative_map = obs_debug["mode"] == "relative_map"
-    panel_width = 360
-    panel_height = 290
-    margin = 16
-    heatmap_size = 200
+    panel_width = panel_rect.width
+    panel_height = panel_rect.height
+    heatmap_size = min(140, panel_height - 88)
     heatmap_cell = heatmap_size // OBS_GRID_SIZE
-    panel_x = surface.get_width() - panel_width - margin
-    panel_y = margin
 
     panel = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
-    panel.fill((8, 12, 16, 205))
+    panel.fill((8, 12, 16, 215))
 
-    title_font = pygame.font.SysFont("Trebuchet MS", 18)
-    body_font = pygame.font.SysFont("Trebuchet MS", 14)
-    tiny_font = pygame.font.SysFont("Trebuchet MS", 13)
+    title_font = pygame.font.SysFont("Trebuchet MS", 16)
+    body_font = pygame.font.SysFont("Trebuchet MS", 12)
+    tiny_font = pygame.font.SysFont("Trebuchet MS", 11)
 
     title = title_font.render(f"Observation Debug: {agent_id}", True, (245, 248, 250))
-    panel.blit(title, (14, 10))
+    panel.blit(title, (10, 8))
 
     meta_lines = [
         f"obs len: {int(sum(np.asarray(v).size for v in observation.values())) if isinstance(observation, dict) else len(np.asarray(observation).reshape(-1))}",
@@ -196,10 +214,10 @@ def draw_observation_overlay(agent_id, observation, reward, action, termination,
         f"done: {termination or truncation}",
     ]
     for idx, line in enumerate(meta_lines):
-        panel.blit(body_font.render(line, True, (215, 225, 235)), (14, 34 + idx * 18))
+        panel.blit(body_font.render(line, True, (215, 225, 235)), (10, 28 + idx * 14))
 
-    heatmap_x = 14
-    heatmap_y = 112
+    heatmap_x = 10
+    heatmap_y = 88
     pygame.draw.rect(panel, (32, 40, 52), pygame.Rect(heatmap_x - 2, heatmap_y - 2, heatmap_size + 4, heatmap_size + 4))
 
     if coverage_map is not None:
@@ -261,27 +279,78 @@ def draw_observation_overlay(agent_id, observation, reward, action, termination,
                     pygame.draw.line(panel, (255, 105, 105), (goal_x - 4, goal_y - 4), (goal_x + 4, goal_y + 4), width=2)
                     pygame.draw.line(panel, (255, 105, 105), (goal_x + 4, goal_y - 4), (goal_x - 4, goal_y + 4), width=2)
 
-    panel.blit(tiny_font.render("relative map" if is_relative_map else "coverage map", True, (210, 220, 230)), (heatmap_x, heatmap_y - 18))
-    panel.blit(tiny_font.render("self: white circle", True, (210, 220, 230)), (heatmap_x, heatmap_y + heatmap_size + 6))
-    panel.blit(tiny_font.render("goal: red x", True, (210, 220, 230)), (heatmap_x, heatmap_y + heatmap_size + 22))
+    panel.blit(tiny_font.render("relative map" if is_relative_map else "coverage map", True, (210, 220, 230)), (heatmap_x, heatmap_y - 16))
+    panel.blit(tiny_font.render("self: white circle", True, (210, 220, 230)), (heatmap_x, heatmap_y + heatmap_size + 4))
+    panel.blit(tiny_font.render("goal: red x", True, (210, 220, 230)), (heatmap_x, heatmap_y + heatmap_size + 16))
 
     labels = _base_observation_labels(agent_id, base_obs)
     for idx, (label, value) in enumerate(zip(labels, base_obs)):
         text = tiny_font.render(f"{label}: {float(value): .3f}", True, (220, 228, 236))
-        panel.blit(text, (228, 112 + idx * 14))
+        panel.blit(text, (heatmap_x + heatmap_size + 14, 88 + idx * 12))
 
     if self_sector is not None:
         panel.blit(
             tiny_font.render(f"self sector: {self_sector}", True, (220, 228, 236)),
-            (228, 76),
+            (heatmap_x + heatmap_size + 14, 60),
         )
     if goal_relative_sector is not None:
         panel.blit(
             tiny_font.render(f"goal rel: {goal_relative_sector}", True, (255, 180, 180)),
-            (228, 92),
+            (heatmap_x + heatmap_size + 14, 72),
         )
 
-    surface.blit(panel, (panel_x, panel_y))
+    border_color = (255, 220, 120) if is_active else (90, 100, 116)
+    pygame.draw.rect(panel, border_color, panel.get_rect(), width=2)
+    surface.blit(panel, panel_rect.topleft)
+
+
+def draw_observation_overlays(agent_debug_state, active_agent):
+    """Draw observation panels for all known agents."""
+    surface = pygame.display.get_surface()
+    if surface is None:
+        return
+
+    agent_ids = list(agent_debug_state.keys())
+    if not agent_ids:
+        return
+
+    columns = 2
+    rows = int(math.ceil(len(agent_ids) / columns))
+    panel_width = 300
+    panel_height = 240
+    margin = 12
+    total_width = columns * panel_width + (columns - 1) * margin
+    start_x = max(surface.get_width() - total_width - margin, margin)
+    start_y = margin
+
+    for idx, agent_id in enumerate(agent_ids):
+        row = idx // columns
+        col = idx % columns
+        panel_rect = pygame.Rect(
+            start_x + col * (panel_width + margin),
+            start_y + row * (panel_height + margin),
+            panel_width,
+            panel_height,
+        )
+        state = agent_debug_state[agent_id]
+        draw_observation_panel(
+            surface=surface,
+            agent_id=agent_id,
+            observation=state["observation"],
+            reward=state["reward"],
+            action=state["action"],
+            termination=state["termination"],
+            truncation=state["truncation"],
+            panel_rect=panel_rect,
+            is_active=(agent_id == active_agent),
+        )
+
+    help_font = pygame.font.SysFont("Trebuchet MS", 16)
+    help_bg = pygame.Surface((280, 30), pygame.SRCALPHA)
+    help_bg.fill((8, 12, 16, 190))
+    surface.blit(help_bg, (12, 12))
+    help_text = help_font.render("Space: next turn | Esc/Q: quit", True, (240, 248, 255))
+    surface.blit(help_text, (20, 18))
     pygame.display.flip()
 
 
@@ -293,6 +362,17 @@ def run_single_episode(env, algo, eval_seed):
     last_info = {}
     total_agent_turns = 0
     frames = []
+    possible_agents = list(getattr(env, "possible_agents", []))
+    agent_debug_state = {
+        agent_id: {
+            "observation": None,
+            "reward": 0.0,
+            "action": None,
+            "termination": False,
+            "truncation": False,
+        }
+        for agent_id in possible_agents
+    }
 
     def get_policy_id(agent_id):
         if "observer" in agent_id:
@@ -320,13 +400,21 @@ def run_single_episode(env, algo, eval_seed):
             else:
                 action = env.action_space(agent).sample()
 
+        agent_debug_state[agent] = {
+            "observation": observation,
+            "reward": reward,
+            "action": action,
+            "termination": termination,
+            "truncation": truncation,
+        }
         env.render()
-        draw_observation_overlay(agent, observation, reward, action, termination, truncation)
+        draw_observation_overlays(agent_debug_state, agent)
         frame = capture_pygame_frame()
         if frame is not None:
             frames.append(frame)
+        if not wait_for_spacebar():
+            break
         env.step(action)
-        time.sleep(0.01)
 
     print(f"Episode finished after {total_agent_turns} agent turns.")
     if last_info:
@@ -383,7 +471,7 @@ def run_trained_model_simulation():
     # 2. 저장된 체크포인트로부터 알고리즘(모델) 로드
     # 저장된 폴더 경로를 지정합니다. (예: ./hemac_checkpoints 하위의 실제 체크포인트 폴더)
     # checkpoint_path = os.path.abspath(find_latest_checkpoint())
-    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_01600")
+    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_00100")
     print(f"[{checkpoint_path}] 경로에서 학습된 모델을 불러오는 중...")
     algo = Algorithm.from_checkpoint(checkpoint_path)
 

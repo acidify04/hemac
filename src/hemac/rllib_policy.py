@@ -13,7 +13,7 @@ torch, nn = try_import_torch()
 
 DRONE_CUSTOM_MODEL_NAME = "hemac_clamped_gaussian_torch"
 OBSERVER_CUSTOM_MODEL_NAME = "hemac_discrete_spatial_torch"
-DRONE_LOG_STD_INIT = -1.35
+DRONE_LOG_STD_INIT = -1.8
 DRONE_LOG_STD_MIN = -2.5
 DRONE_LOG_STD_MAX = -0.35
 DRONE_MODEL_HIDDEN_SIZES = [256, 256]
