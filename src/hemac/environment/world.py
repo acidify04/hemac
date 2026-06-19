@@ -76,7 +76,7 @@ class World(pygame.sprite.Sprite):
         self.timestep = 0
         self.observer_communication = [0.0, 0.0]
         self.goal_known = False
-        self.goal_position = None
+        self.goal_position = (poi_list[0].x, poi_list[0].y) if poi_list else None
         self.detected.clear()
         self.coverage_counts.fill(0)
         self.coverage_map.fill(0.0)

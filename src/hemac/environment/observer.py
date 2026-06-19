@@ -55,7 +55,7 @@ class Observer(BaseAgent):
         base_obs_len = 11
         sector_obs_len = self.GRID_RESOLUTION * self.GRID_RESOLUTION + 4
         self.observation_space = gymnasium.spaces.Box(
-            low=-1.0,
+            low=-19.0,
             high=19.0,
             shape=(base_obs_len + sector_obs_len,),
             dtype=np.float32,

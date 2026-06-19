@@ -61,8 +61,8 @@ class BaseAgent(pygame.sprite.Sprite):
 
         if world.goal_position is not None:
             goal_grid_x, goal_grid_y = self._position_to_grid(world.goal_position[0], world.goal_position[1], world)
-            obs[offset + 2] = goal_grid_x
-            obs[offset + 3] = goal_grid_y
+            obs[offset + 2] = goal_grid_x - self_grid_x # goal 상대좌표 적용
+            obs[offset + 3] = goal_grid_y - self_grid_y
 
         return obs
 

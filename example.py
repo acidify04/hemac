@@ -99,11 +99,9 @@ def _extract_observation_debug(observation):
     coverage_map = sector_obs[: OBS_GRID_SIZE * OBS_GRID_SIZE].reshape(OBS_GRID_SIZE, OBS_GRID_SIZE)
 
     self_sector = tuple(int(v) for v in sector_obs[-4:-2])
-    goal_sector = None
-    if sector_obs[-2] >= 0 and sector_obs[-1] >= 0:
-        goal_sector = (int(sector_obs[-2]), int(sector_obs[-1]))
+    goal_relative_sector = tuple(int(v) for v in sector_obs[-2:])
 
-    return base_obs, coverage_map, self_sector, goal_sector
+    return base_obs, coverage_map, self_sector, goal_relative_sector
 
 
 def _base_observation_labels(agent_id, base_obs):
@@ -141,7 +139,7 @@ def draw_observation_overlay(agent_id, observation, reward, action, termination,
     if surface is None:
         return
 
-    base_obs, coverage_map, self_sector, goal_sector = _extract_observation_debug(observation)
+    base_obs, coverage_map, self_sector, goal_relative_sector = _extract_observation_debug(observation)
     panel_width = 360
     panel_height = 290
     margin = 16
@@ -201,11 +199,16 @@ def draw_observation_overlay(agent_id, observation, reward, action, termination,
             marker_y = heatmap_y + (OBS_GRID_SIZE - 1 - self_sector[1]) * heatmap_cell + heatmap_cell // 2
             pygame.draw.circle(panel, (255, 255, 255), (marker_x, marker_y), max(heatmap_cell // 3, 3), width=2)
 
-        if goal_sector is not None:
-            goal_x = heatmap_x + goal_sector[0] * heatmap_cell + heatmap_cell // 2
-            goal_y = heatmap_y + (OBS_GRID_SIZE - 1 - goal_sector[1]) * heatmap_cell + heatmap_cell // 2
-            pygame.draw.line(panel, (255, 105, 105), (goal_x - 4, goal_y - 4), (goal_x + 4, goal_y + 4), width=2)
-            pygame.draw.line(panel, (255, 105, 105), (goal_x + 4, goal_y - 4), (goal_x - 4, goal_y + 4), width=2)
+        if self_sector is not None and goal_relative_sector is not None:
+            goal_sector = (
+                self_sector[0] + goal_relative_sector[0],
+                self_sector[1] + goal_relative_sector[1],
+            )
+            if 0 <= goal_sector[0] < OBS_GRID_SIZE and 0 <= goal_sector[1] < OBS_GRID_SIZE:
+                goal_x = heatmap_x + goal_sector[0] * heatmap_cell + heatmap_cell // 2
+                goal_y = heatmap_y + (OBS_GRID_SIZE - 1 - goal_sector[1]) * heatmap_cell + heatmap_cell // 2
+                pygame.draw.line(panel, (255, 105, 105), (goal_x - 4, goal_y - 4), (goal_x + 4, goal_y + 4), width=2)
+                pygame.draw.line(panel, (255, 105, 105), (goal_x + 4, goal_y - 4), (goal_x - 4, goal_y + 4), width=2)
 
     panel.blit(tiny_font.render("coverage map", True, (210, 220, 230)), (heatmap_x, heatmap_y - 18))
     panel.blit(tiny_font.render("self: white circle", True, (210, 220, 230)), (heatmap_x, heatmap_y + heatmap_size + 6))
@@ -221,9 +224,9 @@ def draw_observation_overlay(agent_id, observation, reward, action, termination,
             tiny_font.render(f"self sector: {self_sector}", True, (220, 228, 236)),
             (228, 76),
         )
-    if goal_sector is not None:
+    if goal_relative_sector is not None:
         panel.blit(
-            tiny_font.render(f"goal sector: {goal_sector}", True, (255, 180, 180)),
+            tiny_font.render(f"goal rel: {goal_relative_sector}", True, (255, 180, 180)),
             (228, 92),
         )
 
