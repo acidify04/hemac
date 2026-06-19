@@ -52,13 +52,22 @@ class Observer(BaseAgent):
         """
         2D steering. 0: right, 1: left
         """
-        base_obs_len = 11
-        sector_obs_len = self.GRID_RESOLUTION * self.GRID_RESOLUTION + 4
-        self.observation_space = gymnasium.spaces.Box(
-            low=-19.0,
-            high=19.0,
-            shape=(base_obs_len + sector_obs_len,),
-            dtype=np.float32,
+        self.base_obs_len = 11
+        self.observation_space = gymnasium.spaces.Dict(
+            {
+                "vector": gymnasium.spaces.Box(
+                    low=-19.0,
+                    high=19.0,
+                    shape=(self.base_obs_len + 2,),
+                    dtype=np.float32,
+                ),
+                "relative_map": gymnasium.spaces.Box(
+                    low=0.0,
+                    high=1.0,
+                    shape=(self.RELATIVE_MAP_SIZE, self.RELATIVE_MAP_SIZE, 2),
+                    dtype=np.float32,
+                ),
+            }
         )
         """
         [POI, x_g, y_g, theta, x, y, _...]: POI is treated as a bool corresponding to the
@@ -168,7 +177,7 @@ class Observer(BaseAgent):
         else:
             return True
 
-    def get_fov_obs(self, world, goals) -> list:
+    def get_fov_obs(self, world, goals) -> dict[str, np.ndarray]:
         """Return observations given world and sensor.
 
         Args:
@@ -196,11 +205,16 @@ class Observer(BaseAgent):
         orient_norm = float(((self.orientation % (2 * np.pi)) / np.pi) - 1.0)
 
         obs_vec = [orient_norm] + norm_dists
-        while len(obs_vec) < 11:
+        while len(obs_vec) < self.base_obs_len:
             obs_vec.append(0.0)
 
-        obs = np.array(obs_vec, dtype=np.float32)
-        return np.concatenate((obs, self.build_sector_features(world))).astype(np.float32, copy=False)
+        vector_obs = np.concatenate(
+            (np.array(obs_vec, dtype=np.float32), self.build_goal_relative_sector(world))
+        ).astype(np.float32, copy=False)
+        return {
+            "vector": vector_obs,
+            "relative_map": self.build_relative_sector_map(world),
+        }
 
     def observe(self, world, agents, goals):
         """Observe observer."""

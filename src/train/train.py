@@ -14,6 +14,7 @@ from PIL import Image
 from hemac import HeMAC_v0
 from hemac.rllib_policy import (
     drone_policy_model_config,
+    observer_policy_model_config,
     get_policy_log_std_stats,
     register_hemac_rllib_models,
 )
@@ -282,7 +283,12 @@ def main():
     act_space = temp_env.action_space
 
     policies = {
-        "observer_policy": (None, obs_space["observer_0"], act_space["observer_0"], {}),
+        "observer_policy": (
+            None,
+            obs_space["observer_0"],
+            act_space["observer_0"],
+            {"model": observer_policy_model_config()},
+        ),
         "drone_policy": (
             None,
             obs_space["drone_0"],

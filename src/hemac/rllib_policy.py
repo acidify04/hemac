@@ -12,6 +12,7 @@ from ray.rllib.utils.framework import try_import_torch
 torch, nn = try_import_torch()
 
 DRONE_CUSTOM_MODEL_NAME = "hemac_clamped_gaussian_torch"
+OBSERVER_CUSTOM_MODEL_NAME = "hemac_discrete_spatial_torch"
 DRONE_LOG_STD_INIT = -1.35
 DRONE_LOG_STD_MIN = -2.5
 DRONE_LOG_STD_MAX = -0.35
@@ -63,30 +64,18 @@ def _flatten_obs_tensor(obs, device=None):
     return obs.reshape(obs.shape[0], -1)
 
 
-class ClampedGaussianTorchModel(TorchModelV2, nn.Module):
-    """Continuous-control policy head with explicit, clamped log std."""
+class _SpatialObsEncoder(nn.Module):
+    """Shared encoder for vector + 2D relative-map observations."""
 
-    def __init__(self, obs_space, action_space, num_outputs, model_config, name):
-        TorchModelV2.__init__(self, obs_space, action_space, num_outputs, model_config, name)
-        nn.Module.__init__(self)
-
-        if torch is None or nn is None:
-            raise RuntimeError("Torch is required for ClampedGaussianTorchModel.")
-
-        action_dim = int(np.prod(action_space.shape))
-        custom_config = model_config.get("custom_model_config", {})
+    def __init__(self, obs_space, hidden_sizes, activation_name):
+        super().__init__()
         original_space = getattr(obs_space, "original_space", obs_space)
         self._use_spatial_obs = _space_has_spatial_obs(original_space) or _space_has_spatial_obs(obs_space)
 
-        hidden_sizes = custom_config.get("hidden_sizes", model_config.get("fcnet_hiddens", DRONE_MODEL_HIDDEN_SIZES))
-        activation_name = custom_config.get("activation", model_config.get("fcnet_activation", "relu"))
-        self.log_std_min = float(custom_config.get("log_std_min", DRONE_LOG_STD_MIN))
-        self.log_std_max = float(custom_config.get("log_std_max", DRONE_LOG_STD_MAX))
-        log_std_init = float(custom_config.get("log_std_init", DRONE_LOG_STD_INIT))
-
         if self._use_spatial_obs:
-            vector_space = original_space.spaces["vector"]
-            relative_map_space = original_space.spaces["relative_map"]
+            source_space = original_space if _space_has_spatial_obs(original_space) else obs_space
+            vector_space = source_space.spaces["vector"]
+            relative_map_space = source_space.spaces["relative_map"]
             self.vector_dim = int(np.prod(vector_space.shape))
             self.map_channels = int(relative_map_space.shape[-1])
             self.map_encoder = nn.Sequential(
@@ -110,8 +99,8 @@ class ClampedGaussianTorchModel(TorchModelV2, nn.Module):
             encoder_input_dim = self.vector_dim + map_feature_dim
         else:
             encoder_input_dim = int(np.prod(obs_space.shape))
-            self.map_channels = 0
             self.vector_dim = encoder_input_dim
+            self.map_channels = 0
             self.map_encoder = nn.Identity()
 
         layers = []
@@ -125,19 +114,10 @@ class ClampedGaussianTorchModel(TorchModelV2, nn.Module):
             last_size = hidden_size
 
         self.encoder = nn.Sequential(*layers) if layers else nn.Identity()
-        self.policy_head = nn.Linear(last_size, action_dim)
-        self.value_head = nn.Linear(last_size, 1)
+        self.output_dim = last_size
 
-        nn.init.orthogonal_(self.policy_head.weight, gain=0.01)
-        nn.init.zeros_(self.policy_head.bias)
-        nn.init.orthogonal_(self.value_head.weight, gain=1.0)
-        nn.init.zeros_(self.value_head.bias)
-
-        self.log_std = nn.Parameter(torch.full((action_dim,), log_std_init, dtype=torch.float32))
-        self._last_features = None
-        self.num_outputs = action_dim * 2
-
-    def forward(self, input_dict, state, seq_lens):
+    def encode(self, input_dict):
+        """Encode the current observation into a flat feature vector."""
         if self._use_spatial_obs:
             obs_dict = input_dict["obs"]
             if not isinstance(obs_dict, dict) and isinstance(input_dict.get("obs_flat"), dict):
@@ -154,8 +134,42 @@ class ClampedGaussianTorchModel(TorchModelV2, nn.Module):
             encoder_input = torch.cat([vector_obs, map_features], dim=1)
         else:
             encoder_input = _flatten_obs_tensor(input_dict["obs_flat"])
+        return self.encoder(encoder_input)
 
-        features = self.encoder(encoder_input)
+
+class ClampedGaussianTorchModel(TorchModelV2, _SpatialObsEncoder):
+    """Continuous-control policy head with explicit, clamped log std."""
+
+    def __init__(self, obs_space, action_space, num_outputs, model_config, name):
+        TorchModelV2.__init__(self, obs_space, action_space, num_outputs, model_config, name)
+        nn.Module.__init__(self)
+
+        if torch is None or nn is None:
+            raise RuntimeError("Torch is required for ClampedGaussianTorchModel.")
+
+        action_dim = int(np.prod(action_space.shape))
+        custom_config = model_config.get("custom_model_config", {})
+        hidden_sizes = custom_config.get("hidden_sizes", model_config.get("fcnet_hiddens", DRONE_MODEL_HIDDEN_SIZES))
+        activation_name = custom_config.get("activation", model_config.get("fcnet_activation", "relu"))
+        self.log_std_min = float(custom_config.get("log_std_min", DRONE_LOG_STD_MIN))
+        self.log_std_max = float(custom_config.get("log_std_max", DRONE_LOG_STD_MAX))
+        log_std_init = float(custom_config.get("log_std_init", DRONE_LOG_STD_INIT))
+        _SpatialObsEncoder.__init__(self, obs_space, hidden_sizes, activation_name)
+
+        self.policy_head = nn.Linear(self.output_dim, action_dim)
+        self.value_head = nn.Linear(self.output_dim, 1)
+
+        nn.init.orthogonal_(self.policy_head.weight, gain=0.01)
+        nn.init.zeros_(self.policy_head.bias)
+        nn.init.orthogonal_(self.value_head.weight, gain=1.0)
+        nn.init.zeros_(self.value_head.bias)
+
+        self.log_std = nn.Parameter(torch.full((action_dim,), log_std_init, dtype=torch.float32))
+        self._last_features = None
+        self.num_outputs = action_dim * 2
+
+    def forward(self, input_dict, state, seq_lens):
+        features = self.encode(input_dict)
         self._last_features = features
 
         mean = torch.tanh(self.policy_head(features))
@@ -179,6 +193,41 @@ class ClampedGaussianTorchModel(TorchModelV2, nn.Module):
         }
 
 
+class SpatialCategoricalTorchModel(TorchModelV2, _SpatialObsEncoder):
+    """Discrete-action policy/value model for spatial observations."""
+
+    def __init__(self, obs_space, action_space, num_outputs, model_config, name):
+        TorchModelV2.__init__(self, obs_space, action_space, num_outputs, model_config, name)
+        nn.Module.__init__(self)
+
+        if torch is None or nn is None:
+            raise RuntimeError("Torch is required for SpatialCategoricalTorchModel.")
+
+        custom_config = model_config.get("custom_model_config", {})
+        hidden_sizes = custom_config.get("hidden_sizes", model_config.get("fcnet_hiddens", DRONE_MODEL_HIDDEN_SIZES))
+        activation_name = custom_config.get("activation", model_config.get("fcnet_activation", "relu"))
+        _SpatialObsEncoder.__init__(self, obs_space, hidden_sizes, activation_name)
+
+        self.policy_head = nn.Linear(self.output_dim, num_outputs)
+        self.value_head = nn.Linear(self.output_dim, 1)
+        nn.init.orthogonal_(self.policy_head.weight, gain=0.01)
+        nn.init.zeros_(self.policy_head.bias)
+        nn.init.orthogonal_(self.value_head.weight, gain=1.0)
+        nn.init.zeros_(self.value_head.bias)
+        self._last_features = None
+
+    def forward(self, input_dict, state, seq_lens):
+        features = self.encode(input_dict)
+        self._last_features = features
+        logits = self.policy_head(features)
+        return logits, state
+
+    def value_function(self):
+        if self._last_features is None:
+            raise ValueError("value_function() called before forward().")
+        return self.value_head(self._last_features).squeeze(1)
+
+
 def register_hemac_rllib_models() -> None:
     """Register all custom RLlib models needed by HeMAC scripts."""
     global _MODEL_REGISTERED
@@ -186,6 +235,7 @@ def register_hemac_rllib_models() -> None:
         return
 
     ModelCatalog.register_custom_model(DRONE_CUSTOM_MODEL_NAME, ClampedGaussianTorchModel)
+    ModelCatalog.register_custom_model(OBSERVER_CUSTOM_MODEL_NAME, SpatialCategoricalTorchModel)
     _MODEL_REGISTERED = True
 
 
@@ -202,6 +252,20 @@ def drone_policy_model_config() -> dict[str, Any]:
             "log_std_init": DRONE_LOG_STD_INIT,
             "log_std_min": DRONE_LOG_STD_MIN,
             "log_std_max": DRONE_LOG_STD_MAX,
+        },
+    }
+
+
+def observer_policy_model_config() -> dict[str, Any]:
+    """Return the RLlib model config used by the observer policy."""
+    return {
+        "custom_model": OBSERVER_CUSTOM_MODEL_NAME,
+        "vf_share_layers": False,
+        "fcnet_hiddens": DRONE_MODEL_HIDDEN_SIZES,
+        "fcnet_activation": "relu",
+        "custom_model_config": {
+            "hidden_sizes": DRONE_MODEL_HIDDEN_SIZES,
+            "activation": "relu",
         },
     }
 
