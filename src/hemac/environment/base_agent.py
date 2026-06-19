@@ -11,6 +11,7 @@ class BaseAgent(pygame.sprite.Sprite):
 
     GRID_RESOLUTION = 20
     EXTRA_OBS_ROWS = 2
+    RELATIVE_MAP_SIZE = GRID_RESOLUTION * 2
 
     def __init__(self):
         """Overwrite base class constructor."""
@@ -65,6 +66,35 @@ class BaseAgent(pygame.sprite.Sprite):
             obs[offset + 3] = goal_grid_y - self_grid_y
 
         return obs
+
+    def build_relative_sector_map(self, world) -> np.ndarray:
+        """Build a self-centered 40x40x2 map of coverage and valid-search sectors."""
+        self_grid_x, self_grid_y = self._position_to_grid(self.x, self.y, world)
+        pad = self.GRID_RESOLUTION
+        padded_coverage = np.pad(world.coverage_map, ((pad, pad), (pad, pad)), mode="constant", constant_values=0.0)
+        padded_search_mask = np.pad(world.search_mask, ((pad, pad), (pad, pad)), mode="constant", constant_values=0.0)
+
+        start_y = self_grid_y
+        start_x = self_grid_x
+        end_y = start_y + self.RELATIVE_MAP_SIZE
+        end_x = start_x + self.RELATIVE_MAP_SIZE
+
+        relative_map = np.zeros((self.RELATIVE_MAP_SIZE, self.RELATIVE_MAP_SIZE, 2), dtype=np.float32)
+        relative_map[:, :, 0] = padded_coverage[start_y:end_y, start_x:end_x]
+        relative_map[:, :, 1] = padded_search_mask[start_y:end_y, start_x:end_x]
+        return relative_map
+
+    def build_goal_relative_sector(self, world) -> np.ndarray:
+        """Build a goal-sector offset relative to the agent sector."""
+        goal_relative = np.zeros(2, dtype=np.float32)
+        if world.goal_position is None:
+            return goal_relative
+
+        self_grid_x, self_grid_y = self._position_to_grid(self.x, self.y, world)
+        goal_grid_x, goal_grid_y = self._position_to_grid(world.goal_position[0], world.goal_position[1], world)
+        goal_relative[0] = goal_grid_x - self_grid_x
+        goal_relative[1] = goal_grid_y - self_grid_y
+        return goal_relative
 
     def draw(self, surface):
         """Abstract method to draw the agent. Must be implemented by child classes."""

@@ -32,6 +32,37 @@ def _activation_module(name: str) -> nn.Module:
     return nn.ReLU()
 
 
+def _space_has_spatial_obs(space) -> bool:
+    """Return whether an observation space exposes vector+relative_map entries."""
+    return hasattr(space, "spaces") and {"vector", "relative_map"}.issubset(space.spaces.keys())
+
+
+def _flatten_obs_tensor(obs, device=None):
+    """Flatten dict/array observations into a batch-first torch tensor."""
+    if isinstance(obs, dict):
+        flat_parts = [_flatten_obs_tensor(value, device=device) for value in obs.values()]
+        return torch.cat(flat_parts, dim=1)
+
+    if not torch.is_tensor(obs):
+        obs = torch.as_tensor(obs, dtype=torch.float32, device=device)
+    else:
+        obs = obs.float()
+        if device is not None:
+            obs = obs.to(device)
+
+    if obs.dim() == 0:
+        obs = obs.reshape(1, 1)
+    elif obs.dim() == 1:
+        obs = obs.unsqueeze(0)
+    elif obs.dim() == 2:
+        pass
+    elif obs.dim() == 3:
+        obs = obs.unsqueeze(0)
+    else:
+        obs = obs.reshape(obs.shape[0], -1)
+    return obs.reshape(obs.shape[0], -1)
+
+
 class ClampedGaussianTorchModel(TorchModelV2, nn.Module):
     """Continuous-control policy head with explicit, clamped log std."""
 
@@ -42,9 +73,10 @@ class ClampedGaussianTorchModel(TorchModelV2, nn.Module):
         if torch is None or nn is None:
             raise RuntimeError("Torch is required for ClampedGaussianTorchModel.")
 
-        obs_dim = int(np.prod(obs_space.shape))
         action_dim = int(np.prod(action_space.shape))
         custom_config = model_config.get("custom_model_config", {})
+        original_space = getattr(obs_space, "original_space", obs_space)
+        self._use_spatial_obs = _space_has_spatial_obs(original_space) or _space_has_spatial_obs(obs_space)
 
         hidden_sizes = custom_config.get("hidden_sizes", model_config.get("fcnet_hiddens", DRONE_MODEL_HIDDEN_SIZES))
         activation_name = custom_config.get("activation", model_config.get("fcnet_activation", "relu"))
@@ -52,8 +84,38 @@ class ClampedGaussianTorchModel(TorchModelV2, nn.Module):
         self.log_std_max = float(custom_config.get("log_std_max", DRONE_LOG_STD_MAX))
         log_std_init = float(custom_config.get("log_std_init", DRONE_LOG_STD_INIT))
 
+        if self._use_spatial_obs:
+            vector_space = original_space.spaces["vector"]
+            relative_map_space = original_space.spaces["relative_map"]
+            self.vector_dim = int(np.prod(vector_space.shape))
+            self.map_channels = int(relative_map_space.shape[-1])
+            self.map_encoder = nn.Sequential(
+                nn.Conv2d(self.map_channels, 16, kernel_size=5, stride=2, padding=2),
+                _activation_module(activation_name),
+                nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),
+                _activation_module(activation_name),
+                nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
+                _activation_module(activation_name),
+                nn.Flatten(),
+            )
+            with torch.no_grad():
+                dummy_map = torch.zeros(
+                    1,
+                    self.map_channels,
+                    relative_map_space.shape[0],
+                    relative_map_space.shape[1],
+                    dtype=torch.float32,
+                )
+                map_feature_dim = int(self.map_encoder(dummy_map).shape[1])
+            encoder_input_dim = self.vector_dim + map_feature_dim
+        else:
+            encoder_input_dim = int(np.prod(obs_space.shape))
+            self.map_channels = 0
+            self.vector_dim = encoder_input_dim
+            self.map_encoder = nn.Identity()
+
         layers = []
-        last_size = obs_dim
+        last_size = encoder_input_dim
         for hidden_size in hidden_sizes:
             linear = nn.Linear(last_size, hidden_size)
             nn.init.orthogonal_(linear.weight, gain=np.sqrt(2.0))
@@ -76,8 +138,24 @@ class ClampedGaussianTorchModel(TorchModelV2, nn.Module):
         self.num_outputs = action_dim * 2
 
     def forward(self, input_dict, state, seq_lens):
-        obs = input_dict["obs_flat"].float()
-        features = self.encoder(obs)
+        if self._use_spatial_obs:
+            obs_dict = input_dict["obs"]
+            if not isinstance(obs_dict, dict) and isinstance(input_dict.get("obs_flat"), dict):
+                obs_dict = input_dict["obs_flat"]
+            vector_obs = obs_dict["vector"].float()
+            relative_map = obs_dict["relative_map"].float()
+            if vector_obs.dim() == 1:
+                vector_obs = vector_obs.unsqueeze(0)
+            if relative_map.dim() == 3:
+                relative_map = relative_map.unsqueeze(0)
+            if relative_map.shape[-1] == self.map_channels:
+                relative_map = relative_map.permute(0, 3, 1, 2)
+            map_features = self.map_encoder(relative_map)
+            encoder_input = torch.cat([vector_obs, map_features], dim=1)
+        else:
+            encoder_input = _flatten_obs_tensor(input_dict["obs_flat"])
+
+        features = self.encoder(encoder_input)
         self._last_features = features
 
         mean = torch.tanh(self.policy_head(features))

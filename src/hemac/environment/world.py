@@ -3,11 +3,12 @@
 import os
 from datetime import datetime, UTC
 
-import pygame
-import numpy as np
 import copy
 
-from shapely.geometry import Polygon
+import numpy as np
+import pygame
+
+from shapely.geometry import Point, Polygon
 
 from hemac.helpers.helper import game_ref_to_world_ref, world_ref_to_game_ref, sample_point_in_polygon
 
@@ -54,6 +55,14 @@ class World(pygame.sprite.Sprite):
         self.detected = set()
         self.coverage_counts = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.int32)
         self.coverage_map = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
+        self.search_mask = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
+        for grid_x in range(self.coverage_grid_size):
+            for grid_y in range(self.coverage_grid_size):
+                cell_center = (
+                    (grid_x + 0.5) * self.coverage_cell_width,
+                    (grid_y + 0.5) * self.coverage_cell_height,
+                )
+                self.search_mask[grid_y, grid_x] = float(self.search_area.covers(Point(cell_center)))
 
         # Road network data TODO: random generation
         nodes = {

@@ -30,6 +30,7 @@ NUM_EVAL_SEEDS = 10
 VISUALIZATION_DIR = Path("./visualization")
 OBS_GRID_SIZE = 20
 SECTOR_FEATURE_COUNT = OBS_GRID_SIZE * OBS_GRID_SIZE + 4
+RELATIVE_MAP_SIZE = OBS_GRID_SIZE * 2
 
 
 def find_latest_checkpoint():
@@ -90,18 +91,42 @@ def save_gif(frames, eval_seed):
 
 def _extract_observation_debug(observation):
     """Split an observation into base features and sector-based features."""
+    if isinstance(observation, dict):
+        vector_obs = np.asarray(observation.get("vector", []), dtype=np.float32).reshape(-1)
+        relative_map = np.asarray(observation.get("relative_map", []), dtype=np.float32)
+        goal_relative_sector = None
+        if vector_obs.size >= 2:
+            goal_relative_sector = tuple(int(v) for v in vector_obs[-2:])
+            vector_obs = vector_obs[:-2]
+        return {
+            "mode": "relative_map",
+            "base_obs": vector_obs,
+            "coverage_map": relative_map[:, :, 0] if relative_map.size else None,
+            "valid_mask": relative_map[:, :, 1] if relative_map.size else None,
+            "goal_relative_sector": goal_relative_sector,
+        }
+
     obs = np.asarray(observation, dtype=np.float32).reshape(-1)
     if obs.size < SECTOR_FEATURE_COUNT:
-        return obs, None, None, None
+        return {
+            "mode": "flat",
+            "base_obs": obs,
+            "coverage_map": None,
+            "self_sector": None,
+            "goal_relative_sector": None,
+        }
 
     base_obs = obs[:-SECTOR_FEATURE_COUNT]
     sector_obs = obs[-SECTOR_FEATURE_COUNT:]
     coverage_map = sector_obs[: OBS_GRID_SIZE * OBS_GRID_SIZE].reshape(OBS_GRID_SIZE, OBS_GRID_SIZE)
 
-    self_sector = tuple(int(v) for v in sector_obs[-4:-2])
-    goal_relative_sector = tuple(int(v) for v in sector_obs[-2:])
-
-    return base_obs, coverage_map, self_sector, goal_relative_sector
+    return {
+        "mode": "flat",
+        "base_obs": base_obs,
+        "coverage_map": coverage_map,
+        "self_sector": tuple(int(v) for v in sector_obs[-4:-2]),
+        "goal_relative_sector": tuple(int(v) for v in sector_obs[-2:]),
+    }
 
 
 def _base_observation_labels(agent_id, base_obs):
@@ -139,7 +164,13 @@ def draw_observation_overlay(agent_id, observation, reward, action, termination,
     if surface is None:
         return
 
-    base_obs, coverage_map, self_sector, goal_relative_sector = _extract_observation_debug(observation)
+    obs_debug = _extract_observation_debug(observation)
+    base_obs = obs_debug["base_obs"]
+    coverage_map = obs_debug["coverage_map"]
+    goal_relative_sector = obs_debug.get("goal_relative_sector")
+    self_sector = obs_debug.get("self_sector")
+    valid_mask = obs_debug.get("valid_mask")
+    is_relative_map = obs_debug["mode"] == "relative_map"
     panel_width = 360
     panel_height = 290
     margin = 16
@@ -159,7 +190,7 @@ def draw_observation_overlay(agent_id, observation, reward, action, termination,
     panel.blit(title, (14, 10))
 
     meta_lines = [
-        f"obs len: {len(np.asarray(observation).reshape(-1))}",
+        f"obs len: {int(sum(np.asarray(v).size for v in observation.values())) if isinstance(observation, dict) else len(np.asarray(observation).reshape(-1))}",
         f"reward: {float(reward):.2f}",
         f"action: {_format_action(action)}",
         f"done: {termination or truncation}",
@@ -172,19 +203,24 @@ def draw_observation_overlay(agent_id, observation, reward, action, termination,
     pygame.draw.rect(panel, (32, 40, 52), pygame.Rect(heatmap_x - 2, heatmap_y - 2, heatmap_size + 4, heatmap_size + 4))
 
     if coverage_map is not None:
-        for display_row in range(OBS_GRID_SIZE):
-            grid_y = OBS_GRID_SIZE - 1 - display_row
-            for grid_x in range(OBS_GRID_SIZE):
-                coverage = float(coverage_map[grid_y, grid_x])
-                if coverage <= 0.0:
-                    color = (26, 38, 56)
+        map_size = RELATIVE_MAP_SIZE if is_relative_map else OBS_GRID_SIZE
+        heatmap_cell = heatmap_size // map_size
+        for display_row in range(map_size):
+            grid_y = map_size - 1 - display_row
+            for grid_x in range(map_size):
+                if valid_mask is not None and valid_mask[grid_y, grid_x] <= 0.0:
+                    color = (12, 16, 20)
                 else:
-                    intensity = min(max(coverage, 0.0), 1.0)
-                    color = (
-                        int(40 + 40 * intensity),
-                        int(85 + 150 * intensity),
-                        int(55 + 70 * intensity),
-                    )
+                    coverage = float(coverage_map[grid_y, grid_x])
+                    if coverage <= 0.0:
+                        color = (26, 38, 56)
+                    else:
+                        intensity = min(max(coverage, 0.0), 1.0)
+                        color = (
+                            int(40 + 40 * intensity),
+                            int(85 + 150 * intensity),
+                            int(55 + 70 * intensity),
+                        )
                 rect = pygame.Rect(
                     heatmap_x + grid_x * heatmap_cell,
                     heatmap_y + display_row * heatmap_cell,
@@ -194,23 +230,38 @@ def draw_observation_overlay(agent_id, observation, reward, action, termination,
                 pygame.draw.rect(panel, color, rect)
                 pygame.draw.rect(panel, (70, 82, 96), rect, width=1)
 
-        if self_sector is not None and self_sector[0] >= 0 and self_sector[1] >= 0:
-            marker_x = heatmap_x + self_sector[0] * heatmap_cell + heatmap_cell // 2
-            marker_y = heatmap_y + (OBS_GRID_SIZE - 1 - self_sector[1]) * heatmap_cell + heatmap_cell // 2
+        if is_relative_map:
+            self_map_x = OBS_GRID_SIZE
+            self_map_y = OBS_GRID_SIZE
+            marker_x = heatmap_x + self_map_x * heatmap_cell + heatmap_cell // 2
+            marker_y = heatmap_y + (map_size - 1 - self_map_y) * heatmap_cell + heatmap_cell // 2
             pygame.draw.circle(panel, (255, 255, 255), (marker_x, marker_y), max(heatmap_cell // 3, 3), width=2)
+            if goal_relative_sector is not None:
+                goal_map_x = self_map_x + goal_relative_sector[0]
+                goal_map_y = self_map_y + goal_relative_sector[1]
+                if 0 <= goal_map_x < map_size and 0 <= goal_map_y < map_size:
+                    goal_x = heatmap_x + goal_map_x * heatmap_cell + heatmap_cell // 2
+                    goal_y = heatmap_y + (map_size - 1 - goal_map_y) * heatmap_cell + heatmap_cell // 2
+                    pygame.draw.line(panel, (255, 105, 105), (goal_x - 4, goal_y - 4), (goal_x + 4, goal_y + 4), width=2)
+                    pygame.draw.line(panel, (255, 105, 105), (goal_x + 4, goal_y - 4), (goal_x - 4, goal_y + 4), width=2)
+        else:
+            if self_sector is not None and self_sector[0] >= 0 and self_sector[1] >= 0:
+                marker_x = heatmap_x + self_sector[0] * heatmap_cell + heatmap_cell // 2
+                marker_y = heatmap_y + (map_size - 1 - self_sector[1]) * heatmap_cell + heatmap_cell // 2
+                pygame.draw.circle(panel, (255, 255, 255), (marker_x, marker_y), max(heatmap_cell // 3, 3), width=2)
 
-        if self_sector is not None and goal_relative_sector is not None:
-            goal_sector = (
-                self_sector[0] + goal_relative_sector[0],
-                self_sector[1] + goal_relative_sector[1],
-            )
-            if 0 <= goal_sector[0] < OBS_GRID_SIZE and 0 <= goal_sector[1] < OBS_GRID_SIZE:
-                goal_x = heatmap_x + goal_sector[0] * heatmap_cell + heatmap_cell // 2
-                goal_y = heatmap_y + (OBS_GRID_SIZE - 1 - goal_sector[1]) * heatmap_cell + heatmap_cell // 2
-                pygame.draw.line(panel, (255, 105, 105), (goal_x - 4, goal_y - 4), (goal_x + 4, goal_y + 4), width=2)
-                pygame.draw.line(panel, (255, 105, 105), (goal_x + 4, goal_y - 4), (goal_x - 4, goal_y + 4), width=2)
+            if self_sector is not None and goal_relative_sector is not None:
+                goal_sector = (
+                    self_sector[0] + goal_relative_sector[0],
+                    self_sector[1] + goal_relative_sector[1],
+                )
+                if 0 <= goal_sector[0] < map_size and 0 <= goal_sector[1] < map_size:
+                    goal_x = heatmap_x + goal_sector[0] * heatmap_cell + heatmap_cell // 2
+                    goal_y = heatmap_y + (map_size - 1 - goal_sector[1]) * heatmap_cell + heatmap_cell // 2
+                    pygame.draw.line(panel, (255, 105, 105), (goal_x - 4, goal_y - 4), (goal_x + 4, goal_y + 4), width=2)
+                    pygame.draw.line(panel, (255, 105, 105), (goal_x + 4, goal_y - 4), (goal_x - 4, goal_y + 4), width=2)
 
-    panel.blit(tiny_font.render("coverage map", True, (210, 220, 230)), (heatmap_x, heatmap_y - 18))
+    panel.blit(tiny_font.render("relative map" if is_relative_map else "coverage map", True, (210, 220, 230)), (heatmap_x, heatmap_y - 18))
     panel.blit(tiny_font.render("self: white circle", True, (210, 220, 230)), (heatmap_x, heatmap_y + heatmap_size + 6))
     panel.blit(tiny_font.render("goal: red x", True, (210, 220, 230)), (heatmap_x, heatmap_y + heatmap_size + 22))
 

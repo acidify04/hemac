@@ -159,13 +159,22 @@ class Drone(BaseAgent):
             self.action_space = gymnasium.spaces.Box(low=-self.max_speed, high=self.max_speed, shape=(3,))
             self.discrete_action_space = False
 
-        base_obs_len = 6 + self.number_of_drones * 2
-        sector_obs_len = self.GRID_RESOLUTION * self.GRID_RESOLUTION + 4
-        self.observation_space = gymnasium.spaces.Box(
-            low=-19.0,
-            high=19.0,
-            shape=(base_obs_len + sector_obs_len,),
-            dtype=np.float32,
+        self.base_obs_len = 6 + self.number_of_drones * 2
+        self.observation_space = gymnasium.spaces.Dict(
+            {
+                "vector": gymnasium.spaces.Box(
+                    low=-19.0,
+                    high=19.0,
+                    shape=(self.base_obs_len + 2,),
+                    dtype=np.float32,
+                ),
+                "relative_map": gymnasium.spaces.Box(
+                    low=0.0,
+                    high=1.0,
+                    shape=(self.RELATIVE_MAP_SIZE, self.RELATIVE_MAP_SIZE, 2),
+                    dtype=np.float32,
+                ),
+            }
         )
 
         """
@@ -350,7 +359,7 @@ class Drone(BaseAgent):
             return False
         return True
 
-    def observe(self, world, agents, poi) -> np.array:
+    def observe(self, world, agents, poi) -> dict[str, np.ndarray]:
         """Observe the world."""
         try:
             minx, miny, maxx, maxy = world.search_area.bounds
@@ -376,13 +385,16 @@ class Drone(BaseAgent):
 
         obs_raw = norm_dists + agents_rel_pos
         obs = np.array(obs_raw, dtype=np.float32)
-        expected_len = 6 + self.number_of_drones * 2
-        if obs.size < expected_len:
-            obs = np.pad(obs, (0, expected_len - obs.size), mode="constant", constant_values=0.0)
-        elif obs.size > expected_len:
-            obs = obs[:expected_len]
+        if obs.size < self.base_obs_len:
+            obs = np.pad(obs, (0, self.base_obs_len - obs.size), mode="constant", constant_values=0.0)
+        elif obs.size > self.base_obs_len:
+            obs = obs[: self.base_obs_len]
 
-        return np.concatenate((obs, self.build_sector_features(world))).astype(np.float32, copy=False)
+        vector_obs = np.concatenate((obs, self.build_goal_relative_sector(world))).astype(np.float32, copy=False)
+        return {
+            "vector": vector_obs,
+            "relative_map": self.build_relative_sector_map(world),
+        }
 
     def obstacles_in_quadrants(self, point, area, obstacles):
         """Find distancs to obstacles in the 4 quadrants."""
