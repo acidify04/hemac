@@ -349,7 +349,7 @@ def draw_observation_overlays(agent_debug_state, active_agent):
     help_bg = pygame.Surface((280, 30), pygame.SRCALPHA)
     help_bg.fill((8, 12, 16, 190))
     surface.blit(help_bg, (12, 12))
-    help_text = help_font.render("Space: next turn | Esc/Q: quit", True, (240, 248, 255))
+    help_text = help_font.render("Space: next step (all agents) | Esc/Q: quit", True, (240, 248, 255))
     surface.blit(help_text, (20, 18))
     pygame.display.flip()
 
@@ -373,6 +373,7 @@ def run_single_episode(env, algo, eval_seed):
         }
         for agent_id in possible_agents
     }
+    agents_per_step = max(len(possible_agents), 1)
 
     def get_policy_id(agent_id):
         if "observer" in agent_id:
@@ -380,6 +381,37 @@ def run_single_episode(env, algo, eval_seed):
         if "drone" in agent_id:
             return "drone_policy"
         return None
+
+    def refresh_agent_debug_state():
+        rewards = getattr(env, "rewards", {})
+        terminations = getattr(env, "terminations", {})
+        truncations = getattr(env, "truncations", {})
+        for agent_id, state in agent_debug_state.items():
+            try:
+                state["observation"] = env.observe(agent_id)
+            except Exception:
+                pass
+            if isinstance(rewards, dict):
+                state["reward"] = rewards.get(agent_id, state["reward"])
+            if isinstance(terminations, dict):
+                state["termination"] = terminations.get(agent_id, state["termination"])
+            if isinstance(truncations, dict):
+                state["truncation"] = truncations.get(agent_id, state["truncation"])
+
+    def render_step_state():
+        env.render()
+        draw_observation_overlays(agent_debug_state, getattr(env, "agent_selection", None))
+        frame = capture_pygame_frame()
+        if frame is not None:
+            frames.append(frame)
+
+    refresh_agent_debug_state()
+    render_step_state()
+    if not wait_for_spacebar():
+        gif_path = save_gif(frames, eval_seed)
+        if gif_path is not None:
+            print(f"Saved GIF: {gif_path}")
+        return last_info
 
     for agent in env.agent_iter():
         observation, reward, termination, truncation, info = env.last()
@@ -407,14 +439,17 @@ def run_single_episode(env, algo, eval_seed):
             "termination": termination,
             "truncation": truncation,
         }
-        env.render()
-        draw_observation_overlays(agent_debug_state, agent)
-        frame = capture_pygame_frame()
-        if frame is not None:
-            frames.append(frame)
-        if not wait_for_spacebar():
-            break
         env.step(action)
+
+        if total_agent_turns % agents_per_step == 0:
+            refresh_agent_debug_state()
+            render_step_state()
+            episode_done = all(
+                agent_debug_state[agent_id]["termination"] or agent_debug_state[agent_id]["truncation"]
+                for agent_id in possible_agents
+            )
+            if not episode_done and not wait_for_spacebar():
+                break
 
     print(f"Episode finished after {total_agent_turns} agent turns.")
     if last_info:
@@ -471,7 +506,7 @@ def run_trained_model_simulation():
     # 2. 저장된 체크포인트로부터 알고리즘(모델) 로드
     # 저장된 폴더 경로를 지정합니다. (예: ./hemac_checkpoints 하위의 실제 체크포인트 폴더)
     # checkpoint_path = os.path.abspath(find_latest_checkpoint())
-    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_00100")
+    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_00200")
     print(f"[{checkpoint_path}] 경로에서 학습된 모델을 불러오는 중...")
     algo = Algorithm.from_checkpoint(checkpoint_path)
 
