@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +13,7 @@ import wandb
 from PIL import Image
 
 from hemac import HeMAC_v0
+from hemac.helpers.logger import LOGGER
 from hemac.rllib_policy import (
     drone_policy_model_config,
     observer_policy_model_config,
@@ -37,6 +39,7 @@ VIDEO_FPS = 12
 VIDEO_SEED = 0
 VIDEO_OUTPUT_DIR = Path("./wandb_media")
 PPO_ENTROPY_COEFF = 0.0005
+NUM_ENV_RUNNERS = 8
 
 
 def build_env_config(render_mode=None):
@@ -272,6 +275,7 @@ def env_creator(config):
 
 
 def main():
+    LOGGER.setLevel(logging.WARNING)
     ray.init()
     register_hemac_rllib_models()
     
@@ -307,7 +311,7 @@ def main():
         .framework("torch")
         .callbacks(HeMACCallbacks)
         .environment(env=env_name)
-        .env_runners(num_env_runners=4) 
+        .env_runners(num_env_runners=NUM_ENV_RUNNERS)
         .multi_agent(policies=policies, policy_mapping_fn=policy_mapping_fn)
         .resources(num_gpus=1)
         .training(
