@@ -249,9 +249,9 @@ class HeMACCallbacks(DefaultCallbacks):
         # wandb 및 터미널 출력용 custom_metrics 할당
         # episode.custom_metrics["min_drone_dist"] = float(min_drone)
         # episode.custom_metrics["min_obs_dist"] = float(min_obs)
-        # episode.custom_metrics["explored_area"] = float(area)
-        # episode.custom_metrics["coverage_ratio"] = float(coverage_ratio)
-        # episode.custom_metrics["max_coverage_ratio"] = float(max_coverage_ratio)
+        episode.custom_metrics["explored_area"] = float(area)
+        episode.custom_metrics["coverage_ratio"] = float(coverage_ratio)
+        episode.custom_metrics["max_coverage_ratio"] = float(max_coverage_ratio)
         # episode.custom_metrics["goal_found_step"] = float(goal_found_step)
         episode.custom_metrics["success_step"] = float(success_step)
         # episode.custom_metrics["steps_after_goal_found"] = float(steps_after_goal_found)

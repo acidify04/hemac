@@ -483,7 +483,7 @@ class HeMAC:
         """Observe the agent."""
         current_agent = self.agents_list[self.agent_name_mapping[agent]]
         observation = current_agent.observe(self.world, self.agents_list, self.goals)
-        LOGGER.info(f"observation for {agent}: {observation}")
+        # LOGGER.info(f"observation for {agent}: {observation}")
         return observation
 
     def state(self):
@@ -638,8 +638,8 @@ class HeMAC:
         # Specific actions for UAVs
         if "drone" in active_agent:
             # Collision check and map limits
-            reward -= 0.1  # Small step penalty to encourage efficiency
-            reward_dict[active_agent].append(-0.1)
+            reward -= 0.05  # Small step penalty to encourage efficiency
+            reward_dict[active_agent].append(-0.05)
             # if agent.out_of_bound:
             #     self.collided = True
             #     reward -= 100  # Penalty for leaving the map
@@ -649,8 +649,8 @@ class HeMAC:
                 self.collided = True
                 self.drone_crash = True
                 self.terminate = True
-                reward -= 500  # going outside of search area
-                reward_dict[active_agent].append(-500)
+                reward -= 250  # going outside of search area
+                reward_dict[active_agent].append(-250)
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
                     LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
             else:
@@ -669,22 +669,25 @@ class HeMAC:
             # POI tracking reward calculation
             for goal in self.goals[:]:
                 goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
-                reward -= math.sqrt(math.sqrt(goal_dist))  # Exponential reward based on distance to the goal, encourages getting closer
-                reward_dict[active_agent].append(-math.sqrt(math.sqrt(goal_dist)))
+                if self.found_goal:
+                    dist_reward = math.sqrt(math.sqrt(goal_dist))  # Exponential reward based on distance to the goal, encourages getting closer
+                else:
+                    dist_reward = math.sqrt(math.sqrt(goal_dist)) / 10
+                reward_dict[active_agent].append(dist_reward)
                 if goal_dist < agent.sensing_range and not self.found_goal:
                     # if agent.carried_targets < agent.carrying_capacity:
                     agent.found_goal = True
                     self.found_goal = True
                     self.world.goal_position = (goal.x, goal.y)
-                    reward += 200  # Reward for finding a goal
-                    reward_dict[active_agent].append(200)
+                    reward += 30  # Reward for finding a goal
+                    reward_dict[active_agent].append(30)
                     # goal.spawn_poi(self.search_area)
                     # goal.reset()
                     # if self.rescuing_targets:
                     #     agent.carried_targets += 1
             newly_detected_count = self._update_detected_cache(agent)
             if newly_detected_count > 0:
-                detection_reward = math.sqrt(math.sqrt(newly_detected_count))
+                detection_reward = math.sqrt(math.sqrt(newly_detected_count)) / 10
                 reward += detection_reward
                 reward_dict[active_agent].append(detection_reward)
 
@@ -715,8 +718,8 @@ class HeMAC:
             #     self.global_reward += 10 * self.found_goal
 
         elif "observer" in active_agent:
-            reward -= 0.1  # Small step penalty to encourage efficiency
-            reward_dict[active_agent].append(-0.1)
+            reward -= 0.05  # Small step penalty to encourage efficiency
+            reward_dict[active_agent].append(-0.05)
             # if agent.out_of_bound:
             #     self.collided = True
             #     reward -= 100  # Penalty for leaving the map
@@ -773,8 +776,8 @@ class HeMAC:
                 self.collided = True
                 self.observer_crash = True
                 self.terminate = True
-                reward -= 500  # going outside of search area
-                reward_dict[active_agent].append(-500)
+                reward -= 250  # going outside of search area
+                reward_dict[active_agent].append(-250)
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
                     LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
             else:
@@ -793,14 +796,19 @@ class HeMAC:
             # POI tracking reward calculation
             for goal in self.goals[:]:
                 goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
-                reward -= math.sqrt(math.sqrt(goal_dist)) # Exponential reward based on distance to the goal, encourages getting closer
-                reward_dict[active_agent].append(-math.sqrt(math.sqrt(goal_dist)))
-                if goal_dist < agent.sensing_range: # goal까지의 거리가 sensing range보다 가까워지면 발견
+                if self.found_goal:
+                    dist_reward = math.sqrt(math.sqrt(goal_dist))  # Exponential reward based on distance to the goal, encourages getting closer
+                else:
+                    dist_reward = math.sqrt(math.sqrt(goal_dist)) / 10
+                reward_dict[active_agent].append(dist_reward)
+                if goal_dist < agent.sensing_range:  # goal까지의 거리가 sensing range보다 가까워지면 발견
                     agent.found_goal = True
                     self.found_goal = True
                     self.world.goal_position = (goal.x, goal.y)
-                    self.global_reward += 500  # Reward for finding a goal
-                        # goal.spawn_poi(self.search_area)
+                    # self.global_reward += 100  # Reward for finding a goal
+                    reward += 200  # Reward for finding a goal
+                    reward_dict[active_agent].append(200)
+                    # goal.spawn_poi(self.search_area)
                         # goal.reset()
                     self.success_step = self.num_frames
                     self.mission_success = True
@@ -809,10 +817,7 @@ class HeMAC:
 
             newly_detected_count = self._update_detected_cache(agent)
             if newly_detected_count > 0:
-                if not self.found_goal:
-                    detection_reward = math.sqrt(math.sqrt(newly_detected_count))
-                else:
-                    detection_reward = math.sqrt(math.sqrt(math.sqrt(newly_detected_count))) # goal을 찾았으면 탐색 reward를 줄임
+                detection_reward = math.sqrt(math.sqrt(newly_detected_count)) / 10
                 reward += detection_reward
                 reward_dict[active_agent].append(detection_reward)
 
