@@ -82,6 +82,7 @@ class Drone(BaseAgent):
         self.out_of_bound = False
         self.time_factor = time_factor
         self.starting_pos = None
+        self.has_custom_starting_pos = False
 
         ui_dims = 40
         dims = [1, 1]
@@ -101,6 +102,7 @@ class Drone(BaseAgent):
             self.altitude = drone_config.get("drone_altitude", 30)
             self.max_charge = drone_config.get("drone_max_charge", 9999)
             if len(drone_config.get("drones_starting_pos", [])) >= drone_id + 1:
+                self.has_custom_starting_pos = True
                 if drone_config.get("starting_pos_coordinates_type") == "geo":
                     # we convert geo to cardinal position
                     self.starting_pos = list(
@@ -191,9 +193,17 @@ class Drone(BaseAgent):
         """Reset drone."""
         self.charge_level = self.max_charge
         self.charging = False
+        self.charging_point = (0, 0)
         self.out_of_bound = False
         self.carried_targets = 0
         self.found_goal = False
+        self.vx = 0.0
+        self.vy = 0.0
+        self.accel_x = 0.0
+        self.accel_y = 0.0
+        self.previous_accel = [0.0, 0.0]
+        self.orientation = 0.0
+        self.goto_pos = [0, 0]
         self.detected = set()
         self.latest_detected = set()
         self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)

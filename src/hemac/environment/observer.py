@@ -80,12 +80,13 @@ class Observer(BaseAgent):
 
     def reset(self, seed=None, options=None):
         """Reset observer."""
-        self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
         self.out_of_bound = False
+        self.goal_in_view = False
         self.goal_estimation = None
+        self.orientation = 0.0
         self.detected = set()
         self.latest_detected = set()
-        pass
+        self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
 
     def sync_pose_state(self):
         """Sync state derived from the current spawn pose."""

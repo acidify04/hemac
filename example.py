@@ -100,8 +100,8 @@ def wait_for_spacebar():
                 if event.key == pygame.K_SPACE:
                     return True
                 if event.key in (pygame.K_ESCAPE, pygame.K_q):
-                    return False
-        time.sleep(0.01)
+                    return True
+        time.sleep(0.000001)
 
 
 def _extract_observation_debug(observation):
@@ -506,7 +506,7 @@ def run_trained_model_simulation():
     # 2. 저장된 체크포인트로부터 알고리즘(모델) 로드
     # 저장된 폴더 경로를 지정합니다. (예: ./hemac_checkpoints 하위의 실제 체크포인트 폴더)
     # checkpoint_path = os.path.abspath(find_latest_checkpoint())
-    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_00200")
+    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_00300")
     print(f"[{checkpoint_path}] 경로에서 학습된 모델을 불러오는 중...")
     algo = Algorithm.from_checkpoint(checkpoint_path)
 

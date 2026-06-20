@@ -1,3 +1,5 @@
+# CNN Layer / Channel size / Pooling 여부
+
 """RLlib model helpers for HeMAC training and evaluation."""
 
 from __future__ import annotations
@@ -81,8 +83,10 @@ class _SpatialObsEncoder(nn.Module):
             self.map_encoder = nn.Sequential(
                 nn.Conv2d(self.map_channels, 16, kernel_size=5, stride=2, padding=2),
                 _activation_module(activation_name),
+                # nn.MaxPool2d(2),
                 nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),
                 _activation_module(activation_name),
+                nn.MaxPool2d(2),
                 nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
                 _activation_module(activation_name),
                 nn.Flatten(),
