@@ -679,7 +679,7 @@ class HeMAC:
                 if dist(other_agent.x, other_agent.y, agent.x, agent.y) < agent.sensing_range:
                     nearby_drone_count += 1
             if nearby_drone_count > 0:
-                drone_proximity_penalty = float(nearby_drone_count) * 0.2
+                drone_proximity_penalty = float(nearby_drone_count) * 1
                 reward -= drone_proximity_penalty
                 reward_dict[active_agent].append(-drone_proximity_penalty)
 
@@ -815,15 +815,16 @@ class HeMAC:
                 goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
                 # Keep the distance penalty on a consistent scale so the
                 # observer does not suddenly rush the boundary after a goal is found.
-                dist_reward = math.sqrt(math.sqrt(goal_dist)) / 10
+                # dist_reward = math.sqrt(math.sqrt(goal_dist)) / 10
+                dist_reward = 50 / (goal_dist + 1)  # Reward inversely proportional to distance to the goal
                 reward_dict[active_agent].append(dist_reward)
-                reward -= dist_reward
+                reward += dist_reward
                 if goal_dist < agent.sensing_range:  # goal까지의 거리가 sensing range보다 가까워지면 발견
                     agent.found_goal = True
                     self.found_goal = True
                     # self.world.goal_position = (goal.x, goal.y)
                     # self.global_reward += 100  # Reward for finding a goal
-                    reward += 300  # Reward for finding a goal
+                    self.global_reward += 300  # Reward for finding a goal
                     reward_dict[active_agent].append(300)
                     # goal.spawn_poi(self.search_area)
                         # goal.reset()

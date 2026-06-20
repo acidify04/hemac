@@ -96,6 +96,27 @@ class BaseAgent(pygame.sprite.Sprite):
         goal_relative[1] = goal_grid_y - self_grid_y
         return goal_relative
 
+    def build_relative_agent_positions(self, world, agents) -> np.ndarray:
+        """Build normalized relative positions for other observer/drone agents."""
+        try:
+            minx, miny, maxx, maxy = world.search_area.bounds
+            norm = float(np.hypot(maxx - minx, maxy - miny))
+        except Exception:
+            norm = float(np.hypot(world.area.width, world.area.height))
+        if norm <= 0:
+            norm = 1.0
+
+        relative_positions = []
+        for agent in agents:
+            if agent is self or agent.__class__.__name__ not in {"Drone", "Observer"}:
+                continue
+
+            dx = float(np.clip((agent.x - self.x) / norm, -1.0, 1.0))
+            dy = float(np.clip((agent.y - self.y) / norm, -1.0, 1.0))
+            relative_positions.extend((dx, dy))
+
+        return np.array(relative_positions, dtype=np.float32)
+
     def draw(self, surface):
         """Abstract method to draw the agent. Must be implemented by child classes."""
         raise NotImplementedError("Child classes must implement the draw method.")
