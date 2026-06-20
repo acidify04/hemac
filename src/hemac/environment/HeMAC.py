@@ -573,7 +573,7 @@ class HeMAC:
     
     def current_coverage_ratio(self):
         """Return the explored ratio over the full map."""
-        total_map_area = self.area.width * self.area.height
+        total_map_area = self.search_area.length * self.search_area.length
         if total_map_area <= 0:
             return 0.0
         return min(float(len(self.world.detected)) / float(total_map_area), 1.0)

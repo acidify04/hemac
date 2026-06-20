@@ -1,3 +1,4 @@
+import argparse
 import os
 from datetime import datetime
 from pathlib import Path
@@ -13,6 +14,15 @@ from hemac.rllib_policy import register_hemac_rllib_models
 import time
 import pygame
 from PIL import Image
+
+try:
+    from pygame._sdl2.video import Renderer as SdlRenderer
+    from pygame._sdl2.video import Texture as SdlTexture
+    from pygame._sdl2.video import Window as SdlWindow
+except Exception:
+    SdlRenderer = None
+    SdlTexture = None
+    SdlWindow = None
 
 
 DRONE_START_POSITIONS = [
@@ -32,6 +42,12 @@ VISUALIZATION_DIR = Path("./visualization")
 OBS_GRID_SIZE = 20
 SECTOR_FEATURE_COUNT = OBS_GRID_SIZE * OBS_GRID_SIZE + 4
 RELATIVE_MAP_SIZE = OBS_GRID_SIZE * 2
+AUTO_PLAY_DELAY_SECONDS = 0.08
+OBS_PANEL_WIDTH = 300
+OBS_PANEL_HEIGHT = 240
+OBS_PANEL_MARGIN = 12
+OBS_WINDOW_PADDING = 12
+OBS_WINDOW_HEADER_HEIGHT = 42
 
 
 def find_latest_checkpoint():
@@ -90,18 +106,74 @@ def save_gif(frames, eval_seed):
     return gif_path
 
 
-def wait_for_spacebar():
-    """Block until the user presses space, or stop on window close/escape."""
+def wait_for_playback(playback_mode, delay_seconds=AUTO_PLAY_DELAY_SECONDS):
+    """Wait according to playback mode and stop on window close/escape."""
+    window_close_event = getattr(pygame, "WINDOWCLOSE", None)
+    if playback_mode == "auto":
+        end_time = time.time() + delay_seconds
+        while time.time() < end_time:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT or (window_close_event is not None and event.type == window_close_event):
+                    return False
+                if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_q):
+                    return False
+            time.sleep(0.001)
+        return True
+
     while True:
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+            if event.type == pygame.QUIT or (window_close_event is not None and event.type == window_close_event):
                 return False
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
                     return True
                 if event.key in (pygame.K_ESCAPE, pygame.K_q):
-                    return True
-        time.sleep(0.000001)
+                    return False
+        time.sleep(0.001)
+
+
+class ObservationDebugWindow:
+    """Separate SDL2 window used for observation debug panels."""
+
+    def __init__(self):
+        self.window = None
+        self.renderer = None
+        self.available = all(obj is not None for obj in (SdlWindow, SdlRenderer, SdlTexture))
+
+    def ensure(self, size):
+        """Create or resize the observation window."""
+        if not self.available:
+            return False
+
+        normalized_size = (int(size[0]), int(size[1]))
+        if self.window is None:
+            self.window = SdlWindow(
+                title="HeMAC Observation Debug",
+                size=normalized_size,
+                position=(40, 50),
+            )
+            self.renderer = SdlRenderer(self.window)
+            self.renderer.draw_color = (5, 8, 12, 255)
+        elif tuple(self.window.size) != normalized_size:
+            self.window.size = normalized_size
+        return True
+
+    def present(self, surface):
+        """Draw a pygame surface into the separate observation window."""
+        if not self.ensure(surface.get_size()):
+            return False
+        texture = SdlTexture.from_surface(self.renderer, surface)
+        self.renderer.clear()
+        self.renderer.blit(texture)
+        self.renderer.present()
+        return True
+
+    def close(self):
+        """Close the observation window if it exists."""
+        self.renderer = None
+        if self.window is not None:
+            self.window.destroy()
+            self.window = None
 
 
 def _extract_observation_debug(observation):
@@ -304,37 +376,33 @@ def draw_observation_panel(
     surface.blit(panel, panel_rect.topleft)
 
 
-def draw_observation_overlays(agent_debug_state, active_agent):
+def draw_observation_overlays(agent_debug_state, active_agent, playback_mode, observation_window=None):
     """Draw observation panels for all known agents."""
-    surface = pygame.display.get_surface()
-    if surface is None:
-        return
-
     agent_ids = list(agent_debug_state.keys())
     if not agent_ids:
         return
 
     columns = 2
     rows = int(math.ceil(len(agent_ids) / columns))
-    panel_width = 300
-    panel_height = 240
-    margin = 12
-    total_width = columns * panel_width + (columns - 1) * margin
-    start_x = max(surface.get_width() - total_width - margin, margin)
-    start_y = margin
+    canvas_width = columns * OBS_PANEL_WIDTH + (columns - 1) * OBS_PANEL_MARGIN + OBS_WINDOW_PADDING * 2
+    canvas_height = rows * OBS_PANEL_HEIGHT + (rows - 1) * OBS_PANEL_MARGIN + OBS_WINDOW_PADDING * 2 + OBS_WINDOW_HEADER_HEIGHT
+    canvas = pygame.Surface((canvas_width, canvas_height))
+    canvas.fill((6, 10, 14))
+    start_x = OBS_WINDOW_PADDING
+    start_y = OBS_WINDOW_PADDING + OBS_WINDOW_HEADER_HEIGHT
 
     for idx, agent_id in enumerate(agent_ids):
         row = idx // columns
         col = idx % columns
         panel_rect = pygame.Rect(
-            start_x + col * (panel_width + margin),
-            start_y + row * (panel_height + margin),
-            panel_width,
-            panel_height,
+            start_x + col * (OBS_PANEL_WIDTH + OBS_PANEL_MARGIN),
+            start_y + row * (OBS_PANEL_HEIGHT + OBS_PANEL_MARGIN),
+            OBS_PANEL_WIDTH,
+            OBS_PANEL_HEIGHT,
         )
         state = agent_debug_state[agent_id]
         draw_observation_panel(
-            surface=surface,
+            surface=canvas,
             agent_id=agent_id,
             observation=state["observation"],
             reward=state["reward"],
@@ -346,15 +414,27 @@ def draw_observation_overlays(agent_debug_state, active_agent):
         )
 
     help_font = pygame.font.SysFont("Trebuchet MS", 16)
-    help_bg = pygame.Surface((280, 30), pygame.SRCALPHA)
+    help_bg = pygame.Surface((canvas_width - OBS_WINDOW_PADDING * 2, 30), pygame.SRCALPHA)
     help_bg.fill((8, 12, 16, 190))
-    surface.blit(help_bg, (12, 12))
-    help_text = help_font.render("Space: next step (all agents) | Esc/Q: quit", True, (240, 248, 255))
-    surface.blit(help_text, (20, 18))
+    canvas.blit(help_bg, (OBS_WINDOW_PADDING, 8))
+    if playback_mode == "auto":
+        help_label = "Auto playback | Esc/Q: quit"
+    else:
+        help_label = "Space: next step (all agents) | Esc/Q: quit"
+    help_text = help_font.render(help_label, True, (240, 248, 255))
+    canvas.blit(help_text, (OBS_WINDOW_PADDING + 8, 14))
+
+    if observation_window is not None and observation_window.present(canvas):
+        return
+
+    surface = pygame.display.get_surface()
+    if surface is None:
+        return
+    surface.blit(canvas, (0, 0))
     pygame.display.flip()
 
 
-def run_single_episode(env, algo, eval_seed):
+def run_single_episode(env, algo, eval_seed, playback_mode="step", observation_window=None):
     """Run one evaluation episode and return the final info."""
     env.reset(seed=eval_seed)
 
@@ -400,14 +480,19 @@ def run_single_episode(env, algo, eval_seed):
 
     def render_step_state():
         env.render()
-        draw_observation_overlays(agent_debug_state, getattr(env, "agent_selection", None))
+        draw_observation_overlays(
+            agent_debug_state,
+            getattr(env, "agent_selection", None),
+            playback_mode,
+            observation_window=observation_window,
+        )
         frame = capture_pygame_frame()
         if frame is not None:
             frames.append(frame)
 
     refresh_agent_debug_state()
     render_step_state()
-    if not wait_for_spacebar():
+    if not wait_for_playback(playback_mode):
         gif_path = save_gif(frames, eval_seed)
         if gif_path is not None:
             print(f"Saved GIF: {gif_path}")
@@ -448,7 +533,7 @@ def run_single_episode(env, algo, eval_seed):
                 agent_debug_state[agent_id]["termination"] or agent_debug_state[agent_id]["truncation"]
                 for agent_id in possible_agents
             )
-            if not episode_done and not wait_for_spacebar():
+            if not episode_done and not wait_for_playback(playback_mode):
                 break
 
     print(f"Episode finished after {total_agent_turns} agent turns.")
@@ -474,7 +559,7 @@ def run_single_episode(env, algo, eval_seed):
     return last_info
 
 
-def run_trained_model_simulation():
+def run_trained_model_simulation(playback_mode="step"):
     # 1. Ray 및 가상환경 내 초기화
     ray.init(ignore_reinit_error=True)
     register_hemac_rllib_models()
@@ -506,7 +591,7 @@ def run_trained_model_simulation():
     # 2. 저장된 체크포인트로부터 알고리즘(모델) 로드
     # 저장된 폴더 경로를 지정합니다. (예: ./hemac_checkpoints 하위의 실제 체크포인트 폴더)
     # checkpoint_path = os.path.abspath(find_latest_checkpoint())
-    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_00300")
+    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_00100")
     print(f"[{checkpoint_path}] 경로에서 학습된 모델을 불러오는 중...")
     algo = Algorithm.from_checkpoint(checkpoint_path)
 
@@ -538,7 +623,8 @@ def run_trained_model_simulation():
 
     # 환경 생성
     env = HeMAC_v0.env(**env_config)
-    print("시뮬레이션을 시작합니다. 창을 확인해 주세요.")
+    observation_window = ObservationDebugWindow()
+    print(f"시뮬레이션을 시작합니다. 재생 모드: {playback_mode}")
 
     seed_base = random.randint(0, 9999)
     eval_seeds = [seed_base + offset for offset in range(NUM_EVAL_SEEDS)]
@@ -547,7 +633,13 @@ def run_trained_model_simulation():
     results = []
     for idx, eval_seed in enumerate(eval_seeds, start=1):
         print(f"\n=== Evaluation {idx}/{NUM_EVAL_SEEDS} ===")
-        last_info = run_single_episode(env, algo, eval_seed)
+        last_info = run_single_episode(
+            env,
+            algo,
+            eval_seed,
+            playback_mode=playback_mode,
+            observation_window=observation_window,
+        )
         results.append(last_info)
         hold_window_open(seconds=1.0)
 
@@ -563,8 +655,22 @@ def run_trained_model_simulation():
     print(f"Observer crash: {observer_crash_count}/{NUM_EVAL_SEEDS}")
 
     hold_window_open(seconds=5.0)
+    observation_window.close()
     env.close()
     # ray.shutdown()
 
+def parse_args():
+    """Parse CLI arguments for example playback."""
+    parser = argparse.ArgumentParser(description="Run a trained HeMAC policy visualization.")
+    parser.add_argument(
+        "--playback",
+        choices=("step", "auto"),
+        default="step",
+        help="Visualization playback mode.",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    run_trained_model_simulation()
+    args = parse_args()
+    run_trained_model_simulation(playback_mode=args.playback)
