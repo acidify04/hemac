@@ -813,10 +813,9 @@ class HeMAC:
             # POI tracking reward calculation
             for goal in self.goals[:]:
                 goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
-                if self.found_goal:
-                    dist_reward = math.sqrt(math.sqrt(goal_dist))  # Exponential reward based on distance to the goal, encourages getting closer
-                else:
-                    dist_reward = math.sqrt(math.sqrt(goal_dist)) / 10
+                # Keep the distance penalty on a consistent scale so the
+                # observer does not suddenly rush the boundary after a goal is found.
+                dist_reward = math.sqrt(math.sqrt(goal_dist)) / 10
                 reward_dict[active_agent].append(dist_reward)
                 reward -= dist_reward
                 if goal_dist < agent.sensing_range:  # goal까지의 거리가 sensing range보다 가까워지면 발견
