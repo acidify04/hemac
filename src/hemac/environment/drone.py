@@ -102,6 +102,7 @@ class Drone(BaseAgent):
             self.altitude = drone_config.get("drone_altitude", 30)
             self.max_charge = drone_config.get("drone_max_charge", 9999)
             if len(drone_config.get("drones_starting_pos", [])) >= drone_id + 1:
+                # print("starting pos set")
                 self.has_custom_starting_pos = True
                 if drone_config.get("starting_pos_coordinates_type") == "geo":
                     # we convert geo to cardinal position

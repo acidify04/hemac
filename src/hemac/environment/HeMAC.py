@@ -869,7 +869,7 @@ class HeMAC:
                 self.terminations[ag] = self.terminate
                 self.truncations[ag] = self.truncate
                 self.infos[ag] = {
-                    "success": self.found_goal, 
+                    "success": self.mission_success,
                     "goal_found": self.found_goal, 
                     "success_after_goal_found": self.mission_success,
                     "fatal_crash": self.collided,

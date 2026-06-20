@@ -44,13 +44,13 @@ class Observer(BaseAgent):
         self.sensing_range = sensor.sensing_range
 
         if discrete_action_space:
-            self.action_space = gymnasium.spaces.Discrete(5)
+            self.action_space = gymnasium.spaces.Discrete(3)
             self.discrete_action_space = True
         else:
             self.action_space = gymnasium.spaces.Box(low=-100, high=100, shape=(3,))
             self.discrete_action_space = False
         """
-        2D steering. 0: right, 1: left
+        2D steering. 0: right, 1: left, 2: straight
         """
         self.base_obs_len = 11
         self.observation_space = gymnasium.spaces.Dict(
@@ -151,11 +151,7 @@ class Observer(BaseAgent):
             out = [1, 0, 0]
         elif action == 1:
             out = [-1, 0, 0]
-        elif action == 2:
-            out = [0, 0, 0]
-        elif action == 3:
-            out = [0, 0, 0]
-        elif action == 4:
+        else:
             out = [0, 0, 0]
         return out
 

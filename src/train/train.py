@@ -237,25 +237,15 @@ class HeMACCallbacks(DefaultCallbacks):
             final_info = extract_final_info_from_wrapped_env(base_env.get_sub_environments()[env_index])
 
         # 최종 값 추출 (어느 방법으로든 찾지 못한 경우 99999.0 등 기본값)
-        min_drone = final_info.get("min_drone_dist", 99999.0)
-        min_obs = final_info.get("min_obs_dist", 99999.0)
         area = final_info.get("explored_area", 0.0)
         coverage_ratio = final_info.get("coverage_ratio", 0.0)
-        max_coverage_ratio = final_info.get("max_coverage_ratio", coverage_ratio)
         goal_found_step = final_info.get("goal_found_step", 0.0)
         success_step = final_info.get("success_step", 0.0)
         steps_after_goal_found = final_info.get("steps_after_goal_found", 0.0)
-        
-        # 초기값 보정
-        if min_drone == 99999.0: min_drone = 0.0
-        if min_obs == 99999.0: min_obs = 0.0
 
         # wandb 및 터미널 출력용 custom_metrics 할당
-        # episode.custom_metrics["min_drone_dist"] = float(min_drone)
-        # episode.custom_metrics["min_obs_dist"] = float(min_obs)
         episode.custom_metrics["explored_area"] = float(area)
         episode.custom_metrics["coverage_ratio"] = float(coverage_ratio)
-        episode.custom_metrics["max_coverage_ratio"] = float(max_coverage_ratio)
         # episode.custom_metrics["goal_found_step"] = float(goal_found_step)
         episode.custom_metrics["success_step"] = float(success_step)
         # episode.custom_metrics["steps_after_goal_found"] = float(steps_after_goal_found)
@@ -351,13 +341,16 @@ def main():
         custom_metrics = result.get('custom_metrics', {})
         if not custom_metrics:
             custom_metrics = result.get('env_runners', {}).get('custom_metrics', {})
+        visible_custom_metrics = {
+            key: value for key, value in custom_metrics.items() if "min" not in key and "max" not in key
+        }
             
         policy_rewards = result.get('policy_reward_mean', {})
         if not policy_rewards:
             policy_rewards = result.get('env_runners', {}).get('policy_reward_mean', {})
         drone_log_std_stats = get_policy_log_std_stats(algo, "drone_policy") or {}
 
-        print(f">>> [디버깅] custom_metrics: {custom_metrics}")
+        print(f">>> [디버깅] custom_metrics: {visible_custom_metrics}")
 
         log_payload = {
             "iteration": i + 1,
@@ -373,11 +366,8 @@ def main():
             "metrics/crash_rate": custom_metrics.get("crash_rate_mean", 0),
             "metrics/drone_crash_rate": custom_metrics.get("drone_crash_rate_mean", 0),
             "metrics/observer_crash_rate": custom_metrics.get("observer_crash_rate_mean", 0),
-            "metrics/min_drone_dist": custom_metrics.get("min_drone_dist_mean", 0),
-            "metrics/min_obs_dist": custom_metrics.get("min_obs_dist_mean", 0),
             "metrics/explored_area": custom_metrics.get("explored_area_mean", 0),
             "metrics/coverage_ratio": custom_metrics.get("coverage_ratio_mean", 0),
-            "metrics/max_coverage_ratio": custom_metrics.get("max_coverage_ratio_mean", 0),
             "metrics/timeout_rate": custom_metrics.get("timeout_rate_mean", 0),
             "metrics/success_after_goal_found_rate": custom_metrics.get("success_after_goal_found_rate_mean", 0),
             "metrics/goal_found_step": custom_metrics.get("goal_found_step_mean", 0),
