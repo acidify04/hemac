@@ -723,7 +723,8 @@ class HeMAC:
                 # Keep the distance penalty on a consistent scale so the
                 # observer does not suddenly rush the boundary after a goal is found.
                 # dist_reward = math.sqrt(math.sqrt(goal_dist)) / 10
-                dist_reward = 50 / (goal_dist + 1)  # Reward inversely proportional to distance to the goal
+                # dist_reward = 50 / (goal_dist + 1)  # Reward inversely proportional to distance to the goal
+                dist_reward = (1 - math.exp(-goal_dist/1000)) * (-1)
                 reward_dict[active_agent].append(dist_reward)
                 reward += dist_reward
                 if goal_dist < agent.sensing_range:  # goal까지의 거리가 sensing range보다 가까워지면 발견
@@ -741,10 +742,10 @@ class HeMAC:
                     self.terminate = True
 
             newly_detected_count = self._update_detected_cache(agent)
-            if newly_detected_count > 0:
-                detection_reward = math.sqrt(math.sqrt(newly_detected_count)) / 20
-                reward += detection_reward
-                reward_dict[active_agent].append(detection_reward)
+            # if newly_detected_count > 0:
+            #     detection_reward = math.sqrt(math.sqrt(newly_detected_count)) / 20
+            #     reward += detection_reward
+            #     reward_dict[active_agent].append(detection_reward)
 
         # individual reward
         self.rewards[active_agent] = reward

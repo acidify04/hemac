@@ -304,6 +304,7 @@ def main():
         .env_runners(num_env_runners=NUM_ENV_RUNNERS)
         .multi_agent(policies=policies, policy_mapping_fn=policy_mapping_fn)
         .resources(num_gpus=1)
+        .env_runners(num_env_runners=12)
         .training(
             train_batch_size=8000, 
             lr_schedule=[
