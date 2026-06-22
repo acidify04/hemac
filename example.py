@@ -42,7 +42,7 @@ VISUALIZATION_DIR = Path("./visualization")
 OBS_GRID_SIZE = 20
 SECTOR_FEATURE_COUNT = OBS_GRID_SIZE * OBS_GRID_SIZE + 4
 RELATIVE_MAP_SIZE = OBS_GRID_SIZE * 2
-AUTO_PLAY_DELAY_SECONDS = 0.08
+AUTO_PLAY_DELAY_SECONDS = 0.02
 OBS_PANEL_WIDTH = 300
 OBS_PANEL_HEIGHT = 240
 OBS_PANEL_MARGIN = 12
@@ -591,7 +591,7 @@ def run_trained_model_simulation(playback_mode="step"):
     # 2. 저장된 체크포인트로부터 알고리즘(모델) 로드
     # 저장된 폴더 경로를 지정합니다. (예: ./hemac_checkpoints 하위의 실제 체크포인트 폴더)
     # checkpoint_path = os.path.abspath(find_latest_checkpoint())
-    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_00200")
+    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/before_minus_explore/checkpoint_05700")
     print(f"[{checkpoint_path}] 경로에서 학습된 모델을 불러오는 중...")
     algo = Algorithm.from_checkpoint(checkpoint_path)
 

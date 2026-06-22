@@ -646,11 +646,7 @@ class HeMAC:
             # Collision check and map limits
             reward -= 0.05  # Small step penalty to encourage efficiency
             reward_dict[active_agent].append(-0.05)
-            # if agent.out_of_bound:
-            #     self.collided = True
-            #     reward -= 100  # Penalty for leaving the map
-            #     if self.render_mode == "human":
-            #         LOGGER.info(f"drone went out of bounds! pos: {(agent.x, agent.y)}")
+
             if not self.search_area.covers(Point((agent.x, agent.y))):
                 self.collided = True
                 self.drone_crash = True
@@ -669,8 +665,6 @@ class HeMAC:
                             LOGGER.info(
                                 f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
                             )
-            # boundary_dist = self.search_area.boundary.distance(Point((agent.x, agent.y)))
-            # reward += 0.05 * boundary_dist  # Reward for being farther from the boundary, encourages staying in the center of the search area
 
             nearby_drone_count = 0
             for other_agent in self.agents_list:
@@ -686,109 +680,22 @@ class HeMAC:
             # POI tracking reward calculation
             for goal in self.goals[:]:
                 goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
-                # if self.found_goal:
-                #     dist_reward = math.sqrt(math.sqrt(goal_dist))  # Exponential reward based on distance to the goal, encourages getting closer
-                # else:
-                #     dist_reward = math.sqrt(math.sqrt(goal_dist)) / 10
-                # reward_dict[active_agent].append(dist_reward)
                 if goal_dist < agent.sensing_range and not self.found_goal:
-                    # if agent.carried_targets < agent.carrying_capacity:
                     agent.found_goal = True
                     self.found_goal = True
-                    # self.world.goal_position = (goal.x, goal.y)
                     reward += 100  # Reward for finding a goal
                     reward_dict[active_agent].append(100)
-                    # goal.spawn_poi(self.search_area)
-                    # goal.reset()
-                    # if self.rescuing_targets:
-                    #     agent.carried_targets += 1
+
             newly_detected_count = self._update_detected_cache(agent)
             if newly_detected_count > 0:
                 detection_reward = math.sqrt(math.sqrt(newly_detected_count)) / 10
                 reward += detection_reward
                 reward_dict[active_agent].append(detection_reward)
 
-            # if self.rescuing_targets and agent.carried_targets:
-            #     closest_point_to_base = closest_point_in_rect(self.world.base, agent.rect.center)
-            #     if (
-            #         dist(closest_point_to_base[0], closest_point_to_base[1], agent.rect.x, agent.rect.y)
-            #         < agent.sensing_range
-            #     ):
-            #         delivered_goal = 1 * agent.carried_targets
-            #         agent.carried_targets = 0
-            #     else:
-            #         for friend in self.agents:
-            #             if "provisioner" in friend:
-            #                 provisioner = self.agents_list[self.agent_name_mapping[friend]]
-            #                 if dist(provisioner.x, provisioner.y, agent.x, agent.y) < agent.sensing_range:
-            #                     delivered_goal = 1 * agent.carried_targets
-            #                     print(f"agent dropped {agent.carried_targets} targets!")
-            #                     agent.carried_targets = 0
-            #                     break
-
-                # print(f'drone detected: {self.detected}')
-
-            # global reward
-            # if self.rescuing_targets:
-            #     self.global_reward += 10 * self.found_goal + 25 * delivered_goal
-            # else:
-            #     self.global_reward += 10 * self.found_goal
-
         elif "observer" in active_agent:
             reward -= 0.05  # Small step penalty to encourage efficiency
             reward_dict[active_agent].append(-0.05)
-            # if agent.out_of_bound:
-            #     self.collided = True
-            #     reward -= 100  # Penalty for leaving the map
-            #     if self.render_mode == "human":
-            #         LOGGER.info(f"observer went out of bounds! pos: {(agent.x, agent.y)}")
-            # elif agent.goal_in_view:
-            #     reward = 0
 
-            # if agent.out_of_bound:
-            #     self.collided = True
-            #     reward -= 100  # Penalty for leaving the map
-            #     if self.render_mode == "human":
-            #         LOGGER.info(f"observer went out of bounds! pos: {(agent.x, agent.y)}")
-            # elif agent.goal_in_view:
-            #     reward = 0
-
-            # goal_x, goal_y = self.world.observer_communication
-            # current_dist = dist(goal_x, goal_y, agent.x, agent.y)
-            # # if not self.found_goal:
-            # #     reward -= math.sqrt(math.sqrt(math.sqrt(current_dist))) 
-            # # else:
-            # #     reward -= math.sqrt(math.sqrt(current_dist))
-            # goal_heading = np.arctan2(goal_y - agent.y, goal_x - agent.x)
-            # heading_error = ((goal_heading - agent.orientation + np.pi) % (2 * np.pi)) - np.pi
-            # success_radius = 80 if self.known_goals else 50
-
-            # if self.known_goals:
-            #     reward -= 0.01
-            #     reward += 0.12 * np.cos(heading_error)
-            # else:
-            #     reward += 0.03 * np.cos(heading_error)
-
-            # if current_dist < success_radius:
-            #     self.mission_success = True
-            #     reward += 200 # Task completion reward
-            #     self.success_step = self.num_frames
-            #     self.global_reward += 180 if self.known_goals else 120
-            #     self.terminate = True
-            
-            # new_detected = self.detected.union(agent.detected)
-            # if len(self.detected) < len(new_detected):
-            #     reward += 5 * (len(new_detected) - len(self.detected))  # Reward for newly detected goals
-            #     self.detected = new_detected
-            #     # print(f'observer detected: {self.detected}')
-
-            # boundary_dist = self.search_area.boundary.distance(Point((agent.x, agent.y)))
-            # reward += 0.5 * boundary_dist  # Reward for being farther from the boundary
-            # if agent.out_of_bound:
-            #     self.collided = True
-            #     reward -= 300  # Penalty for leaving the map
-            #     if self.render_mode == "human":
-            #         LOGGER.info(f"drone went out of bounds! pos: {(agent.x, agent.y)}")
             if not self.search_area.covers(Point((agent.x, agent.y))):
                 self.collided = True
                 self.observer_crash = True
@@ -835,7 +742,7 @@ class HeMAC:
 
             newly_detected_count = self._update_detected_cache(agent)
             if newly_detected_count > 0:
-                detection_reward = math.sqrt(math.sqrt(newly_detected_count)) / 10
+                detection_reward = math.sqrt(math.sqrt(newly_detected_count)) / 20
                 reward += detection_reward
                 reward_dict[active_agent].append(detection_reward)
 
