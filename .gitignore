@@ -11,3 +11,5 @@ src/train/wandb
 visualization/
 src/train/old
 src/train/trained_checkpoints/
+/src/__pycache__
+/src/hemac/envrionment/__pycache__
