@@ -757,7 +757,7 @@ class HeMAC:
                     # self.global_reward += 180 if self.known_goals else 120
                     self.terminate = True
 
-            newly_detected_count = self._update_detected_cache(agent)
+            # newly_detected_count = self._update_detected_cache(agent)
             # if newly_detected_count > 0:
             #     detection_reward = math.sqrt(math.sqrt(newly_detected_count)) / 20
             #     reward += detection_reward

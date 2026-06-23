@@ -56,8 +56,8 @@ def build_env_config(render_mode=None):
             "drone_max_thrust": 8,
             "drones_starting_pos": DRONE_START_POSITIONS,
         },
-        "min_obstacles": 0,
-        "max_obstacles": 0,
+        "min_obstacles": 5,
+        "max_obstacles": 7,
         "poi_config": [GOAL_CONFIG],
     }
     if render_mode is not None:
@@ -309,9 +309,9 @@ def main():
         .training(
             train_batch_size=8000, 
             lr_schedule=[
-                [0, 1e-4],            
-                [500 * 8000, 5e-5], 
-                [10000 * 8000, 1e-5]
+                [0, 5e-5],
+                [500 * 8000, 2.5e-5],
+                [10000 * 8000, 5e-6]
             ],
             gamma=0.99, 
             grad_clip=1.0, 

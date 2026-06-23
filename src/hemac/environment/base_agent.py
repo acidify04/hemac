@@ -68,20 +68,23 @@ class BaseAgent(pygame.sprite.Sprite):
         return obs
 
     def build_relative_sector_map(self, world) -> np.ndarray:
-        """Build a self-centered 40x40x2 map of coverage and valid-search sectors."""
+        """Build a self-centered 40x40x3 map of coverage, valid-search, and explored obstacles."""
         self_grid_x, self_grid_y = self._position_to_grid(self.x, self.y, world)
         pad = self.GRID_RESOLUTION
         padded_coverage = np.pad(world.coverage_map, ((pad, pad), (pad, pad)), mode="constant", constant_values=0.0)
         padded_search_mask = np.pad(world.search_mask, ((pad, pad), (pad, pad)), mode="constant", constant_values=0.0)
+        explored_obstacle_map = np.where(world.coverage_map > 0.0, world.obstacle_map, 0.0)
+        padded_obstacles = np.pad(explored_obstacle_map, ((pad, pad), (pad, pad)), mode="constant", constant_values=0.0)
 
         start_y = self_grid_y
         start_x = self_grid_x
         end_y = start_y + self.RELATIVE_MAP_SIZE
         end_x = start_x + self.RELATIVE_MAP_SIZE
 
-        relative_map = np.zeros((self.RELATIVE_MAP_SIZE, self.RELATIVE_MAP_SIZE, 2), dtype=np.float32)
+        relative_map = np.zeros((self.RELATIVE_MAP_SIZE, self.RELATIVE_MAP_SIZE, 3), dtype=np.float32)
         relative_map[:, :, 0] = padded_coverage[start_y:end_y, start_x:end_x]
         relative_map[:, :, 1] = padded_search_mask[start_y:end_y, start_x:end_x]
+        relative_map[:, :, 2] = padded_obstacles[start_y:end_y, start_x:end_x]
         return relative_map
 
     def build_goal_relative_sector(self, world) -> np.ndarray:

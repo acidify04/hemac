@@ -18,7 +18,7 @@ OBSERVER_CUSTOM_MODEL_NAME = "hemac_discrete_spatial_torch"
 DRONE_LOG_STD_INIT = -1.8
 DRONE_LOG_STD_MIN = -2.5
 DRONE_LOG_STD_MAX = -0.35
-DRONE_MODEL_HIDDEN_SIZES = [128, 128]
+DRONE_MODEL_HIDDEN_SIZES = [256, 256]
 
 _MODEL_REGISTERED = False
 
@@ -86,9 +86,9 @@ class _SpatialObsEncoder(nn.Module):
                 # nn.MaxPool2d(2),
                 nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),
                 _activation_module(activation_name),
-                # nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1),
-                # _activation_module(activation_name),
-                # nn.MaxPool2d(2),
+                nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1),
+                _activation_module(activation_name),
+                nn.MaxPool2d(2),
                 nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
                 _activation_module(activation_name),
                 nn.Flatten(),
