@@ -34,7 +34,7 @@ GOAL_CONFIG = {
     "boundary_margin": 140,
 }
 
-VIDEO_LOG_INTERVAL = 50
+VIDEO_LOG_INTERVAL = 100
 VIDEO_FPS = 12
 VIDEO_SEED = 0
 VIDEO_OUTPUT_DIR = Path("./wandb_media")

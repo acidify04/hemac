@@ -145,7 +145,7 @@ class HeMAC:
         self.observer_crash_to_obstacle = False
         self.max_coverage_ratio = 0.0
 
-        self.old_dist_to_goal = 1000
+        self.old_dist_to_goal = None
 
         # Display screen
         self.render_ratio = render_ratio
@@ -446,7 +446,7 @@ class HeMAC:
         self.max_coverage_ratio = 0.0
 
         self.num_frames = 0
-        self.old_dist_to_goal = 1000
+        self.old_dist_to_goal = None
 
         self.reinit()
 
@@ -742,9 +742,15 @@ class HeMAC:
                 # observer does not suddenly rush the boundary after a goal is found.
                 # dist_reward = math.sqrt(math.sqrt(goal_dist)) / 10
                 # dist_reward = 50 / (goal_dist + 1)  # Reward inversely proportional to distance to the goal
-                dist_reward = 0.5 * (math.exp(-goal_dist / 400) - 1)
-                reward_dict[active_agent].append(dist_reward)
-                reward += dist_reward
+                # dist_reward = 0.5 * (math.exp(-goal_dist / 400) - 1)
+                # reward_dict[active_agent].append(dist_reward)
+                # reward += dist_reward
+                if self.old_dist_to_goal is not None:
+                    progress_reward = max(self.old_dist_to_goal - goal_dist, 0.0) * 0.005
+                    if progress_reward > 0:
+                        reward += progress_reward
+                        reward_dict[active_agent].append(progress_reward)
+                self.old_dist_to_goal = goal_dist
                 if goal_dist < agent.sensing_range:  # goal까지의 거리가 sensing range보다 가까워지면 발견
                     agent.found_goal = True
                     self.found_goal = True
