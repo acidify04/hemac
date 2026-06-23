@@ -575,17 +575,23 @@ class HeMAC:
         for goal in self.goals:
             goal.draw(self.screen)
     
+    def current_explored_area(self):
+        """Return explored area inside the active search area for this episode."""
+        search_cell_coverage = self.world.coverage_map * self.world.search_mask
+        return float(np.sum(search_cell_coverage) * self.world.coverage_cell_area)
+
     def current_coverage_ratio(self):
-        """Return the explored ratio over the full map."""
-        total_map_area = self.search_area.length * self.search_area.length
-        if total_map_area <= 0:
+        """Return the explored ratio inside the active search area."""
+        total_search_area = float(self.search_area.area)
+        if total_search_area <= 0:
             return 0.0
-        return min(float(len(self.world.detected)) / float(total_map_area), 1.0)
+        explored_area = self.current_explored_area()
+        return min(explored_area / total_search_area, 1.0)
 
     def build_episode_info(self):
         """Build a final-episode info dict for metrics and evaluation."""
         coverage_ratio = self.current_coverage_ratio()
-        total_explored = float(len(self.world.detected))
+        total_explored = self.current_explored_area()
         self.max_coverage_ratio = max(self.max_coverage_ratio, coverage_ratio)
 
         # goal_found_step = self.goal_found_step if self.goal_found_step is not None else self.max_cycles

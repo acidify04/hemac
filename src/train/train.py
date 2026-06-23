@@ -56,8 +56,8 @@ def build_env_config(render_mode=None):
             "drone_max_thrust": 8,
             "drones_starting_pos": DRONE_START_POSITIONS,
         },
-        "min_obstacles": 5,
-        "max_obstacles": 10,
+        "min_obstacles": 0,
+        "max_obstacles": 0,
         "poi_config": [GOAL_CONFIG],
     }
     if render_mode is not None:
