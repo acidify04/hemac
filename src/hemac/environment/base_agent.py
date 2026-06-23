@@ -87,6 +87,20 @@ class BaseAgent(pygame.sprite.Sprite):
         relative_map[:, :, 2] = padded_obstacles[start_y:end_y, start_x:end_x]
         return relative_map
 
+    @staticmethod
+    def update_boundary_distance_channels(point, area, sensing_range, distances) -> None:
+        """Update per-direction boundary distances for axis-aligned search areas."""
+        minx, miny, maxx, maxy = area.bounds
+        wall_distances = {
+            "right": maxx - point.x,
+            "up": maxy - point.y,
+            "left": point.x - minx,
+            "down": point.y - miny,
+        }
+        for direction, distance in wall_distances.items():
+            if 0.0 <= distance < sensing_range:
+                distances[direction] = min(distances[direction], float(distance))
+
     def build_goal_relative_sector(self, world) -> np.ndarray:
         """Build a goal-sector offset relative to the agent sector."""
         goal_relative = np.zeros(2, dtype=np.float32)

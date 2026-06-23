@@ -435,20 +435,7 @@ class Drone(BaseAgent):
                 if closest_y < py:
                     distances["up"] = min(distances["up"], distance)  # y is inverted in pygame
 
-        # --- Find closest point on the area boundary ---
-        closest_point = area.boundary.interpolate(area.boundary.project(point))
-        ax, ay = closest_point.x, closest_point.y
-        distance = np.hypot(ax - point.x, ay - point.y)
-
-        if distance < self.sensing_range:
-            if ax > point.x:
-                distances["right"] = min(distances["right"], distance)
-            if ay > point.y:
-                distances["up"] = min(distances["up"], distance)
-            if ax < point.x:
-                distances["left"] = min(distances["left"], distance)
-            if ay < point.y:
-                distances["down"] = min(distances["down"], distance)
+        self.update_boundary_distance_channels(point, area, self.sensing_range, distances)
 
         result = [dist for dist in distances.values()]
 

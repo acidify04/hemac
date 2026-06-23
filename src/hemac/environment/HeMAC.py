@@ -679,14 +679,16 @@ class HeMAC:
                                 f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
                             )
 
-            nearby_drone_count = 0
+            safe_radius = 30.0
+            drone_proximity_penalty = 0.0
             for other_agent in self.agents_list:
                 if other_agent is agent or not isinstance(other_agent, Drone):
                     continue
-                if dist(other_agent.x, other_agent.y, agent.x, agent.y) < agent.sensing_range:
-                    nearby_drone_count += 1
-            if nearby_drone_count > 0:
-                drone_proximity_penalty = float(nearby_drone_count) * 1
+                drone_distance = dist(other_agent.x, other_agent.y, agent.x, agent.y)
+                if drone_distance < safe_radius:
+                    normalized_gap = (safe_radius - drone_distance) / safe_radius
+                    drone_proximity_penalty += 0.5 * (normalized_gap ** 2)
+            if drone_proximity_penalty > 0:
                 reward -= drone_proximity_penalty
                 reward_dict[active_agent].append(-drone_proximity_penalty)
 
@@ -740,7 +742,7 @@ class HeMAC:
                 # observer does not suddenly rush the boundary after a goal is found.
                 # dist_reward = math.sqrt(math.sqrt(goal_dist)) / 10
                 # dist_reward = 50 / (goal_dist + 1)  # Reward inversely proportional to distance to the goal
-                dist_reward = (1 - math.exp(-goal_dist/1000)) * (-1)
+                dist_reward = 0.5 * (math.exp(-goal_dist / 400) - 1)
                 reward_dict[active_agent].append(dist_reward)
                 reward += dist_reward
                 if goal_dist < agent.sensing_range:  # goal까지의 거리가 sensing range보다 가까워지면 발견
