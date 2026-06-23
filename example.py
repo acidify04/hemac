@@ -190,6 +190,7 @@ def _extract_observation_debug(observation):
             "base_obs": vector_obs,
             "coverage_map": relative_map[:, :, 0] if relative_map.size else None,
             "valid_mask": relative_map[:, :, 1] if relative_map.size else None,
+            "obstacle_map": relative_map[:, :, 2] if relative_map.ndim == 3 and relative_map.shape[-1] > 2 else None,
             "goal_relative_sector": goal_relative_sector,
         }
 
@@ -263,6 +264,7 @@ def draw_observation_panel(
     goal_relative_sector = obs_debug.get("goal_relative_sector")
     self_sector = obs_debug.get("self_sector")
     valid_mask = obs_debug.get("valid_mask")
+    obstacle_map = obs_debug.get("obstacle_map")
     is_relative_map = obs_debug["mode"] == "relative_map"
     panel_width = panel_rect.width
     panel_height = panel_rect.height
@@ -302,7 +304,14 @@ def draw_observation_panel(
                     color = (12, 16, 20)
                 else:
                     coverage = float(coverage_map[grid_y, grid_x])
-                    if coverage <= 0.0:
+                    obstacle = float(obstacle_map[grid_y, grid_x]) if obstacle_map is not None else 0.0
+                    if obstacle > 0.0:
+                        color = (
+                            int(150 + 60 * min(coverage, 1.0)),
+                            int(45 + 50 * min(coverage, 1.0)),
+                            int(45 + 40 * min(coverage, 1.0)),
+                        )
+                    elif coverage <= 0.0:
                         color = (26, 38, 56)
                     else:
                         intensity = min(max(coverage, 0.0), 1.0)
@@ -354,6 +363,8 @@ def draw_observation_panel(
     panel.blit(tiny_font.render("relative map" if is_relative_map else "coverage map", True, (210, 220, 230)), (heatmap_x, heatmap_y - 16))
     panel.blit(tiny_font.render("self: white circle", True, (210, 220, 230)), (heatmap_x, heatmap_y + heatmap_size + 4))
     panel.blit(tiny_font.render("goal: red x", True, (210, 220, 230)), (heatmap_x, heatmap_y + heatmap_size + 16))
+    if obstacle_map is not None:
+        panel.blit(tiny_font.render("obstacle: red cell", True, (210, 220, 230)), (heatmap_x, heatmap_y + heatmap_size + 28))
 
     labels = _base_observation_labels(agent_id, base_obs)
     for idx, (label, value) in enumerate(zip(labels, base_obs)):
@@ -578,8 +589,8 @@ def run_trained_model_simulation(playback_mode="step"):
                 "drone_max_thrust": 8,
                 "drones_starting_pos": DRONE_START_POSITIONS,
             },
-            "min_obstacles": 0,
-            "max_obstacles": 0,
+            "min_obstacles": 5,
+            "max_obstacles": 7,
             "poi_config": [GOAL_CONFIG],
         }
         env = HeMAC_v0.env(**train_env_config)
@@ -591,7 +602,7 @@ def run_trained_model_simulation(playback_mode="step"):
     # 2. 저장된 체크포인트로부터 알고리즘(모델) 로드
     # 저장된 폴더 경로를 지정합니다. (예: ./hemac_checkpoints 하위의 실제 체크포인트 폴더)
     # checkpoint_path = os.path.abspath(find_latest_checkpoint())
-    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/before_minus_explore/checkpoint_05700")
+    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_00100")
     print(f"[{checkpoint_path}] 경로에서 학습된 모델을 불러오는 중...")
     algo = Algorithm.from_checkpoint(checkpoint_path)
 
@@ -613,8 +624,8 @@ def run_trained_model_simulation(playback_mode="step"):
         },
         
         # 맵 및 목적지 설정
-        "min_obstacles": 0,
-        "max_obstacles": 0,
+        "min_obstacles": 5,
+        "max_obstacles": 7,
         "poi_config": [GOAL_CONFIG],
         
         # [핵심] 화면 시각화 활성화

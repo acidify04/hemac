@@ -58,6 +58,7 @@ class World(pygame.sprite.Sprite):
         self.coverage_counts = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.int32)
         self.coverage_map = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
         self.search_mask = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
+        self.obstacle_map = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
         for grid_x in range(self.coverage_grid_size):
             for grid_y in range(self.coverage_grid_size):
                 cell_center = (
@@ -91,6 +92,7 @@ class World(pygame.sprite.Sprite):
         self.detected.clear()
         self.coverage_counts.fill(0)
         self.coverage_map.fill(0.0)
+        self.obstacle_map.fill(0.0)
         self.base.center = (150, 150)
         # collision = True
         # while collision:
@@ -131,6 +133,7 @@ class World(pygame.sprite.Sprite):
     def clear_obstacles(self):
         """Remove all obstacles from the world."""
         self.obstacles.clear()  # Clear the list of obstacles
+        self.obstacle_map.fill(0.0)
 
     @staticmethod
     def _rect_distance(rect_a: pygame.Rect, rect_b: pygame.Rect) -> float:
@@ -138,6 +141,25 @@ class World(pygame.sprite.Sprite):
         dx = max(rect_a.left - rect_b.right, rect_b.left - rect_a.right, 0)
         dy = max(rect_a.top - rect_b.bottom, rect_b.top - rect_a.bottom, 0)
         return float(np.hypot(dx, dy))
+
+    def _grid_to_game_rect(self, grid_x: int, grid_y: int) -> pygame.Rect:
+        """Convert a coverage-grid cell to the corresponding game-space rect."""
+        left = int(round(grid_x * self.coverage_cell_width))
+        right = int(round((grid_x + 1) * self.coverage_cell_width))
+        top = int(round(self.area.height - (grid_y + 1) * self.coverage_cell_height))
+        bottom = int(round(self.area.height - grid_y * self.coverage_cell_height))
+        return pygame.Rect(left, top, max(right - left, 1), max(bottom - top, 1))
+
+    def _rebuild_obstacle_map(self) -> None:
+        """Refresh the obstacle occupancy grid used by agent observations."""
+        self.obstacle_map.fill(0.0)
+        for grid_x in range(self.coverage_grid_size):
+            for grid_y in range(self.coverage_grid_size):
+                if self.search_mask[grid_y, grid_x] <= 0.0:
+                    continue
+                cell_rect = self._grid_to_game_rect(grid_x, grid_y)
+                if any(obstacle.colliderect(cell_rect) for obstacle in self.obstacles):
+                    self.obstacle_map[grid_y, grid_x] = 1.0
 
     def generate_obstacles(self, n_obstacles):
         """Generate random obstacles."""
@@ -160,6 +182,7 @@ class World(pygame.sprite.Sprite):
                 if base_clearance_ok and not road_collision:
                     valid_coord = True
             self.obstacles.append(obstacle)
+        self._rebuild_obstacle_map()
 
     def draw(self, screen):
         """Draw world."""

@@ -174,7 +174,7 @@ class Drone(BaseAgent):
                 "relative_map": gymnasium.spaces.Box(
                     low=0.0,
                     high=1.0,
-                    shape=(self.RELATIVE_MAP_SIZE, self.RELATIVE_MAP_SIZE, 2),
+                    shape=(self.RELATIVE_MAP_SIZE, self.RELATIVE_MAP_SIZE, 3),
                     dtype=np.float32,
                 ),
             }
