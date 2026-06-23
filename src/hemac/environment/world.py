@@ -16,6 +16,8 @@ from hemac.helpers.helper import game_ref_to_world_ref, world_ref_to_game_ref, s
 class World(pygame.sprite.Sprite):
     """World class."""
 
+    BASE_OBSTACLE_CLEARANCE = 150
+
     def __init__(
         self,
         game_area: pygame.Rect,
@@ -130,6 +132,13 @@ class World(pygame.sprite.Sprite):
         """Remove all obstacles from the world."""
         self.obstacles.clear()  # Clear the list of obstacles
 
+    @staticmethod
+    def _rect_distance(rect_a: pygame.Rect, rect_b: pygame.Rect) -> float:
+        """Return the minimum Euclidean distance between two rectangles."""
+        dx = max(rect_a.left - rect_b.right, rect_b.left - rect_a.right, 0)
+        dy = max(rect_a.top - rect_b.bottom, rect_b.top - rect_a.bottom, 0)
+        return float(np.hypot(dx, dy))
+
     def generate_obstacles(self, n_obstacles):
         """Generate random obstacles."""
         for i in range(n_obstacles):
@@ -147,7 +156,8 @@ class World(pygame.sprite.Sprite):
                     road_collision = obstacle.clipline(start, end)
                     if road_collision:
                         break
-                if not obstacle.colliderect(self.base) and not road_collision:
+                base_clearance_ok = self._rect_distance(obstacle, self.base) > self.BASE_OBSTACLE_CLEARANCE
+                if base_clearance_ok and not road_collision:
                     valid_coord = True
             self.obstacles.append(obstacle)
 

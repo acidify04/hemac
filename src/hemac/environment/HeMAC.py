@@ -141,6 +141,8 @@ class HeMAC:
         self.finished = False
         self.drone_crash = False
         self.observer_crash = False
+        self.drone_crash_to_obstacle = False
+        self.observer_crash_to_obstacle = False
         self.max_coverage_ratio = 0.0
 
         self.old_dist_to_goal = 1000
@@ -439,6 +441,8 @@ class HeMAC:
         self.detected = set()
         self.drone_crash = False
         self.observer_crash = False
+        self.drone_crash_to_obstacle = False
+        self.observer_crash_to_obstacle = False
         self.max_coverage_ratio = 0.0
 
         self.num_frames = 0
@@ -659,8 +663,11 @@ class HeMAC:
                 for obstacle in self.world.obstacles:
                     if agent.process_collision(obstacle, 0):
                         self.collided = True
-                        reward -= 20  # Penalty for collision with an obstacle
-                        reward_dict[active_agent].append(-20)
+                        self.drone_crash = True
+                        self.drone_crash_to_obstacle = True
+                        self.terminate = True
+                        reward -= 300  # Penalty for collision with an obstacle
+                        reward_dict[active_agent].append(-300)
                         if self.render_mode == "human" or self.render_mode == "rgb_array":
                             LOGGER.info(
                                 f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
@@ -708,8 +715,11 @@ class HeMAC:
                 for obstacle in self.world.obstacles:
                     if agent.process_collision(obstacle, 0):
                         self.collided = True
-                        reward -= 20  # Penalty for collision with an obstacle
-                        reward_dict[active_agent].append(-20)
+                        self.observer_crash = True
+                        self.observer_crash_to_obstacle = True
+                        self.terminate = True
+                        reward -= 300  # Penalty for collision with an obstacle
+                        reward_dict[active_agent].append(-300)
                         if self.render_mode == "human" or self.render_mode == "rgb_array":
                             LOGGER.info(
                                 f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
@@ -783,6 +793,8 @@ class HeMAC:
                     "fatal_crash": self.collided,
                     "drone_crash": self.drone_crash,
                     "observer_crash": self.observer_crash,
+                    "drone_crash_to_obstacle": self.drone_crash_to_obstacle,
+                    "observer_crash_to_obstacle": self.observer_crash_to_obstacle,
                 }
 
             if self.render_mode is not None:

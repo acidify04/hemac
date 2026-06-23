@@ -39,7 +39,7 @@ VIDEO_FPS = 12
 VIDEO_SEED = 0
 VIDEO_OUTPUT_DIR = Path("./wandb_media")
 PPO_ENTROPY_COEFF = 0.0005
-NUM_ENV_RUNNERS = 8
+NUM_ENV_RUNNERS = 12
 
 
 def build_env_config(render_mode=None):
@@ -56,8 +56,8 @@ def build_env_config(render_mode=None):
             "drone_max_thrust": 8,
             "drones_starting_pos": DRONE_START_POSITIONS,
         },
-        "min_obstacles": 0,
-        "max_obstacles": 0,
+        "min_obstacles": 5,
+        "max_obstacles": 10,
         "poi_config": [GOAL_CONFIG],
     }
     if render_mode is not None:
@@ -258,6 +258,8 @@ class HeMACCallbacks(DefaultCallbacks):
         # episode.custom_metrics["timeout_rate"] = 1.0 if final_info.get("timeout", False) else 0.0
         episode.custom_metrics["drone_crash_rate"] = 1.0 if final_info.get("drone_crash", False) else 0.0
         episode.custom_metrics["observer_crash_rate"] = 1.0 if final_info.get("observer_crash", False) else 0.0
+        episode.custom_metrics["drone_crash_to_obstacle_rate"] = 1.0 if final_info.get("drone_crash_to_obstacle", False) else 0.0
+        episode.custom_metrics["observer_crash_to_obstacle_rate"] = 1.0 if final_info.get("observer_crash_to_obstacle", False) else 0.0
 
 
 def env_creator(config):
@@ -304,7 +306,6 @@ def main():
         .env_runners(num_env_runners=NUM_ENV_RUNNERS)
         .multi_agent(policies=policies, policy_mapping_fn=policy_mapping_fn)
         .resources(num_gpus=1)
-        .env_runners(num_env_runners=12)
         .training(
             train_batch_size=8000, 
             lr_schedule=[
@@ -369,11 +370,13 @@ def main():
             "metrics/observer_crash_rate": custom_metrics.get("observer_crash_rate_mean", 0),
             "metrics/explored_area": custom_metrics.get("explored_area_mean", 0),
             "metrics/coverage_ratio": custom_metrics.get("coverage_ratio_mean", 0),
-            "metrics/timeout_rate": custom_metrics.get("timeout_rate_mean", 0),
+            # "metrics/timeout_rate": custom_metrics.get("timeout_rate_mean", 0),
             "metrics/success_after_goal_found_rate": custom_metrics.get("success_after_goal_found_rate_mean", 0),
-            "metrics/goal_found_step": custom_metrics.get("goal_found_step_mean", 0),
+            # "metrics/goal_found_step": custom_metrics.get("goal_found_step_mean", 0),
             "metrics/success_step": custom_metrics.get("success_step_mean", 0),
-            "metrics/steps_after_goal_found": custom_metrics.get("steps_after_goal_found_mean", 0),
+            # "metrics/steps_after_goal_found": custom_metrics.get("steps_after_goal_found_mean", 0),
+            "metrics/drone_crash_to_obstacle_rate": custom_metrics.get("drone_crash_to_obstacle_rate_mean", 0),
+            "metrics/observer_crash_to_obstacle_rate": custom_metrics.get("observer_crash_to_obstacle_rate_mean", 0),
         }
 
         if (i + 1) % VIDEO_LOG_INTERVAL == 0:
