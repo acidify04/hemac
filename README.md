@@ -1,3 +1,5 @@
+# Note
+**The `render` branch is used. (NOT `main`)**
 
 ## Train
 
@@ -33,6 +35,27 @@ We can record some metrics while training, such as success rate and crash rate.
 To record the metrics, we have to add the value in the `self.infos` dictionary in the end of the `step` function.
 
 Also, there are some functions for visualization.
+
+### reward shaping
+All rewards are recorded in the `reward_dict` dictionary.
+
+- drone
+    - step penalty: -0.05
+    - crash to boundary or obstacle: -300, episode finished
+    - if there is the other drone in the sensing range: $-0.5\times (\frac{\text{threshold}-d}{\text{threshold}})^2$
+    - if there is goal in the sensing range: +20
+    - exploration reward: +the number of newly explored poi * weight
+        - weight = `max(0.0, (self.detection_distance_scale - min_dist) / max(self.detection_distance_scale, 1e-6))`
+        - The default value of `self.detection_distance_scale` is 200
+
+- observer
+    - step penalty: -0.05
+    - crash to boundary or obstacle: -300, episode finished
+    - heading reward: +`max(math.cos(heading_error), 0.0) * reward_scale`
+        - The default value of `reward_scale` is 0.03
+        - `heading_error = math.atan2(math.sin(goal_heading - orientation), math.cos(goal_heading - orientation))`
+    - goal distance reward: -0.0005 * `goal_distance`
+    - if there is goal in the sensing range: +300(global reward)
 
 ---
 

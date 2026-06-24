@@ -794,12 +794,15 @@ class HeMAC:
                 # dist_reward = 0.5 * (math.exp(-goal_dist / 400) - 1)
                 # reward_dict[active_agent].append(dist_reward)
                 # reward += dist_reward
-                if self.old_dist_to_goal is not None:
-                    progress_reward = max(self.old_dist_to_goal - goal_dist, 0.0) * 0.005 # 이전 step보다 goal까지의 거리가 가까워지면 reward를 부여
-                    if progress_reward > 0:
-                        reward += progress_reward
-                        reward_dict[active_agent].append(progress_reward)
-                self.old_dist_to_goal = goal_dist
+                # if self.old_dist_to_goal is not None:
+                #     progress_reward = max(self.old_dist_to_goal - goal_dist, 0.0) * 0.005 # 이전 step보다 goal까지의 거리가 가까워지면 reward를 부여
+                #     if progress_reward > 0:
+                #         reward += progress_reward
+                #         reward_dict[active_agent].append(progress_reward)
+                # self.old_dist_to_goal = goal_dist
+                dist_reward = -0.0005 * goal_dist
+                reward_dict[active_agent].append(dist_reward)
+                reward += dist_reward
                 if goal_dist < agent.sensing_range:  # goal까지의 거리가 sensing range보다 가까워지면 발견
                     agent.found_goal = True
                     self.found_goal = True
