@@ -1,113 +1,85 @@
-# HeMAC - The Heterogeneous Multi-Agent Challenge
 
-**HeMAC** is a standardized, PettingZoo-based benchmark environment for Heterogeneous Multi-Agent Reinforcement Learning (HeMARL). It proposes multiple scenarios where agents with diverse sensors, resources, or capabilities must cooperate to solve complex tasks under partial observability.
+## Train
 
----
-
-## Key Features
-
-- **Rich Heterogeneity:** Multiple distinct agent types (Quadcopters, Observers, Provisioners) with unique observation and action spaces, capabilities, and roles.
-- **Multi-Stage Benchmarking:** Three challenges (“Simple Fleet”, “Fleet”, “Complex Fleet”) with increasing difficulty and heterogeneity.
-- **Scenario Variety:** Each challenge contains several scenarios for fine control over agent compositions and environmental complexity.
-- **Partial Observability:** Agents perceive the world through unique, limited sensors and information, increasing coordination complexity.
-- **Flexible Spaces:** Both discrete and continuous action spaces are supported for all agent types.
-- **Extensibility:** Easily add new agent types, capabilities, and scenarios.
-
----
-
-## Why HeMAC?
-
-Traditional MARL benchmarks focus on homogeneous teams, falling short when representing real-world, heterogeneous agent systems. HeMAC provides:
-
-- A controlled environment where agents must specialize and cooperate based on their unique abilities.
-- Standardized tasks to facilitate reproducible, comparable HeMARL research.
-- Rich partial observability and coordination challenges.
-
-Our latest paper shows that while state-of-the-art methods (like MAPPO) excel at simpler tasks, their performance degrades with increased heterogeneity—with simpler algorithms (like IPPO) sometimes outperforming them under these conditions.
-
----
-
-## Environment Overview
-
-In **HeMAC**, a team of autonomous agents works together to find and reach moving targets in a randomly generated map featuring obstacles and special structures.
-
-### Available Agents
-
-- **Quadcopter:** Low-altitude, agile agents that can reach targets but have limited energy and capacity.
-- **Observer:** High-altitude, fast agents with broad forward-facing views; guide Quadcopters but cannot directly reach targets.
-- **Provisioner:** Ground vehicles navigating a road network to recharge/support aerial agents and assist with target retrieval.
-
-### Challenges and Scenarios
-
-| Name          | Agents                                | Description                                                                                     | Sample Scenarios    |
-|---------------|---------------------------------------|-------------------------------------------------------------------------------------------------|---------------------|
-| **Simple Fleet**  | Quadcopters, Observers                | Reach as many moving targets as possible. Observers must guide Quadcopters.                      | 1q1o, 3q1o, 5q2o    |
-| **Fleet**         | Quadcopters, Observers                | Multi-target, energy constraints, obstacles, limited communication range.                        | 3q1o, 10q3o, 20q5o  |
-| **Complex Fleet** | Quadcopters, Observers, Provisioners  | High heterogeneity: energy/capacity limits, provisioners restricted to roads, complex cooperation.| 3q1o1p, 5q2o1p, etc.|
-
-Agents receive different local observations according to their sensors and roles.
-
----
-
-## Installation
-
-To install HeMAC in a fresh Python environment, python3.11 is recommended. Then run:
+To train reinforcement agent for hemac, use this command:
 
 ```bash
-pip install .
+cd hemac/src/train
+python train.py
+```
+
+For training details, you can refer `HeMAC.py`(for environment), `drone.py`(for drone agents), `observer.py`(for observer agents), `world.py`(for map)
+and `rllib_policy.py`(for CNN architecture).
+
+To visualize and test the trained model, use this command:
+(Please make sure if the checkpoint is correct.)
+```bash
+cd hemac
+python example.py
 ```
 
 ---
 
-## Getting Started
+## `HeMAC.py`
 
-Example of usage (with the PettingZoo's AEC API):
+`HeMAC` class is the environment class. The `step` function in the class describes the reward shaping of the agents.
 
-```python
-from hemac import HeMAC_v0
+There are two kinds of rewards: local reward and global reward.
+- Local reward: The agents receives their own reward respectively.
+- Global reward: All of the agents receives same rewards.
+    - Global rewards are set by `self.global_reward` variable.
 
-env = HeMAC_v0.env(render_mode="human")
-env.reset(seed=0)
+We can record some metrics while training, such as success rate and crash rate.
+To record the metrics, we have to add the value in the `self.infos` dictionary in the end of the `step` function.
 
-for agent in env.agent_iter():
-    observation, reward, termination, truncation, info = env.last()
-    if termination or truncation:
-        action = None
-    else:
-        # this is where you would insert your policy
-        action = env.action_space(agent).sample()
-    env.step(action)
-env.close()
-```
+Also, there are some functions for visualization.
 
 ---
 
-## Citation
+## `base_agent.py`
 
-If you use HeMAC in your research, please cite our [paper](https://arxiv.org/abs/2509.19512):
-```
-@inproceedings{dansereau2025hemac,
-  title     = {The Heterogeneous Multi-Agent Challenge},
-  author    = {Dansereau, Charles and Lopez Yepez, Junior Samuel and Soma, Karthik and Fagette, Antoine},
-  booktitle = {Proceedings of the 27th European Conference on Artificial Intelligence (ECAI 2025)},
-  series    = {Frontiers in Artificial Intelligence and Applications},
-  volume    = {413},
-  pages     = {3290--3296},
-  year      = {2025},
-  publisher = {IOS Press},
-  doi       = {10.3233/FAIA251197}
-}
-```
+`BaseAgent` class is extended by the agent classes, such as `Drone` class in `drone.py` file and `Observer` class in `observer.py`. There are some util functions which are used in the agent classes.
+
+When implementing a new function which is shared in the agent classes, it is better to write in `BaseAgent` class.
 
 ---
 
-## Contributing
 
-Contributions are welcome! Please open an issue or pull request for new agents, scenarios, bug fixes, or suggestions. see our contributing guide.
-version 1.0.0 test coverage: 72.12 %
+## `drone.py`
+
+`Drone` class represents the drone agent. (`UWB` and `IMU` class is not used in this task.)
+The action space and observation space of the drone agent is defined in this class.
+The action is updated with `update` function and the observation is observed with `observe` function.
+- action space: `[wanted vx, wanted vy, recharge]` (we don't need `recharge`.)
+- observation: `vector`, `relative_map`
+    - `vector`: **distance** to the closest boundary or obstacle if they are in the sensing range, **relative position** of the other drones, **relative goal location** and **index** of the drone
+    - `relative_map`: **exploration rate**, **obstacle locations** and **boundaries**
+The sensor is `RoundCamera` class in `sensor.py` file.
+- The sensing range is 75.
 
 ---
 
-**Note:** HeMAC is under active development. Feedback is highly appreciated to help shape this benchmark for the community.
+## `observer.py`
+
+`Observer` class represents the observer agent. 
+The action space and observation space of the observer agent is defined in this class.
+The action is updated with `update` function and the observation is observed with `observe` function.
+- action space: > 0 -> turn right, < 0 -> turn left, 0 -> straight (there is no stay action.)
+- observation: `vector`, `relative_map`
+    - `vector`: **distance** to the closest boundary or obstacle if they are in the sensing range, **orientation** of the observer and **relative goal location**
+    - `relative_map`: **exploration rate**, **obstacle locations** and **boundaries**
+The sensor is `RoundCamera` class in `sensor.py` file.
+- The sensing range is 75.
 
 ---
+
+## `world.py`
+
+`World` class represents the map. There are some functions like generating obstacles.
+
+---
+
+## `rllib_policy.py`
+
+`SpatialObsEncoder` class represents the `relative_map` in observation of `Drone` and `Observer` class.
+Also, `drone_policy_model_config` and `observer_policy_model_config` function describes the policy config of the each agents.

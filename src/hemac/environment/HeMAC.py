@@ -94,6 +94,9 @@ class HeMAC:
         poi_spawn_range: dict = None,
         observer_heading_reward_scale: float = 0.03,
         drone_hazard_penalty_scale: float = 0.2,
+        detection_distance_scale: float = 200.0,
+        detection_per_point_base: float = 0.01,
+        detection_max_total: float = 0.5,
     ):
         self.number_of_POIs = len(poi_config) if poi_config and len(poi_config) else 0
         self.goals = []
@@ -127,6 +130,10 @@ class HeMAC:
         self.global_reward = 0
         self.observer_heading_reward_scale = observer_heading_reward_scale
         self.drone_hazard_penalty_scale = drone_hazard_penalty_scale
+        # detection reward params
+        self.detection_distance_scale = detection_distance_scale
+        self.detection_per_point_base = detection_per_point_base
+        self.detection_max_total = detection_max_total
 
         # players
         self.n_observers = n_observers
@@ -368,7 +375,7 @@ class HeMAC:
         for goal in self.goals:
             goal.spawn_poi(self.search_area)
             goal.reset()
-        self.explored_grids = set() # 이거 안 지우면 다음 에피소드에서 정찰 보상 다 뺏김
+        self.explored_grids = set()
         self.observer_explored_grids = set()
         self.world.explored_grids = self.explored_grids
         self.world.observer_explored_grids = self.observer_explored_grids
@@ -511,11 +518,11 @@ class HeMAC:
         latest_points = getattr(agent, "latest_detected", agent.detected)
         new_points = latest_points.difference(self.detected)
         if not new_points:
-            return 0
+            return set()
 
         self.detected.update(new_points)
         self.world.register_detected_points(new_points)
-        return len(new_points)
+        return new_points
     
     def _build_search_grid_cache(self):
         """Build renderable search-area cells aligned to the shared coverage grid."""
@@ -654,7 +661,7 @@ class HeMAC:
         found_goal = False
         delivered_goal = False
         reward = 0
-        reward_dict = dict(zip(self.agents, [[] for _ in self.agents]))
+        reward_dict = dict(zip(self.agents, [[] for _ in self.agents])) # reward logging용 dictionary
         # LOGGER.info(f'reward_dict: {reward_dict}')
 
         agent = self.agents_list[self.agent_name_mapping[active_agent]]
@@ -668,14 +675,14 @@ class HeMAC:
         # Specific actions for UAVs
         if "drone" in active_agent:
             # Collision check and map limits
-            reward -= 0.05  # Small step penalty to encourage efficiency
+            reward -= 0.05  # Step penalty
             reward_dict[active_agent].append(-0.05)
 
-            if not self.search_area.covers(Point((agent.x, agent.y))):
+            if not self.search_area.covers(Point((agent.x, agent.y))): # 맵 밖으로 나간 경우
                 self.collided = True
                 self.drone_crash = True
                 self.terminate = True
-                reward -= 300  # going outside of search area
+                reward -= 300
                 reward_dict[active_agent].append(-300)
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
                     LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
@@ -693,31 +700,18 @@ class HeMAC:
                                 f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
                             )
 
-            safe_radius = 30.0
+            safe_radius = 75.0 # drone sensing range로 설정
             drone_proximity_penalty = 0.0
             for other_agent in self.agents_list:
                 if other_agent is agent or not isinstance(other_agent, Drone):
                     continue
-                drone_distance = dist(other_agent.x, other_agent.y, agent.x, agent.y)
+                drone_distance = dist(other_agent.x, other_agent.y, agent.x, agent.y) # 다른 drone과의 거리
                 if drone_distance < safe_radius:
                     normalized_gap = (safe_radius - drone_distance) / safe_radius
-                    drone_proximity_penalty += 0.5 * (normalized_gap ** 2)
+                    drone_proximity_penalty += 0.5 * (normalized_gap ** 2) # 드론 간의 근접 패널티
             if drone_proximity_penalty > 0:
                 reward -= drone_proximity_penalty
                 reward_dict[active_agent].append(-drone_proximity_penalty)
-
-            if not self.terminate:
-                hazard_distances = agent.obstacles_in_quadrants(
-                    Point(agent.x, agent.y), self.search_area, self.world.obstacles
-                )
-                hazard_penalty = proximity_penalty_from_distances(
-                    hazard_distances,
-                    agent.sensing_range,
-                    self.drone_hazard_penalty_scale,
-                )
-                if hazard_penalty > 0:
-                    reward -= hazard_penalty
-                    reward_dict[active_agent].append(-hazard_penalty)
 
             # POI tracking reward calculation
             for goal in self.goals[:]:
@@ -725,17 +719,31 @@ class HeMAC:
                 if goal_dist < agent.sensing_range and not self.found_goal:
                     agent.found_goal = True
                     self.found_goal = True
-                    reward += 20  # Reward for finding a goal
+                    reward += 20  # goal 탐색 시
                     reward_dict[active_agent].append(20)
 
-            newly_detected_count = self._update_detected_cache(agent)
-            if newly_detected_count > 0:
-                detection_reward = math.sqrt(math.sqrt(newly_detected_count)) / 20
-                reward += detection_reward
-                reward_dict[active_agent].append(detection_reward)
+            # proximity-weighted detection reward: closer detections to any goal give more reward
+            newly_detected_points = self._update_detected_cache(agent)
+            if newly_detected_points:
+                total_detection_reward = 0.0
+                for p in newly_detected_points:
+                    try:
+                        px, py = float(p[0]), float(p[1])
+                    except Exception:
+                        continue
+                    # distance to nearest goal
+                    min_dist = min([dist(goal.x, goal.y, px, py) for goal in self.goals]) if self.goals else self.detection_distance_scale
+                    # weight: linear 0..1 for dist in [dscale..0]
+                    weight = max(0.0, (self.detection_distance_scale - min_dist) / max(self.detection_distance_scale, 1e-6))
+                    per = self.detection_per_point_base * weight
+                    total_detection_reward += per
+                # cap
+                total_detection_reward = min(total_detection_reward, self.detection_max_total)
+                reward += total_detection_reward
+                reward_dict[active_agent].append(total_detection_reward)
 
         elif "observer" in active_agent:
-            reward -= 0.05  # Small step penalty to encourage efficiency
+            reward -= 0.05  # step penalty
             reward_dict[active_agent].append(-0.05)
 
             if not self.search_area.covers(Point((agent.x, agent.y))):
@@ -787,7 +795,7 @@ class HeMAC:
                 # reward_dict[active_agent].append(dist_reward)
                 # reward += dist_reward
                 if self.old_dist_to_goal is not None:
-                    progress_reward = max(self.old_dist_to_goal - goal_dist, 0.0) * 0.005
+                    progress_reward = max(self.old_dist_to_goal - goal_dist, 0.0) * 0.005 # 이전 step보다 goal까지의 거리가 가까워지면 reward를 부여
                     if progress_reward > 0:
                         reward += progress_reward
                         reward_dict[active_agent].append(progress_reward)

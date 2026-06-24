@@ -146,8 +146,8 @@ class Drone(BaseAgent):
         self.orientation = 0.0
         self.carried_targets = 0
         self.carrying_capacity = 1
-        self.detected = set()
-        self.found_goal = False
+        self.detected = set() # 이 drone이 탐색한 좌표
+        self.found_goal = False # 이 drone이 goal을 찾았는지 여부
 
         self.world = world
         self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
@@ -163,12 +163,13 @@ class Drone(BaseAgent):
             self.discrete_action_space = False
 
         self.base_obs_len = 6 + self.number_of_drones * 2
+        # add one extra slot for normalized self.id in the vector observation
         self.observation_space = gymnasium.spaces.Dict(
             {
                 "vector": gymnasium.spaces.Box(
                     low=-19.0,
                     high=19.0,
-                    shape=(self.base_obs_len + 2,),
+                    shape=(self.base_obs_len + 3,),
                     dtype=np.float32,
                 ),
                 "relative_map": gymnasium.spaces.Box(
@@ -380,7 +381,7 @@ class Drone(BaseAgent):
         if norm <= 0:
             norm = 1.0
 
-        distances = self.obstacles_in_quadrants(Point(self.x, self.y), world.search_area, world.obstacles)
+        distances = self.obstacles_in_quadrants(Point(self.x, self.y), world.search_area, world.obstacles) # 시야 안의 obstacle, boundary까지의 거리
         norm_dists = [float(np.clip(d / max(self.sensing_range, 1e-6), 0.0, 1.0)) for d in distances]
 
         agents_rel_pos = []
@@ -389,10 +390,10 @@ class Drone(BaseAgent):
             if isinstance(ag, Drone):
                 dx = float(np.clip((ag.x - self.x) / norm, -1.0, 1.0))
                 dy = float(np.clip((ag.y - self.y) / norm, -1.0, 1.0))
-                if index == 0 and dx == 0 and dy == 0:
+                if index == 0 and dx == 0 and dy == 0: # 자신인 경우 pass
                     index += 1
                     continue
-                agents_rel_pos.extend([dx, dy])
+                agents_rel_pos.extend([dx, dy]) # 다른 에이전트의 상대 위치
 
         obs_raw = norm_dists + agents_rel_pos
         obs = np.array(obs_raw, dtype=np.float32)
@@ -403,9 +404,15 @@ class Drone(BaseAgent):
 
         goal_relative = self.build_goal_relative_sector(world) if world.goal_known else np.zeros(2, dtype=np.float32)
         vector_obs = np.concatenate((obs, goal_relative)).astype(np.float32, copy=False)
+        # normalized id in [0,1]
+        try:
+            id_norm = float(self.id) / max(1, self.number_of_drones)
+        except Exception:
+            id_norm = 0.0
+        vector_obs = np.concatenate((vector_obs, np.array([id_norm], dtype=np.float32)))
         return {
             "vector": vector_obs,
-            "relative_map": self.build_relative_sector_map(world),
+            "relative_map": self.build_relative_sector_map(world), # 탐색률, map 경계, obstacle 위치 표시
         }
 
     def obstacles_in_quadrants(self, point, area, obstacles):
