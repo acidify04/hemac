@@ -15,3 +15,4 @@ src/hemac/__pycache__/
 src/hemac/environment/__pycache__/
 src/hemac/helpers/__pycache__/
 src/hemac/train/__pycache__/
+tests/__pycache__/

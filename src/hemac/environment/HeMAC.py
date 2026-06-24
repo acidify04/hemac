@@ -50,6 +50,7 @@ from .world import world_ref_to_game_ref, game_ref_to_world_ref
 
 import hemac.environment.sensors as sensors
 from hemac.helpers.logger import LOGGER
+from hemac.helpers.reward_shaping import proximity_penalty_from_distances
 from .drone import Drone
 from .observer import Observer
 from .provisioner import Provisioner
@@ -91,6 +92,8 @@ class HeMAC:
         patrol_config: dict = None,
         poi_config: list = None,
         poi_spawn_range: dict = None,
+        observer_heading_reward_scale: float = 0.01,
+        drone_hazard_penalty_scale: float = 0.02,
     ):
         self.number_of_POIs = len(poi_config) if poi_config and len(poi_config) else 0
         self.goals = []
@@ -122,6 +125,8 @@ class HeMAC:
         self.known_goals = known_goals
         self.rescuing_targets = rescuing_targets
         self.global_reward = 0
+        self.observer_heading_reward_scale = observer_heading_reward_scale
+        self.drone_hazard_penalty_scale = drone_hazard_penalty_scale
 
         # players
         self.n_observers = n_observers
@@ -692,14 +697,27 @@ class HeMAC:
                 reward -= drone_proximity_penalty
                 reward_dict[active_agent].append(-drone_proximity_penalty)
 
+            if not self.terminate:
+                hazard_distances = agent.obstacles_in_quadrants(
+                    Point(agent.x, agent.y), self.search_area, self.world.obstacles
+                )
+                hazard_penalty = proximity_penalty_from_distances(
+                    hazard_distances,
+                    agent.sensing_range,
+                    self.drone_hazard_penalty_scale,
+                )
+                if hazard_penalty > 0:
+                    reward -= hazard_penalty
+                    reward_dict[active_agent].append(-hazard_penalty)
+
             # POI tracking reward calculation
             for goal in self.goals[:]:
                 goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
                 if goal_dist < agent.sensing_range and not self.found_goal:
                     agent.found_goal = True
                     self.found_goal = True
-                    reward += 100  # Reward for finding a goal
-                    reward_dict[active_agent].append(100)
+                    reward += 50  # Reward for finding a goal
+                    reward_dict[active_agent].append(50)
 
             newly_detected_count = self._update_detected_cache(agent)
             if newly_detected_count > 0:
@@ -736,6 +754,20 @@ class HeMAC:
             # reward += 0.05 * boundary_dist  # Reward for being farther from the boundary, encourages staying in the center of the search area
 
             # POI tracking reward calculation
+            if self.goals:
+                closest_goal = min(self.goals, key=lambda goal: dist(goal.x, goal.y, agent.x, agent.y))
+                heading_reward = heading_alignment_reward(
+                    agent.x,
+                    agent.y,
+                    agent.orientation,
+                    closest_goal.x,
+                    closest_goal.y,
+                    self.observer_heading_reward_scale,
+                )
+                if heading_reward > 0:
+                    reward += heading_reward
+                    reward_dict[active_agent].append(heading_reward)
+
             for goal in self.goals[:]:
                 goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
                 # Keep the distance penalty on a consistent scale so the
@@ -765,7 +797,7 @@ class HeMAC:
                     # self.global_reward += 180 if self.known_goals else 120
                     self.terminate = True
 
-            # newly_detected_count = self._update_detected_cache(agent)
+            newly_detected_count = self._update_detected_cache(agent)
             # if newly_detected_count > 0:
             #     detection_reward = math.sqrt(math.sqrt(newly_detected_count)) / 20
             #     reward += detection_reward
@@ -948,6 +980,21 @@ class RawEnv(AECEnv, EzPickle):
 def dist(x1, y1, x2, y2):
     """Return distance between two points."""
     return np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+
+
+def heading_alignment_reward(agent_x, agent_y, orientation, goal_x, goal_y, reward_scale):
+    """Return a bounded shaping reward when the observer faces the goal."""
+    if reward_scale <= 0:
+        return 0.0
+
+    dx = goal_x - agent_x
+    dy = goal_y - agent_y
+    if np.isclose(dx, 0.0) and np.isclose(dy, 0.0):
+        return 0.0
+
+    goal_heading = math.atan2(dy, dx)
+    heading_error = math.atan2(math.sin(goal_heading - orientation), math.cos(goal_heading - orientation))
+    return max(math.cos(heading_error), 0.0) * reward_scale
 
 
 def closest_point_in_rect(rect, point):

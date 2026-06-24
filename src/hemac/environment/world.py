@@ -150,6 +150,21 @@ class World(pygame.sprite.Sprite):
         bottom = int(round(self.area.height - grid_y * self.coverage_cell_height))
         return pygame.Rect(left, top, max(right - left, 1), max(bottom - top, 1))
 
+    def _rect_to_world_polygon(self, rect: pygame.Rect) -> Polygon:
+        """Convert a game-space rect into a world-space polygon."""
+        return Polygon(
+            [
+                game_ref_to_world_ref(rect.topleft, self.area),
+                game_ref_to_world_ref(rect.topright, self.area),
+                game_ref_to_world_ref(rect.bottomright, self.area),
+                game_ref_to_world_ref(rect.bottomleft, self.area),
+            ]
+        )
+
+    def _rect_within_search_area(self, rect: pygame.Rect) -> bool:
+        """Return True when the entire obstacle rect is inside the search area."""
+        return bool(self.search_area.covers(self._rect_to_world_polygon(rect)))
+
     def _rebuild_obstacle_map(self) -> None:
         """Refresh the obstacle occupancy grid used by agent observations."""
         self.obstacle_map.fill(0.0)
@@ -167,7 +182,9 @@ class World(pygame.sprite.Sprite):
             w, h = self.randomizer.integers(10, 150), self.randomizer.integers(10, 150)
             obstacle = pygame.Rect(0, 0, w, h)
             valid_coord = False
-            while not valid_coord:
+            tries = 0
+            while not valid_coord and tries < self.spawn_max_tries:
+                tries += 1
                 obstacle.center = world_ref_to_game_ref(
                     sample_point_in_polygon(self.search_area, self.randomizer), self.area
                 )
@@ -179,9 +196,11 @@ class World(pygame.sprite.Sprite):
                     if road_collision:
                         break
                 base_clearance_ok = self._rect_distance(obstacle, self.base) > self.BASE_OBSTACLE_CLEARANCE
-                if base_clearance_ok and not road_collision:
+                inside_search_area = self._rect_within_search_area(obstacle)
+                if base_clearance_ok and not road_collision and inside_search_area:
                     valid_coord = True
-            self.obstacles.append(obstacle)
+            if valid_coord:
+                self.obstacles.append(obstacle)
         self._rebuild_obstacle_map()
 
     def draw(self, screen):
