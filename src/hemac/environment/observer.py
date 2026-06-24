@@ -39,7 +39,7 @@ class Observer(BaseAgent):
         # rad, positive angle counter-clockwise (note that the world referential is the opposite: y-axis down)
         self.orientation = 0
         self.altitude = 100
-        self.steering_angle = np.pi / 10  # angular velocity
+        self.steering_angle = np.pi / 18  # angular velocity
         self.sensor = sensor
         self.sensing_range = sensor.sensing_range
 

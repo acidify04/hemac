@@ -401,7 +401,8 @@ class Drone(BaseAgent):
         elif obs.size > self.base_obs_len:
             obs = obs[: self.base_obs_len]
 
-        vector_obs = np.concatenate((obs, self.build_goal_relative_sector(world))).astype(np.float32, copy=False)
+        goal_relative = self.build_goal_relative_sector(world) if world.goal_known else np.zeros(2, dtype=np.float32)
+        vector_obs = np.concatenate((obs, goal_relative)).astype(np.float32, copy=False)
         return {
             "vector": vector_obs,
             "relative_map": self.build_relative_sector_map(world),

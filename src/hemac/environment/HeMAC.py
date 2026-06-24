@@ -92,8 +92,8 @@ class HeMAC:
         patrol_config: dict = None,
         poi_config: list = None,
         poi_spawn_range: dict = None,
-        observer_heading_reward_scale: float = 0.01,
-        drone_hazard_penalty_scale: float = 0.02,
+        observer_heading_reward_scale: float = 0.03,
+        drone_hazard_penalty_scale: float = 0.2,
     ):
         self.number_of_POIs = len(poi_config) if poi_config and len(poi_config) else 0
         self.goals = []
@@ -632,11 +632,19 @@ class HeMAC:
         """Propagate the current end-of-episode state to every agent."""
         episode_info = self.build_episode_info()
         for ag in self.agents:
-            self.rewards[ag] += self.global_reward
+            self.rewards[ag] += self._global_reward_for_agent(ag)
             # LOGGER.info(f"final reward for {ag}: {self.rewards[ag]}")
             self.terminations[ag] = self.terminate
             self.truncations[ag] = self.truncate
             self.infos[ag] = dict(episode_info)
+
+    def _global_reward_for_agent(self, agent_name):
+        """Split shared success reward by role for clearer credit assignment."""
+        if "observer" in agent_name:
+            return self.global_reward
+        if "drone" in agent_name:
+            return 0.25 * self.global_reward
+        return 0.0
 
     def step(self, action, active_agent):
         """Execute a step."""
@@ -716,12 +724,12 @@ class HeMAC:
                 if goal_dist < agent.sensing_range and not self.found_goal:
                     agent.found_goal = True
                     self.found_goal = True
-                    reward += 50  # Reward for finding a goal
-                    reward_dict[active_agent].append(50)
+                    reward += 20  # Reward for finding a goal
+                    reward_dict[active_agent].append(20)
 
             newly_detected_count = self._update_detected_cache(agent)
             if newly_detected_count > 0:
-                detection_reward = math.sqrt(math.sqrt(newly_detected_count)) / 10
+                detection_reward = math.sqrt(math.sqrt(newly_detected_count)) / 20
                 reward += detection_reward
                 reward_dict[active_agent].append(detection_reward)
 
@@ -829,7 +837,7 @@ class HeMAC:
 
             # Distribution of awards and information to agents
             for i, ag in enumerate(self.agents):
-                self.rewards[ag] += self.global_reward
+                self.rewards[ag] += self._global_reward_for_agent(ag)
                 self.terminations[ag] = self.terminate
                 self.truncations[ag] = self.truncate
                 self.infos[ag] = {

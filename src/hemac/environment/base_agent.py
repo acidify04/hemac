@@ -109,8 +109,9 @@ class BaseAgent(pygame.sprite.Sprite):
 
         self_grid_x, self_grid_y = self._position_to_grid(self.x, self.y, world)
         goal_grid_x, goal_grid_y = self._position_to_grid(world.goal_position[0], world.goal_position[1], world)
-        goal_relative[0] = goal_grid_x - self_grid_x
-        goal_relative[1] = goal_grid_y - self_grid_y
+        scale = max(self.GRID_RESOLUTION - 1, 1)
+        goal_relative[0] = (goal_grid_x - self_grid_x) / scale
+        goal_relative[1] = (goal_grid_y - self_grid_y) / scale
         return goal_relative
 
     def build_relative_agent_positions(self, world, agents) -> np.ndarray:
