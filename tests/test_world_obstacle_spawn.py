@@ -30,3 +30,25 @@ def test_generated_obstacles_stay_away_from_base():
             assert world._rect_distance(obstacle, world.base) > world.BASE_OBSTACLE_CLEARANCE
     finally:
         pygame.quit()
+
+
+def test_generated_obstacles_do_not_overlap_blocked_rects():
+    """Obstacles should avoid explicitly blocked rectangles such as goal positions."""
+    pygame.init()
+    try:
+        world = World(
+            game_area=pygame.Rect(0, 0, 1000, 1000),
+            geofence_area=[],
+            search_area=Polygon(((100, 100), (900, 100), (900, 900), (100, 900))),
+            randomizer=np.random.default_rng(13),
+        )
+        blocked_goal_rect = pygame.Rect(0, 0, 40, 40)
+        blocked_goal_rect.center = (500, 500)
+
+        world.generate_obstacles(10, avoid_rects=[blocked_goal_rect])
+
+        assert world.obstacles
+        for obstacle in world.obstacles:
+            assert not obstacle.colliderect(blocked_goal_rect)
+    finally:
+        pygame.quit()

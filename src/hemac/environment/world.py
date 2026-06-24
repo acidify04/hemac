@@ -176,8 +176,9 @@ class World(pygame.sprite.Sprite):
                 if any(obstacle.colliderect(cell_rect) for obstacle in self.obstacles):
                     self.obstacle_map[grid_y, grid_x] = 1.0
 
-    def generate_obstacles(self, n_obstacles):
+    def generate_obstacles(self, n_obstacles, avoid_rects=None):
         """Generate random obstacles."""
+        blocked_rects = [rect for rect in (avoid_rects or []) if rect is not None]
         for i in range(n_obstacles):
             w, h = self.randomizer.integers(10, 150), self.randomizer.integers(10, 150)
             obstacle = pygame.Rect(0, 0, w, h)
@@ -197,7 +198,8 @@ class World(pygame.sprite.Sprite):
                         break
                 base_clearance_ok = self._rect_distance(obstacle, self.base) > self.BASE_OBSTACLE_CLEARANCE
                 inside_search_area = self._rect_within_search_area(obstacle)
-                if base_clearance_ok and not road_collision and inside_search_area:
+                overlaps_blocked_rect = any(obstacle.colliderect(blocked_rect) for blocked_rect in blocked_rects)
+                if base_clearance_ok and not road_collision and inside_search_area and not overlaps_blocked_rect:
                     valid_coord = True
             if valid_coord:
                 self.obstacles.append(obstacle)

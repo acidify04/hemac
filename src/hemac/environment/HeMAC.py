@@ -383,7 +383,8 @@ class HeMAC:
         # spawn obstacles
         if self.max_obstacles > 0:  # TODO: reset all world components inside world reset() (obstacles, etc.)
             num_obstacles = self.randomizer.integers(self.min_obstacles, self.max_obstacles)
-            self.world.generate_obstacles(num_obstacles)
+            goal_rects = [goal.rect for goal in self.goals if goal.rect is not None]
+            self.world.generate_obstacles(num_obstacles, avoid_rects=goal_rects)
 
         # reset agents to initial state
         observer_spawned = False
