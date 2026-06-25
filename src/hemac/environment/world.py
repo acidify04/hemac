@@ -55,6 +55,7 @@ class World(pygame.sprite.Sprite):
         self.coverage_cell_height = self.area.height / self.coverage_grid_size
         self.coverage_cell_area = self.coverage_cell_width * self.coverage_cell_height
         self.detected = set()
+        self.detected_mask = np.zeros((self.area.height, self.area.width), dtype=bool)
         self.coverage_counts = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.int32)
         self.coverage_map = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
         self.search_mask = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
@@ -90,6 +91,7 @@ class World(pygame.sprite.Sprite):
         self.goal_known = False
         self.goal_position = (poi_list[0].x, poi_list[0].y) if poi_list else None
         self.detected.clear()
+        self.detected_mask.fill(False)
         self.coverage_counts.fill(0)
         self.coverage_map.fill(0.0)
         self.obstacle_map.fill(0.0)
@@ -107,8 +109,50 @@ class World(pygame.sprite.Sprite):
         #             break
         # TODO: re spawn base, roads and obstacles here?
 
-    def register_detected_points(self, points):
+    def register_detected_points(self, points, *, return_new_points: bool = False):
         """Update the cached coverage map with newly detected coordinates."""
+        if isinstance(points, np.ndarray):
+            points_array = np.asarray(points, dtype=np.int32).reshape(-1, 2)
+            if points_array.size == 0:
+                return points_array if return_new_points else len(self.detected)
+
+            x = points_array[:, 0]
+            y = points_array[:, 1]
+            valid = (0 <= x) & (x < self.area.width) & (0 <= y) & (y < self.area.height)
+            if not np.any(valid):
+                empty = np.empty((0, 2), dtype=np.int32)
+                return empty if return_new_points else len(self.detected)
+
+            valid_points = points_array[valid]
+            if len(valid_points) > 1:
+                valid_points = np.unique(valid_points, axis=0)
+            valid_x = valid_points[:, 0]
+            valid_y = valid_points[:, 1]
+            unseen = ~self.detected_mask[valid_y, valid_x]
+            if not np.any(unseen):
+                empty = np.empty((0, 2), dtype=np.int32)
+                return empty if return_new_points else len(self.detected)
+
+            new_points = valid_points[unseen]
+            new_x = new_points[:, 0]
+            new_y = new_points[:, 1]
+            self.detected_mask[new_y, new_x] = True
+            self.detected.update(map(tuple, new_points.tolist()))
+
+            grid_x = np.minimum((new_x / self.coverage_cell_width).astype(np.int32), self.coverage_grid_size - 1)
+            grid_y = np.minimum((new_y / self.coverage_cell_height).astype(np.int32), self.coverage_grid_size - 1)
+            np.add.at(self.coverage_counts, (grid_y, grid_x), 1)
+
+            touched_cells = np.unique(np.column_stack((grid_y, grid_x)), axis=0)
+            touched_y = touched_cells[:, 0]
+            touched_x = touched_cells[:, 1]
+            self.coverage_map[touched_y, touched_x] = np.minimum(
+                self.coverage_counts[touched_y, touched_x] / self.coverage_cell_area,
+                1.0,
+            )
+
+            return new_points if return_new_points else len(self.detected)
+
         cell_updates = {}
         for x, y in points:
             point = (int(x), int(y))
@@ -118,6 +162,7 @@ class World(pygame.sprite.Sprite):
                 continue
 
             self.detected.add(point)
+            self.detected_mask[point[1], point[0]] = True
             grid_x = min(int(point[0] / self.coverage_cell_width), self.coverage_grid_size - 1)
             grid_y = min(int(point[1] / self.coverage_cell_height), self.coverage_grid_size - 1)
             key = (grid_y, grid_x)

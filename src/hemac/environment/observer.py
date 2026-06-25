@@ -85,7 +85,7 @@ class Observer(BaseAgent):
         self.goal_estimation = None
         self.orientation = 0.0
         self.detected = set()
-        self.latest_detected = set()
+        self.latest_detected = np.empty((0, 2), dtype=np.int32)
         self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
 
     def sync_pose_state(self):

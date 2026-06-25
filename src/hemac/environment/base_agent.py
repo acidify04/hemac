@@ -1,6 +1,5 @@
 """Base agent module."""
 from functools import lru_cache
-from math import isqrt
 
 import numpy as np
 import pygame
@@ -16,29 +15,24 @@ class BaseAgent(pygame.sprite.Sprite):
     def __init__(self):
         """Overwrite base class constructor."""
         super().__init__()
-        self.latest_detected = set()
+        self.latest_detected = np.empty((0, 2), dtype=np.int32)
 
     @staticmethod
     @lru_cache(maxsize=None)
-    def _detected_offsets(radius: int) -> tuple[tuple[int, int], ...]:
+    def _detected_offsets(radius: int) -> np.ndarray:
         """Cache integer offsets inside a circular sensing range."""
         radius = max(0, int(radius))
-        radius_sq = radius * radius
-        offsets = []
-        for dx in range(-radius, radius + 1):
-            max_dy = isqrt(radius_sq - dx * dx)
-            offsets.extend((dx, dy) for dy in range(-max_dy, max_dy + 1))
-        return tuple(offsets)
+        coords = np.arange(-radius, radius + 1, dtype=np.int32)
+        grid_x, grid_y = np.meshgrid(coords, coords, indexing="xy")
+        mask = (grid_x * grid_x) + (grid_y * grid_y) <= radius * radius
+        offsets = np.column_stack((grid_x[mask], grid_y[mask])).astype(np.int32, copy=False)
+        offsets.setflags(write=False)
+        return offsets
 
     def update_detected_area(self, sensing_range: float) -> None:
         """Mark all integer coordinates inside the sensing range as detected."""
-        center_x = int(self.x)
-        center_y = int(self.y)
-        self.latest_detected = {
-            (center_x + dx, center_y + dy)
-            for dx, dy in self._detected_offsets(sensing_range)
-        }
-        self.detected.update(self.latest_detected)
+        center = np.array((int(self.x), int(self.y)), dtype=np.int32)
+        self.latest_detected = self._detected_offsets(sensing_range) + center
 
     def _position_to_grid(self, x: float, y: float, world) -> tuple[int, int]:
         """Convert world coordinates to a coverage-grid sector."""

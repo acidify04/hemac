@@ -2,6 +2,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
+import sys
 
 import numpy as np
 import ray
@@ -11,6 +12,10 @@ from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 import wandb
 from PIL import Image
+
+PROJECT_SRC = Path(__file__).resolve().parents[1]
+if str(PROJECT_SRC) not in sys.path:
+    sys.path.insert(0, str(PROJECT_SRC))
 
 from hemac import HeMAC_v0
 from hemac.helpers.logger import LOGGER
@@ -308,7 +313,9 @@ def main():
         .multi_agent(policies=policies, policy_mapping_fn=policy_mapping_fn)
         .resources(num_gpus=1)
         .training(
-            train_batch_size=8000, 
+            train_batch_size=8000,
+            minibatch_size=512,
+            num_epochs=10,
             lr_schedule=[
                 [0, 3e-4],           # [수정] 초기 학습률 증가 (기존 5e-5)
                 [500 * 8000, 1e-4],  # [수정] 중간 학습률 조정

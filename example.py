@@ -4,6 +4,12 @@ from datetime import datetime
 from pathlib import Path
 import random
 import math
+import sys
+
+PROJECT_SRC = Path(__file__).resolve().parent / "src"
+if str(PROJECT_SRC) not in sys.path:
+    sys.path.insert(0, str(PROJECT_SRC))
+
 import ray
 from ray.rllib.algorithms.algorithm import Algorithm
 from ray.tune.registry import register_env

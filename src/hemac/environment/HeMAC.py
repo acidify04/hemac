@@ -524,11 +524,16 @@ class HeMAC:
     def _update_detected_cache(self, agent):
         """Merge newly detected coordinates into the shared coverage cache."""
         latest_points = getattr(agent, "latest_detected", agent.detected)
-        new_points = latest_points.difference(self.detected)
+        if isinstance(latest_points, np.ndarray):
+            new_points = self.world.register_detected_points(latest_points, return_new_points=True)
+            if len(new_points) == 0:
+                return new_points
+            return new_points
+
+        new_points = latest_points.difference(self.world.detected)
         if not new_points:
             return set()
 
-        self.detected.update(new_points)
         self.world.register_detected_points(new_points)
         return new_points
     
@@ -732,7 +737,7 @@ class HeMAC:
 
             # proximity-weighted detection reward: closer detections to any goal give more reward
             newly_detected_points = self._update_detected_cache(agent)
-            if newly_detected_points:
+            if len(newly_detected_points) > 0:
                 total_detection_reward = 0.0
                 for p in newly_detected_points:
                     try:
@@ -751,7 +756,7 @@ class HeMAC:
                 reward_dict[active_agent].append(total_detection_reward)
 
         elif "observer" in active_agent:
-            reward -= 0.05  # step penalty
+            reward -= 0.02  # step penalty
             reward_dict[active_agent].append(-0.05)
 
             if not self.search_area.covers(Point((agent.x, agent.y))):
@@ -803,14 +808,10 @@ class HeMAC:
                     progress = self.old_dist_to_goal - goal_dist
 
                     if progress > 0:
-                        # 0.05(스텝 패널티)를 상쇄하고도 남을 만큼 가중치를 줍니다.
-                        # 예: 1스텝에 2만큼 이동했다면 2 * 0.05 = +0.10 보상
                         progress_reward = progress * 0.05
                         reward += progress_reward
                         reward_dict[active_agent].append(progress_reward)
 
-                        # (선택) 전진할 때 방향(Heading)도 맞추면 추가 보너스
-                        # 전진하지 않고 제자리에서 돌기만 할 때는 헤딩 보상을 주지 않습니다.
                         heading_reward = heading_alignment_reward(
                             agent.x, agent.y, agent.orientation, goal.x, goal.y, self.observer_heading_reward_scale
                         )
