@@ -35,6 +35,7 @@ GOAL_CONFIG = {
     "speed": 0,
     "spawn_mode": "random",
     "boundary_margin": 140,
+    "spawn_quadrant": "bottom_right",
 }
 
 NUM_EVAL_SEEDS = 10
@@ -580,7 +581,7 @@ def run_trained_model_simulation(playback_mode="step"):
         train_env_config = {
             "n_observers": 1,
             "observer_speed": 5, 
-            "n_drones": 3,
+            "n_drones": 0,
             "n_provisioners": 0,
             "known_goals": False,
             "max_cycles": 500,
@@ -602,7 +603,7 @@ def run_trained_model_simulation(playback_mode="step"):
     # 2. 저장된 체크포인트로부터 알고리즘(모델) 로드
     # 저장된 폴더 경로를 지정합니다. (예: ./hemac_checkpoints 하위의 실제 체크포인트 폴더)
     # checkpoint_path = os.path.abspath(find_latest_checkpoint())
-    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_00100")
+    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_00600")
     print(f"[{checkpoint_path}] 경로에서 학습된 모델을 불러오는 중...")
     algo = Algorithm.from_checkpoint(checkpoint_path)
 
@@ -613,7 +614,7 @@ def run_trained_model_simulation(playback_mode="step"):
         "observer_speed": 5, 
 
         # 무인기 3대 (빠른 속도)
-        "n_drones": 3,
+        "n_drones": 0,
         "n_provisioners": 0,
         "known_goals": False,
         "max_cycles": 500,
@@ -624,8 +625,8 @@ def run_trained_model_simulation(playback_mode="step"):
         },
         
         # 맵 및 목적지 설정
-        "min_obstacles": 5,
-        "max_obstacles": 7,
+        "min_obstacles": 7,
+        "max_obstacles": 10,
         "poi_config": [GOAL_CONFIG],
         
         # [핵심] 화면 시각화 활성화

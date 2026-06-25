@@ -5,7 +5,7 @@ import pygame
 from pymap3d import geodetic2enu
 from shapely import Point
 
-from hemac.helpers.helper import game_ref_to_world_ref, sample_point_in_rect, world_ref_to_game_ref
+from hemac.helpers.helper import game_ref_to_world_ref, world_ref_to_game_ref
 
 
 class PointOfInterest:
@@ -124,9 +124,12 @@ class PointOfInterest:
             attempts += 1
 
             if self.config.get("spawn_mode") == "random":
-                pos = sample_point_in_rect(self.area, self.randomizer)
-                # pos[0] = self.randomizer.integers(min_x, max_x)
-                # pos[1] = self.randomizer.integers(min_y, max_y)
+                min_x, max_x = self.spawn_range["x_range"]
+                min_y, max_y = self.spawn_range["y_range"]
+                pos = (
+                    float(self.randomizer.uniform(min_x, max_x)),
+                    float(self.randomizer.uniform(min_y, max_y)),
+                )
             elif self.config.get("spawn_mode") == "fixed" and len(self.config.get("starting_pos", [])):
                 if self.config.get("starting_pos_coordinates_type") == "geo":
                     # we convert geo to cardinal position

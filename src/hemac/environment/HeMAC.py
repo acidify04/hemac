@@ -92,10 +92,10 @@ class HeMAC:
         patrol_config: dict = None,
         poi_config: list = None,
         poi_spawn_range: dict = None,
-        observer_heading_reward_scale: float = 0.03,
+        observer_heading_reward_scale: float = 0.07,
         drone_hazard_penalty_scale: float = 0.2,
         detection_distance_scale: float = 200.0,
-        detection_per_point_base: float = 0.01,
+        detection_per_point_base: float = 0.5,
         detection_max_total: float = 0.5,
     ):
         self.number_of_POIs = len(poi_config) if poi_config and len(poi_config) else 0
@@ -230,6 +230,14 @@ class HeMAC:
         if poi_spawn_range is None:
             minx, miny, maxx, maxy = self.search_area.bounds
             poi_spawn_range = {"x_range": (minx, maxx), "y_range": (miny, maxy)}
+            first_poi_config = next((cfg for cfg in (poi_config or []) if cfg), None)
+            spawn_quadrant = first_poi_config.get("spawn_quadrant") if first_poi_config else None
+            if spawn_quadrant == "bottom_right":
+                midx = (minx + maxx) / 2.0
+                midy = (miny + maxy) / 2.0
+                # World Y grows upward while the rendered map grows downward, so
+                # the screen's lower half maps to the lower world-Y range.
+                poi_spawn_range = {"x_range": (midx, maxx), "y_range": (miny, midy)}
         self.poi_spawn_range = poi_spawn_range
         for i in range(self.number_of_POIs):
             _poi_config = poi_config[i] if poi_config and poi_config[i] else None
@@ -771,38 +779,48 @@ class HeMAC:
             # reward += 0.05 * boundary_dist  # Reward for being farther from the boundary, encourages staying in the center of the search area
 
             # POI tracking reward calculation
-            if self.goals:
-                closest_goal = min(self.goals, key=lambda goal: dist(goal.x, goal.y, agent.x, agent.y))
-                heading_reward = heading_alignment_reward(
-                    agent.x,
-                    agent.y,
-                    agent.orientation,
-                    closest_goal.x,
-                    closest_goal.y,
-                    self.observer_heading_reward_scale,
-                )
-                if heading_reward > 0:
-                    reward += heading_reward
-                    reward_dict[active_agent].append(heading_reward)
+            # if self.goals:
+            #     closest_goal = min(self.goals, key=lambda goal: dist(goal.x, goal.y, agent.x, agent.y))
+            #     heading_reward = heading_alignment_reward(
+            #         agent.x,
+            #         agent.y,
+            #         agent.orientation,
+            #         closest_goal.x,
+            #         closest_goal.y,
+            #         self.observer_heading_reward_scale,
+            #     )
+            #     if heading_reward > 0:
+            #         reward += heading_reward
+            #         reward_dict[active_agent].append(heading_reward)
 
+            current_goal_dist = None
             for goal in self.goals[:]:
                 goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
-                # Keep the distance penalty on a consistent scale so the
-                # observer does not suddenly rush the boundary after a goal is found.
-                # dist_reward = math.sqrt(math.sqrt(goal_dist)) / 10
-                # dist_reward = 50 / (goal_dist + 1)  # Reward inversely proportional to distance to the goal
-                # dist_reward = 0.5 * (math.exp(-goal_dist / 400) - 1)
+                if current_goal_dist is None or goal_dist < current_goal_dist:
+                    current_goal_dist = goal_dist
+                if self.old_dist_to_goal is not None:
+                    # 이전 스텝보다 가까워진 거리 계산
+                    progress = self.old_dist_to_goal - goal_dist
+
+                    if progress > 0:
+                        # 0.05(스텝 패널티)를 상쇄하고도 남을 만큼 가중치를 줍니다.
+                        # 예: 1스텝에 2만큼 이동했다면 2 * 0.05 = +0.10 보상
+                        progress_reward = progress * 0.05
+                        reward += progress_reward
+                        reward_dict[active_agent].append(progress_reward)
+
+                        # (선택) 전진할 때 방향(Heading)도 맞추면 추가 보너스
+                        # 전진하지 않고 제자리에서 돌기만 할 때는 헤딩 보상을 주지 않습니다.
+                        heading_reward = heading_alignment_reward(
+                            agent.x, agent.y, agent.orientation, goal.x, goal.y, self.observer_heading_reward_scale
+                        )
+                        if heading_reward > 0:
+                            reward += heading_reward
+                            reward_dict[active_agent].append(heading_reward)
+
+                # dist_reward = -0.005 * goal_dist
                 # reward_dict[active_agent].append(dist_reward)
                 # reward += dist_reward
-                # if self.old_dist_to_goal is not None:
-                #     progress_reward = max(self.old_dist_to_goal - goal_dist, 0.0) * 0.005 # 이전 step보다 goal까지의 거리가 가까워지면 reward를 부여
-                #     if progress_reward > 0:
-                #         reward += progress_reward
-                #         reward_dict[active_agent].append(progress_reward)
-                # self.old_dist_to_goal = goal_dist
-                dist_reward = -0.0005 * goal_dist
-                reward_dict[active_agent].append(dist_reward)
-                reward += dist_reward
                 if goal_dist < agent.sensing_range:  # goal까지의 거리가 sensing range보다 가까워지면 발견
                     agent.found_goal = True
                     self.found_goal = True
@@ -816,6 +834,9 @@ class HeMAC:
                     self.mission_success = True
                     # self.global_reward += 180 if self.known_goals else 120
                     self.terminate = True
+
+            # Preserve the closest-goal distance for the next observer step.
+            self.old_dist_to_goal = current_goal_dist
 
             newly_detected_count = self._update_detected_cache(agent)
             # if newly_detected_count > 0:

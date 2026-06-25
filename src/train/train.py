@@ -32,13 +32,14 @@ GOAL_CONFIG = {
     "speed": 0,
     "spawn_mode": "random",
     "boundary_margin": 140,
+    "spawn_quadrant": "bottom_right",
 }
 
 VIDEO_LOG_INTERVAL = 100
 VIDEO_FPS = 12
 VIDEO_SEED = 0
 VIDEO_OUTPUT_DIR = Path("./wandb_media")
-PPO_ENTROPY_COEFF = 0.0005
+PPO_ENTROPY_COEFF = 0.001
 NUM_ENV_RUNNERS = 12
 
 
@@ -47,7 +48,7 @@ def build_env_config(render_mode=None):
     env_config = {
         "n_observers": 1,
         "observer_speed": 5,
-        "n_drones": 3,
+        "n_drones": 0,
         "n_provisioners": 0,
         "known_goals": False,
         "max_cycles": 500,
@@ -56,8 +57,8 @@ def build_env_config(render_mode=None):
             "drone_max_thrust": 8,
             "drones_starting_pos": DRONE_START_POSITIONS,
         },
-        "min_obstacles": 5,
-        "max_obstacles": 7,
+        "min_obstacles": 7,
+        "max_obstacles": 10,
         "poi_config": [GOAL_CONFIG],
     }
     if render_mode is not None:
@@ -285,12 +286,12 @@ def main():
             act_space["observer_0"],
             {"model": observer_policy_model_config()},
         ),
-        "drone_policy": (
-            None,
-            obs_space["drone_0"],
-            act_space["drone_0"],
-            {"model": drone_policy_model_config()},
-        ),
+        # "drone_policy": (
+        #     None,
+        #     obs_space["drone_0"],
+        #     act_space["drone_0"],
+        #     {"model": drone_policy_model_config()},
+        # ),
     }
 
     def policy_mapping_fn(agent_id, episode, **kwargs):
@@ -309,11 +310,11 @@ def main():
         .training(
             train_batch_size=8000, 
             lr_schedule=[
-                [0, 5e-5],
-                [500 * 8000, 2.5e-5],
-                [10000 * 8000, 5e-6]
+                [0, 3e-4],           # [수정] 초기 학습률 증가 (기존 5e-5)
+                [500 * 8000, 1e-4],  # [수정] 중간 학습률 조정
+                [10000 * 8000, 1e-5]
             ],
-            gamma=0.99, 
+            gamma=0.995, 
             grad_clip=1.0, 
             clip_param=0.2,
             entropy_coeff=PPO_ENTROPY_COEFF,

@@ -17,7 +17,14 @@ To visualize and test the trained model, use this command:
 (Please make sure if the checkpoint is correct.)
 ```bash
 cd hemac
-python example.py
+python example.py --playback auto
+```
+
+To visualize step by step with pressing space bar, use this command:
+(The default setting without `--playback` option is `step`)
+```bash
+cd hemac
+python example.py --playback step
 ```
 
 ---
