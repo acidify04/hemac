@@ -183,15 +183,23 @@ class ObservationDebugWindow:
             self.window = None
 
 
-def _extract_observation_debug(observation):
+def _extract_observation_debug(agent_id, observation):
     """Split an observation into base features and sector-based features."""
     if isinstance(observation, dict):
         vector_obs = np.asarray(observation.get("vector", []), dtype=np.float32).reshape(-1)
         relative_map = np.asarray(observation.get("relative_map", []), dtype=np.float32)
         goal_relative_sector = None
-        if vector_obs.size >= 2:
-            goal_relative_sector = tuple(int(v) for v in vector_obs[-2:])
+        goal_relative_is_normalized = False
+        agent_id_norm = None
+        if "drone" in agent_id and vector_obs.size >= 3:
+            goal_relative_sector = tuple(float(v) for v in vector_obs[-3:-1])
+            agent_id_norm = float(vector_obs[-1])
+            vector_obs = vector_obs[:-3]
+            goal_relative_is_normalized = True
+        elif vector_obs.size >= 2:
+            goal_relative_sector = tuple(float(v) for v in vector_obs[-2:])
             vector_obs = vector_obs[:-2]
+            goal_relative_is_normalized = True
         return {
             "mode": "relative_map",
             "base_obs": vector_obs,
@@ -199,6 +207,8 @@ def _extract_observation_debug(observation):
             "valid_mask": relative_map[:, :, 1] if relative_map.size else None,
             "obstacle_map": relative_map[:, :, 2] if relative_map.ndim == 3 and relative_map.shape[-1] > 2 else None,
             "goal_relative_sector": goal_relative_sector,
+            "goal_relative_is_normalized": goal_relative_is_normalized,
+            "agent_id_norm": agent_id_norm,
         }
 
     obs = np.asarray(observation, dtype=np.float32).reshape(-1)
@@ -209,6 +219,7 @@ def _extract_observation_debug(observation):
             "coverage_map": None,
             "self_sector": None,
             "goal_relative_sector": None,
+            "goal_relative_is_normalized": False,
         }
 
     base_obs = obs[:-SECTOR_FEATURE_COUNT]
@@ -221,7 +232,22 @@ def _extract_observation_debug(observation):
         "coverage_map": coverage_map,
         "self_sector": tuple(int(v) for v in sector_obs[-4:-2]),
         "goal_relative_sector": tuple(int(v) for v in sector_obs[-2:]),
+        "goal_relative_is_normalized": False,
     }
+
+
+def _goal_relative_to_sector_offset(goal_relative, is_normalized):
+    """Convert a stored goal-relative feature into integer sector offsets."""
+    if goal_relative is None:
+        return None
+    if not is_normalized:
+        return tuple(int(v) for v in goal_relative)
+
+    scale = max(OBS_GRID_SIZE - 1, 1)
+    return (
+        int(np.clip(np.rint(goal_relative[0] * scale), -scale, scale)),
+        int(np.clip(np.rint(goal_relative[1] * scale), -scale, scale)),
+    )
 
 
 def _base_observation_labels(agent_id, base_obs):
@@ -265,13 +291,18 @@ def draw_observation_panel(
     is_active=False,
 ):
     """Draw one agent observation panel."""
-    obs_debug = _extract_observation_debug(observation)
+    obs_debug = _extract_observation_debug(agent_id, observation)
     base_obs = obs_debug["base_obs"]
     coverage_map = obs_debug["coverage_map"]
     goal_relative_sector = obs_debug.get("goal_relative_sector")
+    goal_relative_offset = _goal_relative_to_sector_offset(
+        goal_relative_sector,
+        obs_debug.get("goal_relative_is_normalized", False),
+    )
     self_sector = obs_debug.get("self_sector")
     valid_mask = obs_debug.get("valid_mask")
     obstacle_map = obs_debug.get("obstacle_map")
+    agent_id_norm = obs_debug.get("agent_id_norm")
     is_relative_map = obs_debug["mode"] == "relative_map"
     panel_width = panel_rect.width
     panel_height = panel_rect.height
@@ -342,9 +373,9 @@ def draw_observation_panel(
             marker_x = heatmap_x + self_map_x * heatmap_cell + heatmap_cell // 2
             marker_y = heatmap_y + (map_size - 1 - self_map_y) * heatmap_cell + heatmap_cell // 2
             pygame.draw.circle(panel, (255, 255, 255), (marker_x, marker_y), max(heatmap_cell // 3, 3), width=2)
-            if goal_relative_sector is not None:
-                goal_map_x = self_map_x + goal_relative_sector[0]
-                goal_map_y = self_map_y + goal_relative_sector[1]
+            if goal_relative_offset is not None:
+                goal_map_x = self_map_x + goal_relative_offset[0]
+                goal_map_y = self_map_y + goal_relative_offset[1]
                 if 0 <= goal_map_x < map_size and 0 <= goal_map_y < map_size:
                     goal_x = heatmap_x + goal_map_x * heatmap_cell + heatmap_cell // 2
                     goal_y = heatmap_y + (map_size - 1 - goal_map_y) * heatmap_cell + heatmap_cell // 2
@@ -356,10 +387,10 @@ def draw_observation_panel(
                 marker_y = heatmap_y + (map_size - 1 - self_sector[1]) * heatmap_cell + heatmap_cell // 2
                 pygame.draw.circle(panel, (255, 255, 255), (marker_x, marker_y), max(heatmap_cell // 3, 3), width=2)
 
-            if self_sector is not None and goal_relative_sector is not None:
+            if self_sector is not None and goal_relative_offset is not None:
                 goal_sector = (
-                    self_sector[0] + goal_relative_sector[0],
-                    self_sector[1] + goal_relative_sector[1],
+                    self_sector[0] + goal_relative_offset[0],
+                    self_sector[1] + goal_relative_offset[1],
                 )
                 if 0 <= goal_sector[0] < map_size and 0 <= goal_sector[1] < map_size:
                     goal_x = heatmap_x + goal_sector[0] * heatmap_cell + heatmap_cell // 2
@@ -374,9 +405,10 @@ def draw_observation_panel(
         panel.blit(tiny_font.render("obstacle: red cell", True, (210, 220, 230)), (heatmap_x, heatmap_y + heatmap_size + 28))
 
     labels = _base_observation_labels(agent_id, base_obs)
+    label_start_y = 100 if agent_id_norm is not None else 88
     for idx, (label, value) in enumerate(zip(labels, base_obs)):
         text = tiny_font.render(f"{label}: {float(value): .3f}", True, (220, 228, 236))
-        panel.blit(text, (heatmap_x + heatmap_size + 14, 88 + idx * 12))
+        panel.blit(text, (heatmap_x + heatmap_size + 14, label_start_y + idx * 12))
 
     if self_sector is not None:
         panel.blit(
@@ -384,9 +416,21 @@ def draw_observation_panel(
             (heatmap_x + heatmap_size + 14, 60),
         )
     if goal_relative_sector is not None:
+        if obs_debug.get("goal_relative_is_normalized", False):
+            goal_text = (
+                f"goal rel: ({goal_relative_sector[0]: .3f}, {goal_relative_sector[1]: .3f})"
+                f" -> {goal_relative_offset}"
+            )
+        else:
+            goal_text = f"goal rel: {goal_relative_sector}"
         panel.blit(
-            tiny_font.render(f"goal rel: {goal_relative_sector}", True, (255, 180, 180)),
+            tiny_font.render(goal_text, True, (255, 180, 180)),
             (heatmap_x + heatmap_size + 14, 72),
+        )
+    if agent_id_norm is not None:
+        panel.blit(
+            tiny_font.render(f"id norm: {agent_id_norm: .3f}", True, (220, 228, 236)),
+            (heatmap_x + heatmap_size + 14, 84),
         )
 
     border_color = (255, 220, 120) if is_active else (90, 100, 116)
@@ -609,7 +653,7 @@ def run_trained_model_simulation(playback_mode="step"):
     # 2. 저장된 체크포인트로부터 알고리즘(모델) 로드
     # 저장된 폴더 경로를 지정합니다. (예: ./hemac_checkpoints 하위의 실제 체크포인트 폴더)
     # checkpoint_path = os.path.abspath(find_latest_checkpoint())
-    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_00600")
+    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_10000")
     print(f"[{checkpoint_path}] 경로에서 학습된 모델을 불러오는 중...")
     algo = Algorithm.from_checkpoint(checkpoint_path)
 

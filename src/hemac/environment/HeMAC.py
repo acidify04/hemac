@@ -525,7 +525,11 @@ class HeMAC:
         """Merge newly detected coordinates into the shared coverage cache."""
         latest_points = getattr(agent, "latest_detected", agent.detected)
         if isinstance(latest_points, np.ndarray):
-            new_points = self.world.register_detected_points(latest_points, return_new_points=True)
+            new_points = self.world.register_detected_points(
+                latest_points,
+                return_new_points=True,
+                assume_unique=True,
+            )
             if len(new_points) == 0:
                 return new_points
             return new_points
@@ -545,7 +549,7 @@ class HeMAC:
         for grid_x in range(self.world.coverage_grid_size):
             for grid_y in range(self.world.coverage_grid_size):
                 world_center = ((grid_x + 0.5) * cell_width, (grid_y + 0.5) * cell_height)
-                if not self.search_area.covers(Point(world_center)):
+                if not self.world.point_in_search_area(*world_center):
                     continue
                 left = int(round(grid_x * cell_width))
                 right = int(round((grid_x + 1) * cell_width))
@@ -634,9 +638,11 @@ class HeMAC:
             "goal_found": bool(self.found_goal),
             # "goal_known": bool(self.world.goal_known),
             "fatal_crash": bool(self.collided),
-            # "timeout": bool(self.truncate and not self.terminate),
+            "timeout": bool(self.truncate and not self.terminate),
             "drone_crash": bool(self.drone_crash),
             "observer_crash": bool(self.observer_crash),
+            "drone_crash_to_obstacle": bool(self.drone_crash_to_obstacle),
+            "observer_crash_to_obstacle": bool(self.observer_crash_to_obstacle),
             # "min_drone_dist": float(self.min_drone_dist),
             # "min_obs_dist": float(self.min_obs_dist),
             "explored_area": total_explored,
@@ -649,15 +655,19 @@ class HeMAC:
             "success_after_goal_found": bool(self.mission_success),
         }
 
-    def finalize_episode(self):
-        """Propagate the current end-of-episode state to every agent."""
+    def _propagate_episode_state(self, *, include_global_reward: bool):
+        """Push current rewards, terminations, and infos to all agents."""
         episode_info = self.build_episode_info()
         for ag in self.agents:
-            self.rewards[ag] += self._global_reward_for_agent(ag)
-            # LOGGER.info(f"final reward for {ag}: {self.rewards[ag]}")
+            if include_global_reward:
+                self.rewards[ag] += self._global_reward_for_agent(ag)
             self.terminations[ag] = self.terminate
             self.truncations[ag] = self.truncate
             self.infos[ag] = dict(episode_info)
+
+    def finalize_episode(self):
+        """Propagate the current end-of-episode state to every agent."""
+        self._propagate_episode_state(include_global_reward=True)
 
     def _global_reward_for_agent(self, agent_name):
         """Split shared success reward by role for clearer credit assignment."""
@@ -691,7 +701,7 @@ class HeMAC:
             reward -= 0.05  # Step penalty
             reward_dict[active_agent].append(-0.05)
 
-            if not self.search_area.covers(Point((agent.x, agent.y))): # 맵 밖으로 나간 경우
+            if not self.world.point_in_search_area(agent.x, agent.y):  # 맵 밖으로 나간 경우
                 self.collided = True
                 self.drone_crash = True
                 self.terminate = True
@@ -700,18 +710,19 @@ class HeMAC:
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
                     LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
             else:
-                for obstacle in self.world.obstacles:
-                    if agent.process_collision(obstacle, 0):
-                        self.collided = True
-                        self.drone_crash = True
-                        self.drone_crash_to_obstacle = True
-                        self.terminate = True
-                        reward -= 300  # Penalty for collision with an obstacle
-                        reward_dict[active_agent].append(-300)
-                        if self.render_mode == "human" or self.render_mode == "rgb_array":
-                            LOGGER.info(
-                                f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
-                            )
+                obstacle_idx = agent.rect.collidelist(self.world.obstacles)
+                if obstacle_idx != -1:
+                    obstacle = self.world.obstacles[obstacle_idx]
+                    self.collided = True
+                    self.drone_crash = True
+                    self.drone_crash_to_obstacle = True
+                    self.terminate = True
+                    reward -= 300  # Penalty for collision with an obstacle
+                    reward_dict[active_agent].append(-300)
+                    if self.render_mode == "human" or self.render_mode == "rgb_array":
+                        LOGGER.info(
+                            f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
+                        )
 
             safe_radius = 75.0 # drone sensing range로 설정
             drone_proximity_penalty = 0.0
@@ -756,10 +767,10 @@ class HeMAC:
                 reward_dict[active_agent].append(total_detection_reward)
 
         elif "observer" in active_agent:
-            reward -= 0.02  # step penalty
+            reward -= 0.05  # step penalty
             reward_dict[active_agent].append(-0.05)
 
-            if not self.search_area.covers(Point((agent.x, agent.y))):
+            if not self.world.point_in_search_area(agent.x, agent.y):
                 self.collided = True
                 self.observer_crash = True
                 self.terminate = True
@@ -768,18 +779,19 @@ class HeMAC:
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
                     LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
             else:
-                for obstacle in self.world.obstacles:
-                    if agent.process_collision(obstacle, 0):
-                        self.collided = True
-                        self.observer_crash = True
-                        self.observer_crash_to_obstacle = True
-                        self.terminate = True
-                        reward -= 300  # Penalty for collision with an obstacle
-                        reward_dict[active_agent].append(-300)
-                        if self.render_mode == "human" or self.render_mode == "rgb_array":
-                            LOGGER.info(
-                                f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
-                            )
+                obstacle_idx = agent.rect.collidelist(self.world.obstacles)
+                if obstacle_idx != -1:
+                    obstacle = self.world.obstacles[obstacle_idx]
+                    self.collided = True
+                    self.observer_crash = True
+                    self.observer_crash_to_obstacle = True
+                    self.terminate = True
+                    reward -= 300  # Penalty for collision with an obstacle
+                    reward_dict[active_agent].append(-300)
+                    if self.render_mode == "human" or self.render_mode == "rgb_array":
+                        LOGGER.info(
+                            f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
+                        )
             # boundary_dist = self.search_area.boundary.distance(Point((agent.x, agent.y)))
             # reward += 0.05 * boundary_dist  # Reward for being farther from the boundary, encourages staying in the center of the search area
 
@@ -798,27 +810,35 @@ class HeMAC:
             #         reward += heading_reward
             #         reward_dict[active_agent].append(heading_reward)
 
-            current_goal_dist = None
+            closest_goal = None
+            current_dist = float('inf')
             for goal in self.goals[:]:
                 goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
-                if current_goal_dist is None or goal_dist < current_goal_dist:
-                    current_goal_dist = goal_dist
-                if self.old_dist_to_goal is not None:
-                    # 이전 스텝보다 가까워진 거리 계산
-                    progress = self.old_dist_to_goal - goal_dist
+                if goal_dist < current_dist:
+                    current_dist = goal_dist
+                    closest_goal = goal
+                
+                if closest_goal is not None:
+                    # Initialize the running best distance on the first valid step.
+                    if not np.isfinite(getattr(agent, "min_dist_record", np.inf)):
+                        agent.min_dist_record = current_dist
 
-                    if progress > 0:
+                    # Reward only when the observer sets a new closest-distance record.
+                    elif current_dist < agent.min_dist_record:
+                        progress = agent.min_dist_record - current_dist
                         progress_reward = progress * 0.05
-                        reward += progress_reward
-                        reward_dict[active_agent].append(progress_reward)
+                        if np.isfinite(progress_reward) and progress_reward > 0:
+                            reward += progress_reward
+                            reward_dict[active_agent].append(progress_reward)
 
                         heading_reward = heading_alignment_reward(
-                            agent.x, agent.y, agent.orientation, goal.x, goal.y, self.observer_heading_reward_scale
+                            agent.x, agent.y, agent.orientation, closest_goal.x, closest_goal.y, self.observer_heading_reward_scale
                         )
                         if heading_reward > 0:
                             reward += heading_reward
                             reward_dict[active_agent].append(heading_reward)
 
+                        agent.min_dist_record = current_dist
                 # dist_reward = -0.005 * goal_dist
                 # reward_dict[active_agent].append(dist_reward)
                 # reward += dist_reward
@@ -835,9 +855,6 @@ class HeMAC:
                     self.mission_success = True
                     # self.global_reward += 180 if self.known_goals else 120
                     self.terminate = True
-
-            # Preserve the closest-goal distance for the next observer step.
-            self.old_dist_to_goal = current_goal_dist
 
             newly_detected_count = self._update_detected_cache(agent)
             # if newly_detected_count > 0:
@@ -869,21 +886,8 @@ class HeMAC:
             if self.terminate or self.truncate:
                 pass
 
-            # Distribution of awards and information to agents
-            for i, ag in enumerate(self.agents):
-                self.rewards[ag] += self._global_reward_for_agent(ag)
-                self.terminations[ag] = self.terminate
-                self.truncations[ag] = self.truncate
-                self.infos[ag] = {
-                    "success": self.mission_success,
-                    "goal_found": self.found_goal, 
-                    "success_after_goal_found": self.mission_success,
-                    "fatal_crash": self.collided,
-                    "drone_crash": self.drone_crash,
-                    "observer_crash": self.observer_crash,
-                    "drone_crash_to_obstacle": self.drone_crash_to_obstacle,
-                    "observer_crash_to_obstacle": self.observer_crash_to_obstacle,
-                }
+            # Refresh episode info after the frame counter/truncation state changes.
+            self._propagate_episode_state(include_global_reward=False)
 
             if self.render_mode is not None:
                 self.render()

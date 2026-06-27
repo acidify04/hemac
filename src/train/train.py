@@ -44,8 +44,10 @@ VIDEO_LOG_INTERVAL = 100
 VIDEO_FPS = 12
 VIDEO_SEED = 0
 VIDEO_OUTPUT_DIR = Path("./wandb_media")
-PPO_ENTROPY_COEFF = 0.001
-NUM_ENV_RUNNERS = 12
+PPO_ENTROPY_COEFF = 0.01
+NUM_ENV_RUNNERS = 10
+ROLLOUT_FRAGMENT_LENGTH = 100
+SAMPLE_TIMEOUT_S = 180.0
 
 
 def build_env_config(render_mode=None):
@@ -309,13 +311,17 @@ def main():
         .framework("torch")
         .callbacks(HeMACCallbacks)
         .environment(env=env_name)
-        .env_runners(num_env_runners=NUM_ENV_RUNNERS)
+        .env_runners(
+            num_env_runners=NUM_ENV_RUNNERS,
+            rollout_fragment_length=ROLLOUT_FRAGMENT_LENGTH,
+            sample_timeout_s=SAMPLE_TIMEOUT_S,
+        )
         .multi_agent(policies=policies, policy_mapping_fn=policy_mapping_fn)
         .resources(num_gpus=1)
         .training(
             train_batch_size=8000,
             minibatch_size=512,
-            num_epochs=10,
+            num_epochs=5,
             lr_schedule=[
                 [0, 3e-4],           # [수정] 초기 학습률 증가 (기존 5e-5)
                 [500 * 8000, 1e-4],  # [수정] 중간 학습률 조정

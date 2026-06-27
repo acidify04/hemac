@@ -10,8 +10,6 @@ import gymnasium
 from .sensors import ForwardFacingCamera, Sensor
 from .world import world_ref_to_game_ref
 
-from shapely.geometry import Point
-
 
 class Observer(BaseAgent):
     """Observer class."""
@@ -31,6 +29,7 @@ class Observer(BaseAgent):
         self.goal_estimation = None
         self.comm_range = comm_range
         self.detected = set()
+        self.min_dist_record = float('inf')
 
         self.trajectory_len = 3
 
@@ -85,6 +84,7 @@ class Observer(BaseAgent):
         self.goal_estimation = None
         self.orientation = 0.0
         self.detected = set()
+        self.min_dist_record = float('inf')
         self.latest_detected = np.empty((0, 2), dtype=np.int32)
         self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
 
@@ -127,15 +127,14 @@ class Observer(BaseAgent):
 
         # communication only possible if near a building
         if self.goal_estimation is not None:
-            if not world.obstacles:
+            if world.obstacle_centers.size == 0:
                 # print(f"no obstacles! infinite comm range")
                 world.observer_communication = self.goal_estimation
             else:
-                for obstacle in world.obstacles:
-                    obstacle_pos = obstacle.center
-                    if dist(obstacle_pos[0], obstacle_pos[1], self.rect.centerx, self.rect.centery) < self.comm_range:
-                        world.observer_communication = self.goal_estimation
-                        break
+                dx = world.obstacle_centers[:, 0] - float(self.rect.centerx)
+                dy = world.obstacle_centers[:, 1] - float(self.rect.centery)
+                if np.any((dx * dx + dy * dy) < self.comm_range * self.comm_range):
+                    world.observer_communication = self.goal_estimation
 
         # make sure the players stay inside the screen
         if area.contains(newpos):
@@ -196,18 +195,13 @@ class Observer(BaseAgent):
                     self.goal_estimation = (goal.x, goal.y)
                     world.goal_position = (goal.x, goal.y)
 
-        distances = self.obstacles_in_quadrants(Point(self.x, self.y), world.search_area, world.obstacles, world)
-        norm_dists = [float(np.clip(d / max(self.sensing_range, 1e-6), 0.0, 1.0)) for d in distances]
+        distances = self.obstacles_in_quadrants(world)
+        norm_dists = np.clip(distances / max(self.sensing_range, 1e-6), 0.0, 1.0)
 
-        orient_norm = float(((self.orientation % (2 * np.pi)) / np.pi) - 1.0)
-
-        obs_vec = [orient_norm] + norm_dists
-        while len(obs_vec) < self.base_obs_len:
-            obs_vec.append(0.0)
-
-        vector_obs = np.concatenate(
-            (np.array(obs_vec, dtype=np.float32), self.build_goal_relative_sector(world))
-        ).astype(np.float32, copy=False)
+        vector_obs = np.zeros(self.base_obs_len + 2, dtype=np.float32)
+        vector_obs[0] = float(((self.orientation % (2 * np.pi)) / np.pi) - 1.0)
+        vector_obs[1 : 1 + norm_dists.size] = norm_dists
+        vector_obs[-2:] = self.build_goal_relative_sector(world)
         return {
             "vector": vector_obs,
             "relative_map": self.build_relative_sector_map(world),
@@ -217,39 +211,12 @@ class Observer(BaseAgent):
         """Observe observer."""
         return self.get_fov_obs(world, goals)
     
-    def obstacles_in_quadrants(self, point, area, obstacles, world):
+    def obstacles_in_quadrants(self, world):
         """Find distances to obstacles in the 4 quadrants."""
-        pygame_area = world.area  # Needed for coordinate conversion
-        px, py = world_ref_to_game_ref((point.x, point.y), pygame_area)
-
-        # Initialize distances with sensing range
-        distances = {
-            "right": self.sensing_range,
-            "up": self.sensing_range,
-            "left": self.sensing_range,
-            "down": self.sensing_range,
-        }
-
-        # --- Find closest point on each obstacle ---
-        for obstacle in obstacles:
-            closest_x, closest_y = obstacle.clamp(pygame.Rect(px, py, 0, 0)).topleft  # Closest point on rect
-            distance = np.hypot(closest_x - px, closest_y - py)
-
-            if distance < self.sensing_range:
-                if closest_x > px:
-                    distances["right"] = min(distances["right"], distance)
-                if closest_y > py:
-                    distances["down"] = min(distances["down"], distance)  # y is inverted in pygame
-                if closest_x < px:
-                    distances["left"] = min(distances["left"], distance)
-                if closest_y < py:
-                    distances["up"] = min(distances["up"], distance)  # y is inverted in pygame
-
-        self.update_boundary_distance_channels(point, area, self.sensing_range, distances)
-
-        result = [dist for dist in distances.values()]
-
-        return result
+        px, py = world_ref_to_game_ref((self.x, self.y), world.area)
+        distances = self.obstacle_distance_channels(px, py, self.sensing_range, world.obstacle_bounds)
+        self.update_boundary_distance_array(self.x, self.y, world.search_bounds, self.sensing_range, distances)
+        return distances
 
 def dist(x1, y1, x2, y2):
     """Distance between two points."""

@@ -13,8 +13,6 @@ from hemac.environment.base_agent import BaseAgent
 from hemac.helpers.helper import world_ref_to_game_ref, game_ref_to_world_ref
 from hemac.environment.sensors import DownwardFacingCamera, Sensor, RoundCamera
 
-from shapely.geometry import Point
-
 
 class UWB:
     """UWB (Ultra Wide Band) class."""
@@ -373,81 +371,46 @@ class Drone(BaseAgent):
 
     def observe(self, world, agents, poi) -> dict[str, np.ndarray]:
         """Observe the world."""
-        try:
-            minx, miny, maxx, maxy = world.search_area.bounds
-            norm = math.hypot(maxx - minx, maxy - miny)
-        except Exception:
-            norm = 1.0
+        norm = world.search_diagonal
         if norm <= 0:
             norm = 1.0
 
-        distances = self.obstacles_in_quadrants(Point(self.x, self.y), world.search_area, world.obstacles) # 시야 안의 obstacle, boundary까지의 거리
-        norm_dists = [float(np.clip(d / max(self.sensing_range, 1e-6), 0.0, 1.0)) for d in distances]
+        distances = self.obstacles_in_quadrants(world)  # 시야 안의 obstacle, boundary까지의 거리
+        norm_dists = np.clip(distances / max(self.sensing_range, 1e-6), 0.0, 1.0)
 
-        agents_rel_pos = []
-        index = 0
+        vector_obs = np.zeros(self.base_obs_len + 3, dtype=np.float32)
+        vector_obs[: norm_dists.size] = norm_dists
+        write_idx = norm_dists.size
         for ag in agents:
-            if isinstance(ag, Drone):
-                dx = float(np.clip((ag.x - self.x) / norm, -1.0, 1.0))
-                dy = float(np.clip((ag.y - self.y) / norm, -1.0, 1.0))
-                if index == 0 and dx == 0 and dy == 0: # 자신인 경우 pass
-                    index += 1
-                    continue
-                agents_rel_pos.extend([dx, dy]) # 다른 에이전트의 상대 위치
-
-        obs_raw = norm_dists + agents_rel_pos
-        obs = np.array(obs_raw, dtype=np.float32)
-        if obs.size < self.base_obs_len:
-            obs = np.pad(obs, (0, self.base_obs_len - obs.size), mode="constant", constant_values=0.0)
-        elif obs.size > self.base_obs_len:
-            obs = obs[: self.base_obs_len]
+            if not isinstance(ag, Drone) or ag is self:
+                continue
+            dx = float(np.clip((ag.x - self.x) / norm, -1.0, 1.0))
+            dy = float(np.clip((ag.y - self.y) / norm, -1.0, 1.0))
+            if write_idx + 1 >= self.base_obs_len:
+                break
+            vector_obs[write_idx] = dx
+            vector_obs[write_idx + 1] = dy
+            write_idx += 2
 
         goal_relative = self.build_goal_relative_sector(world) if world.goal_known else np.zeros(2, dtype=np.float32)
-        vector_obs = np.concatenate((obs, goal_relative)).astype(np.float32, copy=False)
+        vector_obs[self.base_obs_len : self.base_obs_len + 2] = goal_relative
         # normalized id in [0,1]
         try:
             id_norm = float(self.id) / max(1, self.number_of_drones)
         except Exception:
             id_norm = 0.0
-        vector_obs = np.concatenate((vector_obs, np.array([id_norm], dtype=np.float32)))
+        vector_obs[-1] = id_norm
         return {
             "vector": vector_obs,
             "relative_map": self.build_relative_sector_map(world), # 탐색률, map 경계, obstacle 위치 표시
         }
 
-    def obstacles_in_quadrants(self, point, area, obstacles):
+    def obstacles_in_quadrants(self, world):
         """Find distancs to obstacles in the 4 quadrants."""
-        pygame_area = self.world.area  # Needed for coordinate conversion
-        px, py = world_ref_to_game_ref((point.x, point.y), pygame_area)
-
-        # Initialize distances with sensing range
-        distances = {
-            "right": self.sensing_range,
-            "up": self.sensing_range,
-            "left": self.sensing_range,
-            "down": self.sensing_range,
-        }
-
-        # --- Find closest point on each obstacle ---
-        for obstacle in obstacles:
-            closest_x, closest_y = obstacle.clamp(pygame.Rect(px, py, 0, 0)).topleft  # Closest point on rect
-            distance = np.hypot(closest_x - px, closest_y - py)
-
-            if distance < self.sensing_range:
-                if closest_x > px:
-                    distances["right"] = min(distances["right"], distance)
-                if closest_y > py:
-                    distances["down"] = min(distances["down"], distance)  # y is inverted in pygame
-                if closest_x < px:
-                    distances["left"] = min(distances["left"], distance)
-                if closest_y < py:
-                    distances["up"] = min(distances["up"], distance)  # y is inverted in pygame
-
-        self.update_boundary_distance_channels(point, area, self.sensing_range, distances)
-
-        result = [dist for dist in distances.values()]
-
-        return result
+        px, py = world_ref_to_game_ref((self.x, self.y), self.world.area)
+        distances = self.obstacle_distance_channels(px, py, self.sensing_range, world.obstacle_bounds)
+        self.update_boundary_distance_array(self.x, self.y, world.search_bounds, self.sensing_range, distances)
+        return distances
 
 
 def dist(x1, y1, x2, y2):

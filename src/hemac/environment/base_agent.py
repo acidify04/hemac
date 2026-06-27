@@ -64,21 +64,15 @@ class BaseAgent(pygame.sprite.Sprite):
     def build_relative_sector_map(self, world) -> np.ndarray:
         """Build a self-centered 40x40x3 map of coverage, valid-search, and explored obstacles."""
         self_grid_x, self_grid_y = self._position_to_grid(self.x, self.y, world)
-        pad = self.GRID_RESOLUTION
-        padded_coverage = np.pad(world.coverage_map, ((pad, pad), (pad, pad)), mode="constant", constant_values=0.0)
-        padded_search_mask = np.pad(world.search_mask, ((pad, pad), (pad, pad)), mode="constant", constant_values=0.0)
-        explored_obstacle_map = np.where(world.coverage_map > 0.0, world.obstacle_map, 0.0)
-        padded_obstacles = np.pad(explored_obstacle_map, ((pad, pad), (pad, pad)), mode="constant", constant_values=0.0)
-
         start_y = self_grid_y
         start_x = self_grid_x
         end_y = start_y + self.RELATIVE_MAP_SIZE
         end_x = start_x + self.RELATIVE_MAP_SIZE
 
-        relative_map = np.zeros((self.RELATIVE_MAP_SIZE, self.RELATIVE_MAP_SIZE, 3), dtype=np.float32)
-        relative_map[:, :, 0] = padded_coverage[start_y:end_y, start_x:end_x]
-        relative_map[:, :, 1] = padded_search_mask[start_y:end_y, start_x:end_x]
-        relative_map[:, :, 2] = padded_obstacles[start_y:end_y, start_x:end_x]
+        relative_map = np.empty((self.RELATIVE_MAP_SIZE, self.RELATIVE_MAP_SIZE, 3), dtype=np.float32)
+        relative_map[:, :, 0] = world.padded_coverage_map[start_y:end_y, start_x:end_x]
+        relative_map[:, :, 1] = world.padded_search_mask[start_y:end_y, start_x:end_x]
+        relative_map[:, :, 2] = world.padded_explored_obstacle_map[start_y:end_y, start_x:end_x]
         return relative_map
 
     @staticmethod
@@ -94,6 +88,65 @@ class BaseAgent(pygame.sprite.Sprite):
         for direction, distance in wall_distances.items():
             if 0.0 <= distance < sensing_range:
                 distances[direction] = min(distances[direction], float(distance))
+
+    @staticmethod
+    def update_boundary_distance_array(
+        point_x: float,
+        point_y: float,
+        search_bounds: tuple[float, float, float, float],
+        sensing_range: float,
+        distances: np.ndarray,
+    ) -> None:
+        """Update cardinal boundary distances in-place for [right, up, left, down]."""
+        minx, miny, maxx, maxy = search_bounds
+        wall_distances = np.array(
+            [maxx - point_x, maxy - point_y, point_x - minx, point_y - miny],
+            dtype=np.float32,
+        )
+        valid = (wall_distances >= 0.0) & (wall_distances < sensing_range)
+        distances[valid] = np.minimum(distances[valid], wall_distances[valid])
+
+    @staticmethod
+    def obstacle_distance_channels(
+        px: float,
+        py: float,
+        sensing_range: float,
+        obstacle_bounds: np.ndarray,
+    ) -> np.ndarray:
+        """Return nearest obstacle distances for [right, up, left, down] in game coordinates."""
+        distances = np.full(4, float(sensing_range), dtype=np.float32)
+        if obstacle_bounds.size == 0:
+            return distances
+
+        left = obstacle_bounds[:, 0]
+        right = obstacle_bounds[:, 1]
+        top = obstacle_bounds[:, 2]
+        bottom = obstacle_bounds[:, 3]
+        closest_x = np.clip(px, left, right)
+        closest_y = np.clip(py, top, bottom)
+        distance = np.hypot(closest_x - px, closest_y - py)
+        within = distance < sensing_range
+        if not np.any(within):
+            return distances
+
+        closest_x = closest_x[within]
+        closest_y = closest_y[within]
+        distance = distance[within]
+
+        right_mask = closest_x > px
+        if np.any(right_mask):
+            distances[0] = float(np.min(distance[right_mask]))
+        up_mask = closest_y < py
+        if np.any(up_mask):
+            distances[1] = float(np.min(distance[up_mask]))
+        left_mask = closest_x < px
+        if np.any(left_mask):
+            distances[2] = float(np.min(distance[left_mask]))
+        down_mask = closest_y > py
+        if np.any(down_mask):
+            distances[3] = float(np.min(distance[down_mask]))
+
+        return distances
 
     def build_goal_relative_sector(self, world) -> np.ndarray:
         """Build a goal-sector offset relative to the agent sector."""
