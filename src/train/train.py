@@ -1,5 +1,6 @@
 import logging
 import os
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 import sys
@@ -48,14 +49,145 @@ PPO_ENTROPY_COEFF = 0.01
 NUM_ENV_RUNNERS = 10
 ROLLOUT_FRAGMENT_LENGTH = 100
 SAMPLE_TIMEOUT_S = 180.0
+CURRICULUM_COVERAGE_LEVELS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+CURRICULUM_PROMOTION_SUCCESS_RATE = 0.8
+CURRICULUM_STABILITY_WINDOW = 5
+CURRENT_DRONE_SUCCESS_MIN_COVERAGE_RATIO = CURRICULUM_COVERAGE_LEVELS[0]
+
+
+class CoverageCurriculum:
+    """Promote the drone-only success target once training success stays high enough."""
+
+    def __init__(self, levels, promotion_success_rate=0.8, stability_window=3):
+        if not levels:
+            raise ValueError("Coverage curriculum requires at least one level.")
+        self.levels = [float(level) for level in levels]
+        self.promotion_success_rate = float(promotion_success_rate)
+        self.recent_success_rates = deque(maxlen=max(int(stability_window), 1))
+        self.stage_index = 0
+
+    @property
+    def current_coverage_ratio(self):
+        return self.levels[self.stage_index]
+
+    @property
+    def stage_number(self):
+        return self.stage_index + 1
+
+    @property
+    def num_stages(self):
+        return len(self.levels)
+
+    @property
+    def is_finished(self):
+        return self.stage_index >= len(self.levels) - 1
+
+    @property
+    def recent_success_mean(self):
+        if not self.recent_success_rates:
+            return 0.0
+        return float(np.mean(self.recent_success_rates))
+
+    @property
+    def recent_success_min(self):
+        if not self.recent_success_rates:
+            return 0.0
+        return float(np.min(self.recent_success_rates))
+
+    def record_success(self, success_rate):
+        """Return True when it is time to promote to the next curriculum level."""
+        self.recent_success_rates.append(float(success_rate))
+        if self.is_finished:
+            return False
+        if len(self.recent_success_rates) < self.recent_success_rates.maxlen:
+            return False
+        if min(self.recent_success_rates) < self.promotion_success_rate:
+            return False
+
+        self.stage_index += 1
+        self.recent_success_rates.clear()
+        return True
+
+
+def set_current_drone_success_min_coverage_ratio(value):
+    """Update the default success threshold used by newly-created environments."""
+    global CURRENT_DRONE_SUCCESS_MIN_COVERAGE_RATIO
+    CURRENT_DRONE_SUCCESS_MIN_COVERAGE_RATIO = float(value)
+
+
+def _set_drone_success_ratio_on_env(env, coverage_ratio):
+    """Push the curriculum target through wrappers down to the live HeMAC env."""
+    queue = [env]
+    visited = set()
+    updated = 0
+
+    while queue:
+        current = queue.pop(0)
+        if current is None or id(current) in visited:
+            continue
+        visited.add(id(current))
+
+        if hasattr(current, "drone_only_success_min_coverage_ratio"):
+            current.drone_only_success_min_coverage_ratio = float(coverage_ratio)
+            updated += 1
+
+        kwargs = getattr(current, "_kwargs", None)
+        if isinstance(kwargs, dict):
+            kwargs["drone_only_success_min_coverage_ratio"] = float(coverage_ratio)
+
+        for attr_name in ("env", "unwrapped"):
+            nested = getattr(current, attr_name, None)
+            if nested is not None and nested is not current:
+                queue.append(nested)
+
+    return updated
+
+
+def get_env_runner_group(algo):
+    """Return RLlib's env-runner group across minor API variations."""
+    env_runner_group = getattr(algo, "env_runner_group", None)
+    if env_runner_group is not None:
+        return env_runner_group
+
+    workers_attr = getattr(algo, "workers", None)
+    if callable(workers_attr):
+        try:
+            return workers_attr()
+        except TypeError:
+            return None
+    return workers_attr
+
+
+def apply_curriculum_to_algo(algo, coverage_ratio):
+    """Update both current workers and future rollouts to the new curriculum target."""
+    set_current_drone_success_min_coverage_ratio(coverage_ratio)
+
+    env_runner_group = get_env_runner_group(algo)
+
+    updated_count = 0
+    if env_runner_group is not None and hasattr(env_runner_group, "foreach_env"):
+        results = env_runner_group.foreach_env(
+            lambda env: _set_drone_success_ratio_on_env(env, coverage_ratio)
+        )
+        for worker_results in results:
+            if isinstance(worker_results, list):
+                updated_count += sum(int(value) for value in worker_results)
+            else:
+                updated_count += int(worker_results)
+
+    env_config = getattr(algo.config, "env_config", None)
+    if isinstance(env_config, dict):
+        env_config["drone_only_success_min_coverage_ratio"] = float(coverage_ratio)
+
+    return updated_count
 
 
 def build_env_config(render_mode=None):
     """Return the shared environment config for training and evaluation."""
     env_config = {
-        "n_observers": 1,
+        "n_observers": 0,
         "observer_speed": 5,
-        "n_drones": 0,
+        "n_drones": 3,
         "n_provisioners": 0,
         "known_goals": False,
         "max_cycles": 500,
@@ -67,6 +199,8 @@ def build_env_config(render_mode=None):
         "min_obstacles": 7,
         "max_obstacles": 10,
         "poi_config": [GOAL_CONFIG],
+        "drone_only_success_min_coverage_ratio": CURRENT_DRONE_SUCCESS_MIN_COVERAGE_RATIO,
+        "drone_only_success_reward": 300.0,
     }
     if render_mode is not None:
         env_config["render_mode"] = render_mode
@@ -271,39 +405,54 @@ class HeMACCallbacks(DefaultCallbacks):
 
 
 def env_creator(config):
-    return PettingZooEnv(HeMAC_v0.env(**build_env_config()))
+    env_config = build_env_config()
+    if config:
+        env_config.update(config)
+    return PettingZooEnv(HeMAC_v0.env(**env_config))
 
 
 def main():
     LOGGER.setLevel(logging.WARNING)
     ray.init()
     register_hemac_rllib_models()
+
+    curriculum = CoverageCurriculum(
+        levels=CURRICULUM_COVERAGE_LEVELS,
+        promotion_success_rate=CURRICULUM_PROMOTION_SUCCESS_RATE,
+        stability_window=CURRICULUM_STABILITY_WINDOW,
+    )
+    set_current_drone_success_min_coverage_ratio(curriculum.current_coverage_ratio)
     
     env_name = "hemac_asymmetric_env"
     register_env(env_name, env_creator)
 
-    temp_env = env_creator({})
+    env_config = build_env_config()
+    temp_env = env_creator(env_config)
     obs_space = temp_env.observation_space
     act_space = temp_env.action_space
 
-    policies = {
-        "observer_policy": (
+    policies = {}
+    if env_config.get("n_observers", 0) > 0:
+        policies["observer_policy"] = (
             None,
             obs_space["observer_0"],
             act_space["observer_0"],
             {"model": observer_policy_model_config()},
-        ),
-        # "drone_policy": (
-        #     None,
-        #     obs_space["drone_0"],
-        #     act_space["drone_0"],
-        #     {"model": drone_policy_model_config()},
-        # ),
-    }
+        )
+    if env_config.get("n_drones", 0) > 0:
+        policies["drone_policy"] = (
+            None,
+            obs_space["drone_0"],
+            act_space["drone_0"],
+            {"model": drone_policy_model_config()},
+        )
 
     def policy_mapping_fn(agent_id, episode, **kwargs):
-        if "observer" in agent_id: return "observer_policy"
-        elif "drone" in agent_id: return "drone_policy"
+        if "observer" in agent_id and "observer_policy" in policies:
+            return "observer_policy"
+        if "drone" in agent_id and "drone_policy" in policies:
+            return "drone_policy"
+        raise ValueError(f"No policy configured for agent_id={agent_id}")
 
     config = (
         PPOConfig()
@@ -338,6 +487,14 @@ def main():
 
     print("RLlib PPO 알고리즘 빌드 중...")
     algo = config.build()
+    updated_envs = apply_curriculum_to_algo(algo, curriculum.current_coverage_ratio)
+    if updated_envs <= 0:
+        print("[warn] curriculum target was not applied to any live env at startup.")
+    print(
+        "[curriculum] start stage "
+        f"{curriculum.stage_number}/{curriculum.num_stages} "
+        f"(coverage >= {curriculum.current_coverage_ratio:.1f}, updated_envs={updated_envs})"
+    )
     
     checkpoint_dir = "./hemac_checkpoints"
     os.makedirs(checkpoint_dir, exist_ok=True)
@@ -350,6 +507,8 @@ def main():
     for i in range(num_iterations):
         result = algo.train()
         mean_reward = result.get('env_runners', {}).get('episode_reward_mean', result.get('episode_reward_mean', 0))
+        curriculum_promoted = False
+        curriculum_updated_envs = 0
         
         print(f"\n--- Iteration {i+1} ---")
         print(f"Mean Reward: {mean_reward:.2f}")
@@ -365,6 +524,21 @@ def main():
         if not policy_rewards:
             policy_rewards = result.get('env_runners', {}).get('policy_reward_mean', {})
         drone_log_std_stats = get_policy_log_std_stats(algo, "drone_policy") or {}
+        rollout_success_rate = float(custom_metrics.get("success_rate_mean", 0.0))
+
+        curriculum_promoted = curriculum.record_success(rollout_success_rate)
+        if curriculum_promoted:
+            curriculum_updated_envs = apply_curriculum_to_algo(
+                algo, curriculum.current_coverage_ratio
+            )
+            if curriculum_updated_envs <= 0:
+                print("[warn] curriculum promoted, but no live env received the new coverage target.")
+            print(
+                "[curriculum] promoted to stage "
+                f"{curriculum.stage_number}/{curriculum.num_stages} "
+                f"(coverage >= {curriculum.current_coverage_ratio:.1f}, "
+                f"updated_envs={curriculum_updated_envs})"
+            )
 
         print(f">>> [디버깅] custom_metrics: {visible_custom_metrics}")
 
@@ -377,7 +551,7 @@ def main():
             # "model/drone_log_std_min": drone_log_std_stats.get("min", 0.0),
             # "model/drone_log_std_max": drone_log_std_stats.get("max", 0.0),
             "model/entropy_coeff": PPO_ENTROPY_COEFF,
-            "metrics/rollout_success_rate": custom_metrics.get("success_rate_mean", 0),
+            "metrics/rollout_success_rate": rollout_success_rate,
             "metrics/goal_found_rate": custom_metrics.get("goal_found_rate_mean", 0),
             "metrics/crash_rate": custom_metrics.get("crash_rate_mean", 0),
             "metrics/drone_crash_rate": custom_metrics.get("drone_crash_rate_mean", 0),
@@ -391,6 +565,14 @@ def main():
             # "metrics/steps_after_goal_found": custom_metrics.get("steps_after_goal_found_mean", 0),
             "metrics/drone_crash_to_obstacle_rate": custom_metrics.get("drone_crash_to_obstacle_rate_mean", 0),
             "metrics/observer_crash_to_obstacle_rate": custom_metrics.get("observer_crash_to_obstacle_rate_mean", 0),
+            "curriculum/stage_number": curriculum.stage_number,
+            "curriculum/num_stages": curriculum.num_stages,
+            "curriculum/current_coverage_target": curriculum.current_coverage_ratio,
+            "curriculum/recent_success_mean": curriculum.recent_success_mean,
+            "curriculum/recent_success_min": curriculum.recent_success_min,
+            "curriculum/promotion_success_rate": CURRICULUM_PROMOTION_SUCCESS_RATE,
+            "curriculum/stability_window": CURRICULUM_STABILITY_WINDOW,
+            "curriculum/is_finished": 1.0 if curriculum.is_finished else 0.0,
         }
 
         if (i + 1) % VIDEO_LOG_INTERVAL == 0:
@@ -444,6 +626,13 @@ def main():
                 log_payload["metrics/eval_drone_crash_rate_stochastic"] = eval_drone_crash_rate_stochastic
             except Exception as exc:
                 print(f"[warn] eval drone crash logging skipped at iteration {i + 1}: {exc}")
+
+        log_payload["curriculum/stage_number"] = curriculum.stage_number
+        log_payload["curriculum/current_coverage_target"] = curriculum.current_coverage_ratio
+        log_payload["curriculum/recent_success_mean"] = curriculum.recent_success_mean
+        log_payload["curriculum/recent_success_min"] = curriculum.recent_success_min
+        log_payload["curriculum/just_promoted"] = 1.0 if curriculum_promoted else 0.0
+        log_payload["curriculum/updated_envs"] = float(curriculum_updated_envs)
 
         wandb.log(log_payload)
         

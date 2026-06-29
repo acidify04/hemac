@@ -629,9 +629,9 @@ def run_trained_model_simulation(playback_mode="step"):
     def env_creator(config):
         # 훈련 때 사용했던 동일한 스펙을 반환해야 합니다. (render_mode 제외)
         train_env_config = {
-            "n_observers": 1,
+            "n_observers": 0,
             "observer_speed": 5, 
-            "n_drones": 0,
+            "n_drones": 3,
             "n_provisioners": 0,
             "known_goals": False,
             "max_cycles": 500,
@@ -653,7 +653,7 @@ def run_trained_model_simulation(playback_mode="step"):
     # 2. 저장된 체크포인트로부터 알고리즘(모델) 로드
     # 저장된 폴더 경로를 지정합니다. (예: ./hemac_checkpoints 하위의 실제 체크포인트 폴더)
     # checkpoint_path = os.path.abspath(find_latest_checkpoint())
-    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_10000")
+    checkpoint_path = os.path.abspath("./src/train/trained_checkpoints/observer_checkpoint_10000")
     print(f"[{checkpoint_path}] 경로에서 학습된 모델을 불러오는 중...")
     algo = Algorithm.from_checkpoint(checkpoint_path)
 

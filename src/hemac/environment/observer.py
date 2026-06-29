@@ -1,12 +1,13 @@
 """Observer module."""
 
+import math
 import os
 
-import pygame
-from .base_agent import BaseAgent
-import numpy as np
-import math
 import gymnasium
+import numpy as np
+import pygame
+
+from .base_agent import BaseAgent
 from .sensors import ForwardFacingCamera, Sensor
 from .world import world_ref_to_game_ref
 
@@ -14,7 +15,16 @@ from .world import world_ref_to_game_ref
 class Observer(BaseAgent):
     """Observer class."""
 
-    def __init__(self, dims, speed, observer_id=-1, sensor: Sensor = ForwardFacingCamera(), time_factor: int = 1, discrete_action_space: bool = False, comm_range = 150):
+    def __init__(
+        self,
+        dims,
+        speed,
+        observer_id=-1,
+        sensor: Sensor = ForwardFacingCamera(),
+        time_factor: int = 1,
+        discrete_action_space: bool = False,
+        comm_range=150,
+    ):
         """Overwrite constructor."""
         super().__init__()
         self.img = pygame.image.load(f"{os.path.dirname(__file__)}/img/observer.png")
@@ -34,22 +44,29 @@ class Observer(BaseAgent):
         self.trajectory_len = 3
 
         self.time_factor = time_factor
-        self.speed = speed  # fixed speed
+        self.speed = float(speed)
+        self.max_speed = float(speed)
         # rad, positive angle counter-clockwise (note that the world referential is the opposite: y-axis down)
         self.orientation = 0
         self.altitude = 100
         self.steering_angle = np.pi / 18  # angular velocity
         self.sensor = sensor
+        self.sensor.sensing_range = max(float(self.sensor.sensing_range) / 3.0, 1.0)
         self.sensing_range = sensor.sensing_range
 
         if discrete_action_space:
-            self.action_space = gymnasium.spaces.Discrete(3)
+            self.action_space = gymnasium.spaces.Discrete(5)
             self.discrete_action_space = True
         else:
-            self.action_space = gymnasium.spaces.Box(low=-100, high=100, shape=(3,))
+            self.action_space = gymnasium.spaces.Box(
+                low=-self.max_speed,
+                high=self.max_speed,
+                shape=(3,),
+                dtype=np.float32,
+            )
             self.discrete_action_space = False
         """
-        2D steering. 0: right, 1: left, 2: straight
+        2D velocity control compatible with the drone action format: [vx, vy, aux].
         """
         self.base_obs_len = 11
         self.observation_space = gymnasium.spaces.Dict(
@@ -107,17 +124,15 @@ class Observer(BaseAgent):
 
     def update(self, area, world, action, found_goal):
         """Update observer."""
-        # action: > 0 : turn right, < 0 : turn left, 0: straight
         if self.discrete_action_space:
             action = self.discrete_to_continuous(action)
 
-        if action[0] < 0:
-            self.orientation += self.steering_angle
-        elif action[0] > 0:
-            self.orientation -= self.steering_angle
-        self.orientation = self.orientation % (2 * np.pi)
-        self.x += self.speed * np.cos(self.orientation) * self.time_factor
-        self.y += self.speed * np.sin(self.orientation) * self.time_factor
+        vx = float(np.clip(action[0], -self.max_speed, self.max_speed))
+        vy = float(np.clip(action[1], -self.max_speed, self.max_speed))
+        if not np.isclose(vx, 0.0) or not np.isclose(vy, 0.0):
+            self.orientation = math.atan2(vy, vx) % (2 * np.pi)
+        self.x += vx * self.time_factor
+        self.y += vy * self.time_factor
         self.update_detected_area(self.sensing_range)
 
         newpos = self.rect.copy()
@@ -147,11 +162,15 @@ class Observer(BaseAgent):
     def discrete_to_continuous(self, action):
         """Convert discrete action to box space."""
         if action == 0:
-            out = [1, 0, 0]
+            out = [0, 0, 1]
         elif action == 1:
-            out = [-1, 0, 0]
+            out = [self.max_speed, self.max_speed, 0]
+        elif action == 2:
+            out = [self.max_speed, -self.max_speed, 0]
+        elif action == 3:
+            out = [-self.max_speed, self.max_speed, 0]
         else:
-            out = [0, 0, 0]
+            out = [-self.max_speed, -self.max_speed, 0]
         return out
 
     def process_collision(self, o_rect, o_speed):

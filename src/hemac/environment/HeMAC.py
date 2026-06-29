@@ -96,7 +96,9 @@ class HeMAC:
         drone_hazard_penalty_scale: float = 0.2,
         detection_distance_scale: float = 200.0,
         detection_per_point_base: float = 0.5,
-        detection_max_total: float = 0.5,
+        detection_max_total: float = 3.0,
+        drone_only_success_min_coverage_ratio: float = 0.7,
+        drone_only_success_reward: float = 300.0,
     ):
         self.number_of_POIs = len(poi_config) if poi_config and len(poi_config) else 0
         self.goals = []
@@ -120,6 +122,8 @@ class HeMAC:
             Geofence config: {geofence_config}
             Patrol config: {patrol_config}
             POI config: {poi_config}
+            Drone-only success min coverage ratio: {drone_only_success_min_coverage_ratio}
+            Drone-only success reward: {drone_only_success_reward}
             """)
 
         pygame.init()
@@ -134,6 +138,10 @@ class HeMAC:
         self.detection_distance_scale = detection_distance_scale
         self.detection_per_point_base = detection_per_point_base
         self.detection_max_total = detection_max_total
+        self.drone_only_success_min_coverage_ratio = float(
+            max(0.0, min(drone_only_success_min_coverage_ratio, 1.0))
+        )
+        self.drone_only_success_reward = float(drone_only_success_reward)
 
         # players
         self.n_observers = n_observers
@@ -270,7 +278,7 @@ class HeMAC:
                     observer_id=i,
                     sensor=in_observer_sensor,
                     time_factor=time_factor,
-                    discrete_action_space=True,
+                    discrete_action_space=False,
                     comm_range=observer_comm_range,
                 )
             )
@@ -618,6 +626,71 @@ class HeMAC:
         explored_area = self.current_explored_area()
         return min(explored_area / total_search_area, 1.0)
 
+    def is_drone_only_mode(self):
+        """Return True when the mission is trained with drones only."""
+        return self.n_observers == 0 and self.n_drones > 0
+
+    def _mark_mission_success(self, active_agent=None, reward_dict=None, reward_bonus=0.0):
+        """Mark the current episode as a success and stop it."""
+        if self.mission_success:
+            return False
+
+        reward_bonus = float(reward_bonus)
+        if reward_bonus != 0.0:
+            self.global_reward += reward_bonus
+            if reward_dict is not None and active_agent in reward_dict:
+                reward_dict[active_agent].append(reward_bonus)
+
+        self.success_step = self.num_frames
+        self.mission_success = True
+        self.terminate = True
+        return True
+
+    def _check_drone_only_mission_success(self, active_agent=None, reward_dict=None):
+        """Succeed once drones have found the goal and explored enough area."""
+        if not self.is_drone_only_mode():
+            return False
+        if self.terminate or self.mission_success or not self.found_goal:
+            return False
+
+        if self.current_coverage_ratio() < self.drone_only_success_min_coverage_ratio:
+            return False
+
+        return self._mark_mission_success(
+            active_agent=active_agent,
+            reward_dict=reward_dict,
+            reward_bonus=self.drone_only_success_reward,
+        )
+
+    def _compute_drone_detection_reward(self, newly_detected_points) -> float:
+        """Return a bounded, non-saturating reward for goal-proximal exploration."""
+        if not self.goals:
+            return 0.0
+
+        if isinstance(newly_detected_points, np.ndarray):
+            points = newly_detected_points.astype(np.float32, copy=False)
+        else:
+            points = np.asarray(list(newly_detected_points), dtype=np.float32)
+
+        if points.size == 0:
+            return 0.0
+        if points.ndim != 2 or points.shape[1] != 2:
+            points = np.reshape(points, (-1, 2))
+
+        goal_positions = np.asarray([(goal.x, goal.y) for goal in self.goals], dtype=np.float32)
+        deltas = points[:, None, :] - goal_positions[None, :, :]
+        min_dists = np.linalg.norm(deltas, axis=2).min(axis=1)
+        scale = max(float(self.detection_distance_scale), 1e-6)
+        weights = np.clip((scale - min_dists) / scale, 0.0, 1.0)
+        weighted_hits = float(np.sum(weights))
+        if weighted_hits <= 0.0:
+            return 0.0
+
+        reward = float(self.detection_per_point_base) * math.log1p(weighted_hits)
+        if self.detection_max_total > 0:
+            reward = min(reward, float(self.detection_max_total))
+        return reward
+
     def build_episode_info(self):
         """Build a final-episode info dict for metrics and evaluation."""
         coverage_ratio = self.current_coverage_ratio()
@@ -749,22 +822,12 @@ class HeMAC:
             # proximity-weighted detection reward: closer detections to any goal give more reward
             newly_detected_points = self._update_detected_cache(agent)
             if len(newly_detected_points) > 0:
-                total_detection_reward = 0.0
-                for p in newly_detected_points:
-                    try:
-                        px, py = float(p[0]), float(p[1])
-                    except Exception:
-                        continue
-                    # distance to nearest goal
-                    min_dist = min([dist(goal.x, goal.y, px, py) for goal in self.goals]) if self.goals else self.detection_distance_scale
-                    # weight: linear 0..1 for dist in [dscale..0]
-                    weight = max(0.0, (self.detection_distance_scale - min_dist) / max(self.detection_distance_scale, 1e-6))
-                    per = self.detection_per_point_base * weight
-                    total_detection_reward += per
-                # cap
-                total_detection_reward = min(total_detection_reward, self.detection_max_total)
+                # total_detection_reward = min(self._compute_drone_detection_reward(newly_detected_points), 0.1)
+                total_detection_reward = len(newly_detected_points) / 50000
                 reward += total_detection_reward
                 reward_dict[active_agent].append(total_detection_reward)
+
+            self._check_drone_only_mission_success(active_agent=active_agent, reward_dict=reward_dict)
 
         elif "observer" in active_agent:
             reward -= 0.05  # step penalty
@@ -792,23 +855,6 @@ class HeMAC:
                         LOGGER.info(
                             f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
                         )
-            # boundary_dist = self.search_area.boundary.distance(Point((agent.x, agent.y)))
-            # reward += 0.05 * boundary_dist  # Reward for being farther from the boundary, encourages staying in the center of the search area
-
-            # POI tracking reward calculation
-            # if self.goals:
-            #     closest_goal = min(self.goals, key=lambda goal: dist(goal.x, goal.y, agent.x, agent.y))
-            #     heading_reward = heading_alignment_reward(
-            #         agent.x,
-            #         agent.y,
-            #         agent.orientation,
-            #         closest_goal.x,
-            #         closest_goal.y,
-            #         self.observer_heading_reward_scale,
-            #     )
-            #     if heading_reward > 0:
-            #         reward += heading_reward
-            #         reward_dict[active_agent].append(heading_reward)
 
             closest_goal = None
             current_dist = float('inf')
@@ -839,22 +885,15 @@ class HeMAC:
                             reward_dict[active_agent].append(heading_reward)
 
                         agent.min_dist_record = current_dist
-                # dist_reward = -0.005 * goal_dist
-                # reward_dict[active_agent].append(dist_reward)
-                # reward += dist_reward
+
                 if goal_dist < agent.sensing_range:  # goal까지의 거리가 sensing range보다 가까워지면 발견
                     agent.found_goal = True
                     self.found_goal = True
-                    # self.world.goal_position = (goal.x, goal.y)
-                    # self.global_reward += 100  # Reward for finding a goal
-                    self.global_reward += 300  # Reward for finding a goal
-                    reward_dict[active_agent].append(300)
-                    # goal.spawn_poi(self.search_area)
-                        # goal.reset()
-                    self.success_step = self.num_frames
-                    self.mission_success = True
-                    # self.global_reward += 180 if self.known_goals else 120
-                    self.terminate = True
+                    self._mark_mission_success(
+                        active_agent=active_agent,
+                        reward_dict=reward_dict,
+                        reward_bonus=300.0,
+                    )
 
             newly_detected_count = self._update_detected_cache(agent)
             # if newly_detected_count > 0:

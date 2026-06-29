@@ -265,13 +265,16 @@ def drone_policy_model_config() -> dict[str, Any]:
 def observer_policy_model_config() -> dict[str, Any]:
     """Return the RLlib model config used by the observer policy."""
     return {
-        "custom_model": OBSERVER_CUSTOM_MODEL_NAME,
+        "custom_model": DRONE_CUSTOM_MODEL_NAME,
         "vf_share_layers": False,
         "fcnet_hiddens": DRONE_MODEL_HIDDEN_SIZES,
         "fcnet_activation": "relu",
         "custom_model_config": {
             "hidden_sizes": DRONE_MODEL_HIDDEN_SIZES,
             "activation": "relu",
+            "log_std_init": DRONE_LOG_STD_INIT,
+            "log_std_min": DRONE_LOG_STD_MIN,
+            "log_std_max": DRONE_LOG_STD_MAX,
         },
     }
 
