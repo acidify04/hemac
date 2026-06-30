@@ -550,14 +550,13 @@ class HeMAC:
         return new_points
     
     def _build_search_grid_cache(self):
-        """Build renderable search-area cells aligned to the shared coverage grid."""
+        """Build renderable cells aligned to the shared coverage grid."""
         cell_width = self.world.coverage_cell_width
         cell_height = self.world.coverage_cell_height
         grid_rects = {}
         for grid_x in range(self.world.coverage_grid_size):
             for grid_y in range(self.world.coverage_grid_size):
-                world_center = ((grid_x + 0.5) * cell_width, (grid_y + 0.5) * cell_height)
-                if not self.world.point_in_search_area(*world_center):
+                if self.world.search_mask[grid_y, grid_x] <= 0.0:
                     continue
                 left = int(round(grid_x * cell_width))
                 right = int(round((grid_x + 1) * cell_width))
@@ -579,12 +578,16 @@ class HeMAC:
         outline_color = (220, 235, 255, 25)
 
         for grid_key, rect in self.search_grid_rects.items():
-            coverage_value = float(self.world.coverage_map[grid_key])
-            if coverage_value > 0.0:
+            search_ratio = float(self.world.search_mask[grid_key])
+            coverage_value = float(self.world.observation_coverage_map[grid_key])
+            if search_ratio <= 0.0:
+                cell_color = (0, 0, 0, 0)
+            elif coverage_value > 0.0:
                 explored_alpha = 80 + int(140 * min(coverage_value, 1.0))
                 cell_color = (*explored_base, explored_alpha)
             else:
-                cell_color = unexplored_color
+                unexplored_alpha = int(unexplored_color[-1] * search_ratio)
+                cell_color = (*unexplored_color[:3], unexplored_alpha)
             pygame.draw.rect(overlay, cell_color, rect)
             pygame.draw.rect(overlay, outline_color, rect, width=1)
 
@@ -615,7 +618,7 @@ class HeMAC:
     
     def current_explored_area(self):
         """Return explored area inside the active search area for this episode."""
-        search_cell_coverage = self.world.coverage_map * self.world.search_mask
+        search_cell_coverage = np.minimum(self.world.coverage_map, self.world.search_mask)
         return float(np.sum(search_cell_coverage) * self.world.coverage_cell_area)
 
     def current_coverage_ratio(self):

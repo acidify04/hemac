@@ -160,28 +160,29 @@ class Drone(BaseAgent):
             self.action_space = gymnasium.spaces.Box(low=-self.max_speed, high=self.max_speed, shape=(3,))
             self.discrete_action_space = False
 
-        self.base_obs_len = 6 + self.number_of_drones * 2
-        # add one extra slot for normalized self.id in the vector observation
         self.observation_space = gymnasium.spaces.Dict(
             {
-                "vector": gymnasium.spaces.Box(
-                    low=-19.0,
-                    high=19.0,
-                    shape=(self.base_obs_len + 3,),
-                    dtype=np.float32,
-                ),
-                "relative_map": gymnasium.spaces.Box(
+                "global_map": gymnasium.spaces.Box(
                     low=0.0,
                     high=1.0,
-                    shape=(self.RELATIVE_MAP_SIZE, self.RELATIVE_MAP_SIZE, 3),
+                    shape=(self.GLOBAL_MAP_SIZE, self.GLOBAL_MAP_SIZE, 6),
+                    dtype=np.float32,
+                ),
+                "local_map": gymnasium.spaces.Box(
+                    low=0.0,
+                    high=1.0,
+                    shape=(self.LOCAL_MAP_SIZE, self.LOCAL_MAP_SIZE, 6),
+                    dtype=np.float32,
+                ),
+                "vector": gymnasium.spaces.Box(
+                    low=-self.max_speed,
+                    high=self.max_speed,
+                    shape=(self.ACTION_HISTORY_LENGTH * self.ACTION_DIM,),
                     dtype=np.float32,
                 ),
             }
         )
 
-        """
-        action space: [wanted vx, wanted vy, recharge] where recharge is mapped to a bool for trying to recharge.
-        """
         self.charge_level = self.max_charge
         self.charging = False
         self.charging_point = (0, 0)
@@ -206,6 +207,7 @@ class Drone(BaseAgent):
         self.goto_pos = [0, 0]
         self.detected = set()
         self.latest_detected = np.empty((0, 2), dtype=np.int32)
+        self.reset_action_history()
         self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
 
     def sync_pose_state(self):
@@ -251,8 +253,11 @@ class Drone(BaseAgent):
         #     return
         if self.discrete_action_space:
             action = self.discrete_to_continuous(action)
+        action = np.asarray(action, dtype=np.float32)
+        clipped_action = np.clip(action, -self.max_speed, self.max_speed)
+        self.push_action_history(clipped_action)
 
-        if action[2] > 0:  # drone tries to recharge
+        if clipped_action[2] > 0:  # drone tries to recharge
             # self.closest_point_in_base = closest_point_in_rect(world.base, self.rect.center)
             # can_charge = self.charging_distance > dist(
             #     self.rect.x,
@@ -288,11 +293,11 @@ class Drone(BaseAgent):
                 self.previous_accel = [self.accel_x, self.accel_y]
 
                 # compute target acceleration compensating for predicted drag (a = dV/dt + drag compensation)
-                self.accel_x = (action[0] - self.vx) / self.time_factor + 0.02 * action[0] * abs(action[0])
-                self.accel_y = (action[1] - self.vy) / self.time_factor + 0.02 * action[1] * abs(action[1])
+                self.accel_x = (clipped_action[0] - self.vx) / self.time_factor + 0.02 * clipped_action[0] * abs(clipped_action[0])
+                self.accel_y = (clipped_action[1] - self.vy) / self.time_factor + 0.02 * clipped_action[1] * abs(clipped_action[1])
 
                 # for position control
-                self.goto_pos = (int(self.rect.x + action[0]), int(self.rect.y - action[1]))
+                self.goto_pos = (int(self.rect.x + clipped_action[0]), int(self.rect.y - clipped_action[1]))
 
                 # compute achievable acceleration given max thrust
                 if np.linalg.norm([self.accel_x, self.accel_y]) > self.max_thrust:
@@ -371,38 +376,33 @@ class Drone(BaseAgent):
 
     def observe(self, world, agents, poi) -> dict[str, np.ndarray]:
         """Observe the world."""
-        norm = world.search_diagonal
-        if norm <= 0:
-            norm = 1.0
+        other_drone_positions = [
+            (agent.x, agent.y)
+            for agent in agents
+            if isinstance(agent, Drone) and agent is not self
+        ]
+        observer_positions = [
+            (agent.x, agent.y)
+            for agent in agents
+            if agent.__class__.__name__ == "Observer"
+        ]
+        goal_positions = [(goal.x, goal.y) for goal in poi]
 
-        distances = self.obstacles_in_quadrants(world)  # 시야 안의 obstacle, boundary까지의 거리
-        norm_dists = np.clip(distances / max(self.sensing_range, 1e-6), 0.0, 1.0)
+        padded_channels = [
+            world.padded_coverage_map,
+            world.padded_search_mask,
+            world.padded_explored_obstacle_map,
+            self.build_padded_entity_channel(world, other_drone_positions),
+            self.build_padded_entity_channel(world, observer_positions),
+            self.build_padded_entity_channel(world, goal_positions),
+        ]
+        global_map = self.build_global_map_view(world, padded_channels)
+        local_map = self.build_local_map_view(world, padded_channels)
 
-        vector_obs = np.zeros(self.base_obs_len + 3, dtype=np.float32)
-        vector_obs[: norm_dists.size] = norm_dists
-        write_idx = norm_dists.size
-        for ag in agents:
-            if not isinstance(ag, Drone) or ag is self:
-                continue
-            dx = float(np.clip((ag.x - self.x) / norm, -1.0, 1.0))
-            dy = float(np.clip((ag.y - self.y) / norm, -1.0, 1.0))
-            if write_idx + 1 >= self.base_obs_len:
-                break
-            vector_obs[write_idx] = dx
-            vector_obs[write_idx + 1] = dy
-            write_idx += 2
-
-        goal_relative = self.build_goal_relative_sector(world) if world.goal_known else np.zeros(2, dtype=np.float32)
-        vector_obs[self.base_obs_len : self.base_obs_len + 2] = goal_relative
-        # normalized id in [0,1]
-        try:
-            id_norm = float(self.id) / max(1, self.number_of_drones)
-        except Exception:
-            id_norm = 0.0
-        vector_obs[-1] = id_norm
         return {
-            "vector": vector_obs,
-            "relative_map": self.build_relative_sector_map(world), # 탐색률, map 경계, obstacle 위치 표시
+            "global_map": global_map,
+            "local_map": local_map,
+            "vector": self.build_action_history_vector(),
         }
 
     def obstacles_in_quadrants(self, world):

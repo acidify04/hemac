@@ -185,12 +185,12 @@ def apply_curriculum_to_algo(algo, coverage_ratio):
 def build_env_config(render_mode=None):
     """Return the shared environment config for training and evaluation."""
     env_config = {
-        "n_observers": 0,
-        "observer_speed": 5,
-        "n_drones": 3,
+        "n_observers": 1,
+        "observer_speed": 10,
+        "n_drones": 0,
         "n_provisioners": 0,
         "known_goals": False,
-        "max_cycles": 500,
+        "max_cycles": 400,
         "drone_config": {
             "drone_max_speed": 25,
             "drone_max_thrust": 8,

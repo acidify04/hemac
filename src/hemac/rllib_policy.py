@@ -36,7 +36,12 @@ def _activation_module(name: str) -> nn.Module:
 
 
 def _space_has_spatial_obs(space) -> bool:
-    """Return whether an observation space exposes vector+relative_map entries."""
+    """Return whether an observation space exposes the multi-map observation schema."""
+    return hasattr(space, "spaces") and {"vector", "global_map", "local_map"}.issubset(space.spaces.keys())
+
+
+def _space_has_legacy_spatial_obs(space) -> bool:
+    """Return whether an observation space exposes the legacy vector+relative_map schema."""
     return hasattr(space, "spaces") and {"vector", "relative_map"}.issubset(space.spaces.keys())
 
 
@@ -66,33 +71,64 @@ def _flatten_obs_tensor(obs, device=None):
     return obs.reshape(obs.shape[0], -1)
 
 
+def _to_float_tensor(obs, device=None):
+    """Convert one observation component to a float torch tensor."""
+    if not torch.is_tensor(obs):
+        return torch.as_tensor(obs, dtype=torch.float32, device=device)
+    obs = obs.float()
+    if device is not None:
+        obs = obs.to(device)
+    return obs
+
+
 class _SpatialObsEncoder(nn.Module):
     """Shared encoder for vector + 2D relative-map observations."""
 
     def __init__(self, obs_space, hidden_sizes, activation_name):
         super().__init__()
         original_space = getattr(obs_space, "original_space", obs_space)
-        self._use_spatial_obs = _space_has_spatial_obs(original_space) or _space_has_spatial_obs(obs_space)
+        self._obs_schema = "flat"
+        self._use_spatial_obs = False
 
-        if self._use_spatial_obs:
+        if _space_has_spatial_obs(original_space) or _space_has_spatial_obs(obs_space):
+            self._obs_schema = "multi_map"
+            self._use_spatial_obs = True
             source_space = original_space if _space_has_spatial_obs(original_space) else obs_space
+            vector_space = source_space.spaces["vector"]
+            global_map_space = source_space.spaces["global_map"]
+            local_map_space = source_space.spaces["local_map"]
+            self.vector_dim = int(np.prod(vector_space.shape))
+            self.global_map_channels = int(global_map_space.shape[-1])
+            self.local_map_channels = int(local_map_space.shape[-1])
+            self.global_map_encoder = self._build_map_encoder(self.global_map_channels, activation_name)
+            self.local_map_encoder = self._build_map_encoder(self.local_map_channels, activation_name)
+            with torch.no_grad():
+                dummy_global_map = torch.zeros(
+                    1,
+                    self.global_map_channels,
+                    global_map_space.shape[0],
+                    global_map_space.shape[1],
+                    dtype=torch.float32,
+                )
+                dummy_local_map = torch.zeros(
+                    1,
+                    self.local_map_channels,
+                    local_map_space.shape[0],
+                    local_map_space.shape[1],
+                    dtype=torch.float32,
+                )
+                global_map_feature_dim = int(self.global_map_encoder(dummy_global_map).shape[1])
+                local_map_feature_dim = int(self.local_map_encoder(dummy_local_map).shape[1])
+            encoder_input_dim = self.vector_dim + global_map_feature_dim + local_map_feature_dim
+        elif _space_has_legacy_spatial_obs(original_space) or _space_has_legacy_spatial_obs(obs_space):
+            self._obs_schema = "legacy_map"
+            self._use_spatial_obs = True
+            source_space = original_space if _space_has_legacy_spatial_obs(original_space) else obs_space
             vector_space = source_space.spaces["vector"]
             relative_map_space = source_space.spaces["relative_map"]
             self.vector_dim = int(np.prod(vector_space.shape))
             self.map_channels = int(relative_map_space.shape[-1])
-            self.map_encoder = nn.Sequential(
-                nn.Conv2d(self.map_channels, 16, kernel_size=5, stride=2, padding=2),
-                _activation_module(activation_name),
-                # nn.MaxPool2d(2),
-                nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),
-                _activation_module(activation_name),
-                nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1),
-                _activation_module(activation_name),
-                nn.MaxPool2d(2),
-                nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
-                _activation_module(activation_name),
-                nn.Flatten(),
-            )
+            self.map_encoder = self._build_map_encoder(self.map_channels, activation_name)
             with torch.no_grad():
                 dummy_map = torch.zeros(
                     1,
@@ -106,7 +142,11 @@ class _SpatialObsEncoder(nn.Module):
         else:
             encoder_input_dim = int(np.prod(obs_space.shape))
             self.vector_dim = encoder_input_dim
+            self.global_map_channels = 0
+            self.local_map_channels = 0
             self.map_channels = 0
+            self.global_map_encoder = nn.Identity()
+            self.local_map_encoder = nn.Identity()
             self.map_encoder = nn.Identity()
 
         layers = []
@@ -122,14 +162,50 @@ class _SpatialObsEncoder(nn.Module):
         self.encoder = nn.Sequential(*layers) if layers else nn.Identity()
         self.output_dim = last_size
 
+    @staticmethod
+    def _build_map_encoder(map_channels, activation_name):
+        """Build a compact CNN encoder for one spatial map."""
+        return nn.Sequential(
+            nn.Conv2d(map_channels, 16, kernel_size=5, stride=2, padding=2),
+            _activation_module(activation_name),
+            nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),
+            _activation_module(activation_name),
+            nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1),
+            _activation_module(activation_name),
+            nn.MaxPool2d(2),
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
+            _activation_module(activation_name),
+            nn.Flatten(),
+        )
+
     def encode(self, input_dict):
         """Encode the current observation into a flat feature vector."""
-        if self._use_spatial_obs:
+        if self._obs_schema == "multi_map":
             obs_dict = input_dict["obs"]
             if not isinstance(obs_dict, dict) and isinstance(input_dict.get("obs_flat"), dict):
                 obs_dict = input_dict["obs_flat"]
-            vector_obs = obs_dict["vector"].float()
-            relative_map = obs_dict["relative_map"].float()
+            vector_obs = _to_float_tensor(obs_dict["vector"])
+            global_map = _to_float_tensor(obs_dict["global_map"])
+            local_map = _to_float_tensor(obs_dict["local_map"])
+            if vector_obs.dim() == 1:
+                vector_obs = vector_obs.unsqueeze(0)
+            if global_map.dim() == 3:
+                global_map = global_map.unsqueeze(0)
+            if local_map.dim() == 3:
+                local_map = local_map.unsqueeze(0)
+            if global_map.shape[-1] == self.global_map_channels:
+                global_map = global_map.permute(0, 3, 1, 2)
+            if local_map.shape[-1] == self.local_map_channels:
+                local_map = local_map.permute(0, 3, 1, 2)
+            global_map_features = self.global_map_encoder(global_map)
+            local_map_features = self.local_map_encoder(local_map)
+            encoder_input = torch.cat([vector_obs, global_map_features, local_map_features], dim=1)
+        elif self._obs_schema == "legacy_map":
+            obs_dict = input_dict["obs"]
+            if not isinstance(obs_dict, dict) and isinstance(input_dict.get("obs_flat"), dict):
+                obs_dict = input_dict["obs_flat"]
+            vector_obs = _to_float_tensor(obs_dict["vector"])
+            relative_map = _to_float_tensor(obs_dict["relative_map"])
             if vector_obs.dim() == 1:
                 vector_obs = vector_obs.unsqueeze(0)
             if relative_map.dim() == 3:

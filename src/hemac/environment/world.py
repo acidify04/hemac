@@ -62,19 +62,20 @@ class World(pygame.sprite.Sprite):
         self.detected_mask = np.zeros((self.area.height, self.area.width), dtype=bool)
         self.coverage_counts = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.int32)
         self.coverage_map = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
+        self.observation_coverage_map = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
         self.search_mask = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
         self.obstacle_map = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
         self.explored_obstacle_map = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
         self.coverage_counts_flat = self.coverage_counts.reshape(-1)
         self.coverage_map_flat = self.coverage_map.reshape(-1)
         self.relative_pad = self.coverage_grid_size
+        self.cell_game_rects = [
+            [self._grid_to_game_rect(grid_x, grid_y) for grid_x in range(self.coverage_grid_size)]
+            for grid_y in range(self.coverage_grid_size)
+        ]
         for grid_x in range(self.coverage_grid_size):
             for grid_y in range(self.coverage_grid_size):
-                cell_center = (
-                    (grid_x + 0.5) * self.coverage_cell_width,
-                    (grid_y + 0.5) * self.coverage_cell_height,
-                )
-                self.search_mask[grid_y, grid_x] = float(self.point_in_search_area(*cell_center))
+                self.search_mask[grid_y, grid_x] = self._cell_search_area_ratio(grid_x, grid_y)
         self.padded_search_mask = np.pad(
             self.search_mask,
             ((self.relative_pad, self.relative_pad), (self.relative_pad, self.relative_pad)),
@@ -129,6 +130,25 @@ class World(pygame.sprite.Sprite):
             return minx <= x <= maxx and miny <= y <= maxy
         return bool(self.prepared_search_area.covers(Point((x, y))))
 
+    def _cell_search_area_ratio(self, grid_x: int, grid_y: int) -> float:
+        """Return the fraction of one coverage cell that lies inside the search area."""
+        if self.search_area_is_rect:
+            minx, miny, maxx, maxy = self.search_bounds
+            cell_min_x = grid_x * self.coverage_cell_width
+            cell_max_x = (grid_x + 1) * self.coverage_cell_width
+            cell_min_y = grid_y * self.coverage_cell_height
+            cell_max_y = (grid_y + 1) * self.coverage_cell_height
+            overlap_x = max(0.0, min(cell_max_x, maxx) - max(cell_min_x, minx))
+            overlap_y = max(0.0, min(cell_max_y, maxy) - max(cell_min_y, miny))
+            return float(np.clip((overlap_x * overlap_y) / max(self.coverage_cell_area, 1e-6), 0.0, 1.0))
+
+        cell_polygon = self._rect_to_world_polygon(self.cell_game_rects[grid_y][grid_x])
+        cell_area = float(cell_polygon.area)
+        if cell_area <= 0.0:
+            return 0.0
+        intersection_area = float(self.search_area.intersection(cell_polygon).area)
+        return float(np.clip(intersection_area / cell_area, 0.0, 1.0))
+
     def _refresh_obstacle_cache(self) -> None:
         """Refresh vectorized obstacle bounds/centers caches."""
         if not self.obstacles:
@@ -144,14 +164,37 @@ class World(pygame.sprite.Sprite):
 
     def _refresh_padded_observation_maps(self, touched_flat: np.ndarray | None = None) -> None:
         """Keep cached padded observation maps in sync with coverage updates."""
+        search_mask_positive = self.search_mask > 0.0
+
         if touched_flat is None:
             self.padded_coverage_map.fill(0.0)
             self.padded_explored_obstacle_map.fill(0.0)
+            self.observation_coverage_map.fill(0.0)
+            np.divide(
+                self.coverage_map,
+                self.search_mask,
+                out=self.observation_coverage_map,
+                where=search_mask_positive,
+            )
+            np.clip(self.observation_coverage_map, 0.0, 1.0, out=self.observation_coverage_map)
+
+            normalized_obstacle_map = np.zeros_like(self.obstacle_map)
+            np.divide(
+                self.obstacle_map,
+                self.search_mask,
+                out=normalized_obstacle_map,
+                where=search_mask_positive,
+            )
+            np.clip(normalized_obstacle_map, 0.0, 1.0, out=normalized_obstacle_map)
+            self.explored_obstacle_map[:, :] = np.where(
+                self.observation_coverage_map > 0.0,
+                normalized_obstacle_map,
+                0.0,
+            )
             self.padded_coverage_map[
                 self.relative_pad : self.relative_pad + self.coverage_grid_size,
                 self.relative_pad : self.relative_pad + self.coverage_grid_size,
-            ] = self.coverage_map
-            self.explored_obstacle_map[:, :] = np.where(self.coverage_map > 0.0, self.obstacle_map, 0.0)
+            ] = self.observation_coverage_map
             self.padded_explored_obstacle_map[
                 self.relative_pad : self.relative_pad + self.coverage_grid_size,
                 self.relative_pad : self.relative_pad + self.coverage_grid_size,
@@ -164,12 +207,21 @@ class World(pygame.sprite.Sprite):
         grid_y, grid_x = np.divmod(touched_flat, self.coverage_grid_size)
         padded_y = grid_y + self.relative_pad
         padded_x = grid_x + self.relative_pad
-        self.padded_coverage_map[padded_y, padded_x] = self.coverage_map[grid_y, grid_x]
+        raw_search = self.search_mask[grid_y, grid_x]
+        normalized_coverage = np.zeros_like(raw_search, dtype=np.float32)
+        valid_search = raw_search > 0.0
+        normalized_coverage[valid_search] = self.coverage_map[grid_y, grid_x][valid_search] / raw_search[valid_search]
+        self.observation_coverage_map[grid_y, grid_x] = np.clip(normalized_coverage, 0.0, 1.0)
+
+        normalized_obstacle = np.zeros_like(raw_search, dtype=np.float32)
+        normalized_obstacle[valid_search] = self.obstacle_map[grid_y, grid_x][valid_search] / raw_search[valid_search]
+        normalized_obstacle = np.clip(normalized_obstacle, 0.0, 1.0)
         self.explored_obstacle_map[grid_y, grid_x] = np.where(
-            self.coverage_map[grid_y, grid_x] > 0.0,
-            self.obstacle_map[grid_y, grid_x],
+            self.observation_coverage_map[grid_y, grid_x] > 0.0,
+            normalized_obstacle,
             0.0,
         )
+        self.padded_coverage_map[padded_y, padded_x] = self.observation_coverage_map[grid_y, grid_x]
         self.padded_explored_obstacle_map[padded_y, padded_x] = self.explored_obstacle_map[grid_y, grid_x]
 
     def reset(self, poi_list, seed=None, options=None):
@@ -182,6 +234,7 @@ class World(pygame.sprite.Sprite):
         self.detected_mask.fill(False)
         self.coverage_counts.fill(0)
         self.coverage_map.fill(0.0)
+        self.observation_coverage_map.fill(0.0)
         self.obstacle_map.fill(0.0)
         self.explored_obstacle_map.fill(0.0)
         self.padded_coverage_map.fill(0.0)
@@ -322,13 +375,35 @@ class World(pygame.sprite.Sprite):
     def _rebuild_obstacle_map(self) -> None:
         """Refresh the obstacle occupancy grid used by agent observations."""
         self.obstacle_map.fill(0.0)
-        for grid_x in range(self.coverage_grid_size):
-            for grid_y in range(self.coverage_grid_size):
-                if self.search_mask[grid_y, grid_x] <= 0.0:
-                    continue
-                cell_rect = self._grid_to_game_rect(grid_x, grid_y)
-                if any(obstacle.colliderect(cell_rect) for obstacle in self.obstacles):
-                    self.obstacle_map[grid_y, grid_x] = 1.0
+        if not self.obstacles:
+            self._refresh_obstacle_cache()
+            self._refresh_padded_observation_maps()
+            return
+
+        for obstacle in self.obstacles:
+            min_grid_x = max(int(obstacle.left / self.coverage_cell_width), 0)
+            max_grid_x = min(int((max(obstacle.right - 1, obstacle.left)) / self.coverage_cell_width), self.coverage_grid_size - 1)
+            min_grid_y = max(
+                int(((self.area.height - obstacle.bottom)) / self.coverage_cell_height),
+                0,
+            )
+            max_grid_y = min(
+                int(((self.area.height - max(obstacle.top + 1, obstacle.top)) - 1) / self.coverage_cell_height),
+                self.coverage_grid_size - 1,
+            )
+
+            for grid_y in range(min_grid_y, max_grid_y + 1):
+                for grid_x in range(min_grid_x, max_grid_x + 1):
+                    if self.search_mask[grid_y, grid_x] <= 0.0:
+                        continue
+                    cell_rect = self.cell_game_rects[grid_y][grid_x]
+                    overlap_rect = obstacle.clip(cell_rect)
+                    if overlap_rect.width <= 0 or overlap_rect.height <= 0:
+                        continue
+                    overlap_area = float(overlap_rect.width * overlap_rect.height)
+                    self.obstacle_map[grid_y, grid_x] += overlap_area / max(self.coverage_cell_area, 1e-6)
+
+        np.clip(self.obstacle_map, 0.0, 1.0, out=self.obstacle_map)
         self._refresh_obstacle_cache()
         self._refresh_padded_observation_maps()
 

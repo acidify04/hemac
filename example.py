@@ -46,12 +46,13 @@ GOAL_CONFIG = {
 
 NUM_EVAL_SEEDS = 10
 VISUALIZATION_DIR = Path("./visualization")
-OBS_GRID_SIZE = 20
-SECTOR_FEATURE_COUNT = OBS_GRID_SIZE * OBS_GRID_SIZE + 4
-RELATIVE_MAP_SIZE = OBS_GRID_SIZE * 2
+GLOBAL_MAP_SIZE = 40
+LOCAL_MAP_SIZE = 20
+ACTION_HISTORY_LENGTH = 5
+ACTION_DIM = 3
 AUTO_PLAY_DELAY_SECONDS = 0.02
-OBS_PANEL_WIDTH = 300
-OBS_PANEL_HEIGHT = 240
+OBS_PANEL_WIDTH = 460
+OBS_PANEL_HEIGHT = 360
 OBS_PANEL_MARGIN = 12
 OBS_WINDOW_PADDING = 12
 OBS_WINDOW_HEADER_HEIGHT = 42
@@ -184,86 +185,175 @@ class ObservationDebugWindow:
 
 
 def _extract_observation_debug(agent_id, observation):
-    """Split an observation into base features and sector-based features."""
+    """Normalize current observation formats into a debug-friendly dict."""
     if isinstance(observation, dict):
+        global_map = np.asarray(observation.get("global_map", []), dtype=np.float32)
+        local_map = np.asarray(observation.get("local_map", []), dtype=np.float32)
         vector_obs = np.asarray(observation.get("vector", []), dtype=np.float32).reshape(-1)
+
+        if global_map.ndim == 3 or local_map.ndim == 3:
+            return {
+                "mode": "multi_map",
+                "vector_obs": vector_obs,
+                "global_map": global_map if global_map.ndim == 3 else None,
+                "local_map": local_map if local_map.ndim == 3 else None,
+            }
+
         relative_map = np.asarray(observation.get("relative_map", []), dtype=np.float32)
-        goal_relative_sector = None
-        goal_relative_is_normalized = False
-        agent_id_norm = None
-        if "drone" in agent_id and vector_obs.size >= 3:
-            goal_relative_sector = tuple(float(v) for v in vector_obs[-3:-1])
-            agent_id_norm = float(vector_obs[-1])
-            vector_obs = vector_obs[:-3]
-            goal_relative_is_normalized = True
-        elif vector_obs.size >= 2:
-            goal_relative_sector = tuple(float(v) for v in vector_obs[-2:])
-            vector_obs = vector_obs[:-2]
-            goal_relative_is_normalized = True
         return {
-            "mode": "relative_map",
-            "base_obs": vector_obs,
-            "coverage_map": relative_map[:, :, 0] if relative_map.size else None,
-            "valid_mask": relative_map[:, :, 1] if relative_map.size else None,
-            "obstacle_map": relative_map[:, :, 2] if relative_map.ndim == 3 and relative_map.shape[-1] > 2 else None,
-            "goal_relative_sector": goal_relative_sector,
-            "goal_relative_is_normalized": goal_relative_is_normalized,
-            "agent_id_norm": agent_id_norm,
+            "mode": "legacy_relative_map",
+            "vector_obs": vector_obs,
+            "relative_map": relative_map if relative_map.ndim == 3 else None,
         }
 
     obs = np.asarray(observation, dtype=np.float32).reshape(-1)
-    if obs.size < SECTOR_FEATURE_COUNT:
-        return {
-            "mode": "flat",
-            "base_obs": obs,
-            "coverage_map": None,
-            "self_sector": None,
-            "goal_relative_sector": None,
-            "goal_relative_is_normalized": False,
-        }
-
-    base_obs = obs[:-SECTOR_FEATURE_COUNT]
-    sector_obs = obs[-SECTOR_FEATURE_COUNT:]
-    coverage_map = sector_obs[: OBS_GRID_SIZE * OBS_GRID_SIZE].reshape(OBS_GRID_SIZE, OBS_GRID_SIZE)
-
     return {
         "mode": "flat",
-        "base_obs": base_obs,
-        "coverage_map": coverage_map,
-        "self_sector": tuple(int(v) for v in sector_obs[-4:-2]),
-        "goal_relative_sector": tuple(int(v) for v in sector_obs[-2:]),
-        "goal_relative_is_normalized": False,
+        "vector_obs": obs,
+        "global_map": None,
+        "local_map": None,
     }
 
 
-def _goal_relative_to_sector_offset(goal_relative, is_normalized):
-    """Convert a stored goal-relative feature into integer sector offsets."""
-    if goal_relative is None:
-        return None
-    if not is_normalized:
-        return tuple(int(v) for v in goal_relative)
-
-    scale = max(OBS_GRID_SIZE - 1, 1)
-    return (
-        int(np.clip(np.rint(goal_relative[0] * scale), -scale, scale)),
-        int(np.clip(np.rint(goal_relative[1] * scale), -scale, scale)),
-    )
+def _observation_size(observation):
+    """Return the flattened size of an observation object."""
+    if isinstance(observation, dict):
+        return int(sum(np.asarray(value).size for value in observation.values()))
+    return int(np.asarray(observation).size)
 
 
-def _base_observation_labels(agent_id, base_obs):
-    """Return readable labels for the non-sector observation slice."""
+def _map_channel_labels(agent_id, map_kind, channel_count):
+    """Return human-readable channel labels for the current observation schema."""
     if "observer" in agent_id:
-        labels = ["orientation", "dist_right", "dist_up", "dist_left", "dist_down"]
+        labels = ["coverage", "boundary", "obstacle", "drones", "goal"]
     else:
-        labels = ["dist_right", "dist_up", "dist_left", "dist_down"]
-        drone_pair_count = max((len(base_obs) - 4) // 2, 0)
-        for idx in range(drone_pair_count):
-            labels.extend([f"peer_{idx}_dx", f"peer_{idx}_dy"])
+        labels = ["coverage", "boundary", "obstacle", "other_drones", "observer", "goal"]
 
-    if len(labels) < len(base_obs):
-        labels.extend([f"pad_{idx}" for idx in range(len(base_obs) - len(labels))])
+    if channel_count > len(labels):
+        labels.extend([f"channel_{idx}" for idx in range(len(labels), channel_count)])
+    return labels[:channel_count]
 
-    return labels[: len(base_obs)]
+
+def _blend_color(base_color, overlay_color, alpha):
+    """Alpha-blend two RGB colors."""
+    alpha = float(np.clip(alpha, 0.0, 1.0))
+    base = np.asarray(base_color, dtype=np.float32)
+    overlay = np.asarray(overlay_color, dtype=np.float32)
+    return tuple(int(v) for v in (base * (1.0 - alpha) + overlay * alpha))
+
+
+def _draw_map_thumbnail(panel, map_array, agent_id, map_kind, top_left, max_size, title_font, tiny_font):
+    """Draw a composite map thumbnail for the current observation."""
+    title_x, title_y = top_left
+    panel.blit(title_font.render(map_kind, True, (240, 245, 250)), (title_x, title_y))
+
+    if map_array is None or map_array.ndim != 3 or map_array.shape[0] == 0 or map_array.shape[1] == 0:
+        panel.blit(tiny_font.render("missing", True, (220, 228, 236)), (title_x, title_y + 16))
+        return pygame.Rect(title_x, title_y + 18, 0, 0)
+
+    map_height, map_width, channel_count = map_array.shape
+    cell_size = max(1, max_size // max(map_height, map_width))
+    draw_width = map_width * cell_size
+    draw_height = map_height * cell_size
+    heatmap_x = title_x
+    heatmap_y = title_y + 18
+    heatmap_rect = pygame.Rect(heatmap_x, heatmap_y, draw_width, draw_height)
+    pygame.draw.rect(panel, (32, 40, 52), heatmap_rect.inflate(4, 4))
+
+    channel_labels = _map_channel_labels(agent_id, map_kind, channel_count)
+    channel_index = {label: idx for idx, label in enumerate(channel_labels)}
+    coverage = map_array[:, :, channel_index["coverage"]] if "coverage" in channel_index else None
+    boundary = map_array[:, :, channel_index["boundary"]] if "boundary" in channel_index else None
+    obstacle = map_array[:, :, channel_index["obstacle"]] if "obstacle" in channel_index else None
+    drone_layer = map_array[:, :, channel_index["drones"]] if "drones" in channel_index else None
+    if drone_layer is None and "other_drones" in channel_index:
+        drone_layer = map_array[:, :, channel_index["other_drones"]]
+    observer_layer = map_array[:, :, channel_index["observer"]] if "observer" in channel_index else None
+    goal_layer = map_array[:, :, channel_index["goal"]] if "goal" in channel_index else None
+
+    for display_row in range(map_height):
+        grid_y = map_height - 1 - display_row
+        for grid_x in range(map_width):
+            boundary_value = float(boundary[grid_y, grid_x]) if boundary is not None else 1.0
+            coverage_value = float(coverage[grid_y, grid_x]) if coverage is not None else 0.0
+            obstacle_value = float(obstacle[grid_y, grid_x]) if obstacle is not None else 0.0
+
+            if boundary is not None and boundary_value <= 0.0 and obstacle_value <= 0.0:
+                color = (10, 14, 18)
+            else:
+                if coverage is not None:
+                    intensity = float(np.clip(coverage_value, 0.0, 1.0))
+                    color = (
+                        int(26 + 32 * boundary_value),
+                        int(52 + 170 * intensity),
+                        int(36 + 72 * intensity),
+                    )
+                else:
+                    boundary_intensity = float(np.clip(boundary_value, 0.0, 1.0))
+                    color = (
+                        int(18 + 26 * boundary_intensity),
+                        int(28 + 42 * boundary_intensity),
+                        int(42 + 112 * boundary_intensity),
+                    )
+                if obstacle_value > 0.0:
+                    color = _blend_color(color, (190, 72, 52), min(obstacle_value, 1.0))
+
+            rect = pygame.Rect(
+                heatmap_x + grid_x * cell_size,
+                heatmap_y + display_row * cell_size,
+                cell_size,
+                cell_size,
+            )
+            pygame.draw.rect(panel, color, rect)
+
+            center = (rect.centerx, rect.centery)
+            marker_radius = max(1, cell_size // 3)
+            if drone_layer is not None and float(drone_layer[grid_y, grid_x]) > 0.0:
+                pygame.draw.circle(panel, (90, 230, 255), center, marker_radius)
+            if observer_layer is not None and float(observer_layer[grid_y, grid_x]) > 0.0:
+                pygame.draw.circle(panel, (255, 226, 120), center, marker_radius + 1, width=1)
+            if goal_layer is not None and float(goal_layer[grid_y, grid_x]) > 0.0:
+                pygame.draw.line(panel, (255, 110, 110), (center[0] - 3, center[1] - 3), (center[0] + 3, center[1] + 3), width=1)
+                pygame.draw.line(panel, (255, 110, 110), (center[0] + 3, center[1] - 3), (center[0] - 3, center[1] + 3), width=1)
+
+    pygame.draw.rect(panel, (70, 82, 96), heatmap_rect, width=1)
+    return heatmap_rect
+
+
+def _map_stat_lines(prefix, map_array, agent_id, map_kind):
+    """Summarize map channels with compact numeric stats."""
+    if map_array is None or map_array.ndim != 3:
+        return [f"{prefix}: missing"]
+
+    lines = []
+    channel_labels = _map_channel_labels(agent_id, map_kind, map_array.shape[-1])
+    for idx, label in enumerate(channel_labels):
+        channel = map_array[:, :, idx]
+        if label in {"coverage", "boundary", "obstacle"}:
+            lines.append(f"{prefix}.{label}: mean {float(np.mean(channel)):.3f}")
+        else:
+            lines.append(f"{prefix}.{label}: sum {float(np.sum(channel)):.1f}")
+    return lines
+
+
+def _action_history_lines(vector_obs):
+    """Format the previous 5-step action history."""
+    if vector_obs.size == 0:
+        return ["action_history: empty"]
+
+    if vector_obs.size % ACTION_DIM != 0:
+        preview = ", ".join(f"{float(value):.2f}" for value in vector_obs[: min(len(vector_obs), 6)])
+        return [f"vector: [{preview}]"]
+
+    history = vector_obs.reshape(-1, ACTION_DIM)
+    lines = []
+    total_steps = history.shape[0]
+    for idx, action_values in enumerate(history):
+        age = total_steps - idx
+        lines.append(
+            f"a[-{age}]: [{float(action_values[0]):.2f}, {float(action_values[1]):.2f}, {float(action_values[2]):.2f}]"
+        )
+    return lines
 
 
 def _format_action(action):
@@ -292,22 +382,11 @@ def draw_observation_panel(
 ):
     """Draw one agent observation panel."""
     obs_debug = _extract_observation_debug(agent_id, observation)
-    base_obs = obs_debug["base_obs"]
-    coverage_map = obs_debug["coverage_map"]
-    goal_relative_sector = obs_debug.get("goal_relative_sector")
-    goal_relative_offset = _goal_relative_to_sector_offset(
-        goal_relative_sector,
-        obs_debug.get("goal_relative_is_normalized", False),
-    )
-    self_sector = obs_debug.get("self_sector")
-    valid_mask = obs_debug.get("valid_mask")
-    obstacle_map = obs_debug.get("obstacle_map")
-    agent_id_norm = obs_debug.get("agent_id_norm")
-    is_relative_map = obs_debug["mode"] == "relative_map"
+    vector_obs = obs_debug.get("vector_obs", np.empty((0,), dtype=np.float32))
+    global_map = obs_debug.get("global_map")
+    local_map = obs_debug.get("local_map")
     panel_width = panel_rect.width
     panel_height = panel_rect.height
-    heatmap_size = min(140, panel_height - 88)
-    heatmap_cell = heatmap_size // OBS_GRID_SIZE
 
     panel = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
     panel.fill((8, 12, 16, 215))
@@ -320,7 +399,7 @@ def draw_observation_panel(
     panel.blit(title, (10, 8))
 
     meta_lines = [
-        f"obs len: {int(sum(np.asarray(v).size for v in observation.values())) if isinstance(observation, dict) else len(np.asarray(observation).reshape(-1))}",
+        f"obs len: {_observation_size(observation)}",
         f"reward: {float(reward):.2f}",
         f"action: {_format_action(action)}",
         f"done: {termination or truncation}",
@@ -328,110 +407,56 @@ def draw_observation_panel(
     for idx, line in enumerate(meta_lines):
         panel.blit(body_font.render(line, True, (215, 225, 235)), (10, 28 + idx * 14))
 
-    heatmap_x = 10
-    heatmap_y = 88
-    pygame.draw.rect(panel, (32, 40, 52), pygame.Rect(heatmap_x - 2, heatmap_y - 2, heatmap_size + 4, heatmap_size + 4))
-
-    if coverage_map is not None:
-        map_size = RELATIVE_MAP_SIZE if is_relative_map else OBS_GRID_SIZE
-        heatmap_cell = heatmap_size // map_size
-        for display_row in range(map_size):
-            grid_y = map_size - 1 - display_row
-            for grid_x in range(map_size):
-                if valid_mask is not None and valid_mask[grid_y, grid_x] <= 0.0:
-                    color = (12, 16, 20)
-                else:
-                    coverage = float(coverage_map[grid_y, grid_x])
-                    obstacle = float(obstacle_map[grid_y, grid_x]) if obstacle_map is not None else 0.0
-                    if obstacle > 0.0:
-                        color = (
-                            int(150 + 60 * min(coverage, 1.0)),
-                            int(45 + 50 * min(coverage, 1.0)),
-                            int(45 + 40 * min(coverage, 1.0)),
-                        )
-                    elif coverage <= 0.0:
-                        color = (26, 38, 56)
-                    else:
-                        intensity = min(max(coverage, 0.0), 1.0)
-                        color = (
-                            int(40 + 40 * intensity),
-                            int(85 + 150 * intensity),
-                            int(55 + 70 * intensity),
-                        )
-                rect = pygame.Rect(
-                    heatmap_x + grid_x * heatmap_cell,
-                    heatmap_y + display_row * heatmap_cell,
-                    heatmap_cell,
-                    heatmap_cell,
-                )
-                pygame.draw.rect(panel, color, rect)
-                pygame.draw.rect(panel, (70, 82, 96), rect, width=1)
-
-        if is_relative_map:
-            self_map_x = OBS_GRID_SIZE
-            self_map_y = OBS_GRID_SIZE
-            marker_x = heatmap_x + self_map_x * heatmap_cell + heatmap_cell // 2
-            marker_y = heatmap_y + (map_size - 1 - self_map_y) * heatmap_cell + heatmap_cell // 2
-            pygame.draw.circle(panel, (255, 255, 255), (marker_x, marker_y), max(heatmap_cell // 3, 3), width=2)
-            if goal_relative_offset is not None:
-                goal_map_x = self_map_x + goal_relative_offset[0]
-                goal_map_y = self_map_y + goal_relative_offset[1]
-                if 0 <= goal_map_x < map_size and 0 <= goal_map_y < map_size:
-                    goal_x = heatmap_x + goal_map_x * heatmap_cell + heatmap_cell // 2
-                    goal_y = heatmap_y + (map_size - 1 - goal_map_y) * heatmap_cell + heatmap_cell // 2
-                    pygame.draw.line(panel, (255, 105, 105), (goal_x - 4, goal_y - 4), (goal_x + 4, goal_y + 4), width=2)
-                    pygame.draw.line(panel, (255, 105, 105), (goal_x + 4, goal_y - 4), (goal_x - 4, goal_y + 4), width=2)
-        else:
-            if self_sector is not None and self_sector[0] >= 0 and self_sector[1] >= 0:
-                marker_x = heatmap_x + self_sector[0] * heatmap_cell + heatmap_cell // 2
-                marker_y = heatmap_y + (map_size - 1 - self_sector[1]) * heatmap_cell + heatmap_cell // 2
-                pygame.draw.circle(panel, (255, 255, 255), (marker_x, marker_y), max(heatmap_cell // 3, 3), width=2)
-
-            if self_sector is not None and goal_relative_offset is not None:
-                goal_sector = (
-                    self_sector[0] + goal_relative_offset[0],
-                    self_sector[1] + goal_relative_offset[1],
-                )
-                if 0 <= goal_sector[0] < map_size and 0 <= goal_sector[1] < map_size:
-                    goal_x = heatmap_x + goal_sector[0] * heatmap_cell + heatmap_cell // 2
-                    goal_y = heatmap_y + (map_size - 1 - goal_sector[1]) * heatmap_cell + heatmap_cell // 2
-                    pygame.draw.line(panel, (255, 105, 105), (goal_x - 4, goal_y - 4), (goal_x + 4, goal_y + 4), width=2)
-                    pygame.draw.line(panel, (255, 105, 105), (goal_x + 4, goal_y - 4), (goal_x - 4, goal_y + 4), width=2)
-
-    panel.blit(tiny_font.render("relative map" if is_relative_map else "coverage map", True, (210, 220, 230)), (heatmap_x, heatmap_y - 16))
-    panel.blit(tiny_font.render("self: white circle", True, (210, 220, 230)), (heatmap_x, heatmap_y + heatmap_size + 4))
-    panel.blit(tiny_font.render("goal: red x", True, (210, 220, 230)), (heatmap_x, heatmap_y + heatmap_size + 16))
-    if obstacle_map is not None:
-        panel.blit(tiny_font.render("obstacle: red cell", True, (210, 220, 230)), (heatmap_x, heatmap_y + heatmap_size + 28))
-
-    labels = _base_observation_labels(agent_id, base_obs)
-    label_start_y = 100 if agent_id_norm is not None else 88
-    for idx, (label, value) in enumerate(zip(labels, base_obs)):
-        text = tiny_font.render(f"{label}: {float(value): .3f}", True, (220, 228, 236))
-        panel.blit(text, (heatmap_x + heatmap_size + 14, label_start_y + idx * 12))
-
-    if self_sector is not None:
-        panel.blit(
-            tiny_font.render(f"self sector: {self_sector}", True, (220, 228, 236)),
-            (heatmap_x + heatmap_size + 14, 60),
+    if obs_debug["mode"] == "multi_map":
+        global_rect = _draw_map_thumbnail(
+            panel,
+            global_map,
+            agent_id,
+            "global_map",
+            (10, 88),
+            128,
+            body_font,
+            tiny_font,
         )
-    if goal_relative_sector is not None:
-        if obs_debug.get("goal_relative_is_normalized", False):
-            goal_text = (
-                f"goal rel: ({goal_relative_sector[0]: .3f}, {goal_relative_sector[1]: .3f})"
-                f" -> {goal_relative_offset}"
-            )
-        else:
-            goal_text = f"goal rel: {goal_relative_sector}"
-        panel.blit(
-            tiny_font.render(goal_text, True, (255, 180, 180)),
-            (heatmap_x + heatmap_size + 14, 72),
+        local_rect = _draw_map_thumbnail(
+            panel,
+            local_map,
+            agent_id,
+            "local_map",
+            (150, 88),
+            128,
+            body_font,
+            tiny_font,
         )
-    if agent_id_norm is not None:
+
+        stat_lines = _map_stat_lines("g", global_map, agent_id, "global")
+        stat_lines.extend(_map_stat_lines("l", local_map, agent_id, "local"))
+        panel.blit(tiny_font.render("channel stats", True, (240, 245, 250)), (290, 88))
+        for idx, line in enumerate(stat_lines):
+            text = tiny_font.render(line, True, (220, 228, 236))
+            panel.blit(text, (290, 104 + idx * 12))
+
+        action_lines = _action_history_lines(vector_obs)
+        action_title_y = max(global_rect.bottom, local_rect.bottom) + 16
+        panel.blit(tiny_font.render("previous 5-step actions", True, (240, 245, 250)), (10, action_title_y))
+        for idx, line in enumerate(action_lines):
+            panel.blit(tiny_font.render(line, True, (220, 228, 236)), (10, action_title_y + 14 + idx * 12))
+
+        legend_y = panel_height - 38
+        legend_lines = [
+            "bg: coverage/boundary, red: obstacle",
+            "cyan: drone, gold: observer, pink x: goal",
+        ]
+        for idx, legend in enumerate(legend_lines):
+            panel.blit(tiny_font.render(legend, True, (210, 220, 230)), (10, legend_y + idx * 12))
+    else:
         panel.blit(
-            tiny_font.render(f"id norm: {agent_id_norm: .3f}", True, (220, 228, 236)),
-            (heatmap_x + heatmap_size + 14, 84),
+            body_font.render("Current debug panel expects global_map/local_map/vector.", True, (255, 190, 190)),
+            (10, 96),
         )
+        fallback_lines = _action_history_lines(vector_obs)
+        for idx, line in enumerate(fallback_lines):
+            panel.blit(tiny_font.render(line, True, (220, 228, 236)), (10, 118 + idx * 12))
 
     border_color = (255, 220, 120) if is_active else (90, 100, 116)
     pygame.draw.rect(panel, border_color, panel.get_rect(), width=2)
@@ -629,12 +654,12 @@ def run_trained_model_simulation(playback_mode="step"):
     def env_creator(config):
         # 훈련 때 사용했던 동일한 스펙을 반환해야 합니다. (render_mode 제외)
         train_env_config = {
-            "n_observers": 0,
-            "observer_speed": 5, 
+            "n_observers": 1,
+            "observer_speed": 25, 
             "n_drones": 3,
             "n_provisioners": 0,
             "known_goals": False,
-            "max_cycles": 500,
+            "max_cycles": 400,
             "drone_config": {
                 "drone_max_speed": 25,
                 "drone_max_thrust": 8,
@@ -653,7 +678,7 @@ def run_trained_model_simulation(playback_mode="step"):
     # 2. 저장된 체크포인트로부터 알고리즘(모델) 로드
     # 저장된 폴더 경로를 지정합니다. (예: ./hemac_checkpoints 하위의 실제 체크포인트 폴더)
     # checkpoint_path = os.path.abspath(find_latest_checkpoint())
-    checkpoint_path = os.path.abspath("./src/train/trained_checkpoints/observer_checkpoint_10000")
+    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_10000")
     print(f"[{checkpoint_path}] 경로에서 학습된 모델을 불러오는 중...")
     algo = Algorithm.from_checkpoint(checkpoint_path)
 
@@ -661,13 +686,13 @@ def run_trained_model_simulation(playback_mode="step"):
     env_config = {
         # 유인기 1대 (느린 속도)
         "n_observers": 1,
-        "observer_speed": 5, 
+        "observer_speed": 25, 
 
         # 무인기 3대 (빠른 속도)
         "n_drones": 0,
         "n_provisioners": 0,
         "known_goals": False,
-        "max_cycles": 500,
+        "max_cycles": 400,
         "drone_config": {
             "drone_max_speed": 25,
             "drone_max_thrust": 8,
@@ -675,8 +700,8 @@ def run_trained_model_simulation(playback_mode="step"):
         },
         
         # 맵 및 목적지 설정
-        "min_obstacles": 7,
-        "max_obstacles": 10,
+        "min_obstacles": 10,
+        "max_obstacles": 13,
         "poi_config": [GOAL_CONFIG],
         
         # [핵심] 화면 시각화 활성화

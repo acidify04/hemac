@@ -11,11 +11,20 @@ class BaseAgent(pygame.sprite.Sprite):
     GRID_RESOLUTION = 20
     EXTRA_OBS_ROWS = 2
     RELATIVE_MAP_SIZE = GRID_RESOLUTION * 2
+    GLOBAL_MAP_SIZE = 40
+    LOCAL_MAP_SIZE = 20
+    LOCAL_REAL_MAP_SIZE = 10
+    ACTION_HISTORY_LENGTH = 5
+    ACTION_DIM = 3
 
     def __init__(self):
         """Overwrite base class constructor."""
         super().__init__()
         self.latest_detected = np.empty((0, 2), dtype=np.int32)
+        self.action_history = np.zeros(
+            (self.ACTION_HISTORY_LENGTH, self.ACTION_DIM),
+            dtype=np.float32,
+        )
 
     @staticmethod
     @lru_cache(maxsize=None)
@@ -40,9 +49,105 @@ class BaseAgent(pygame.sprite.Sprite):
         height = max(world.area.height, 1)
         clipped_x = min(max(int(x), 0), width - 1)
         clipped_y = min(max(int(y), 0), height - 1)
-        grid_x = min(int(clipped_x / world.coverage_cell_width), self.GRID_RESOLUTION - 1)
-        grid_y = min(int(clipped_y / world.coverage_cell_height), self.GRID_RESOLUTION - 1)
+        grid_limit = max(int(world.coverage_grid_size) - 1, 0)
+        grid_x = min(int(clipped_x / world.coverage_cell_width), grid_limit)
+        grid_y = min(int(clipped_y / world.coverage_cell_height), grid_limit)
         return grid_x, grid_y
+
+    def reset_action_history(self) -> None:
+        """Reset the fixed-length action history buffer."""
+        self.action_history.fill(0.0)
+
+    def push_action_history(self, action) -> None:
+        """Append one action to the fixed-length history buffer."""
+        action_array = np.asarray(action, dtype=np.float32).reshape(-1)
+        history_entry = np.zeros((self.ACTION_DIM,), dtype=np.float32)
+        copy_len = min(history_entry.size, action_array.size)
+        if copy_len > 0:
+            history_entry[:copy_len] = action_array[:copy_len]
+
+        self.action_history[:-1] = self.action_history[1:]
+        self.action_history[-1] = history_entry
+
+    def build_action_history_vector(self) -> np.ndarray:
+        """Return the previous actions as a flat vector."""
+        return self.action_history.reshape(-1).astype(np.float32, copy=False)
+
+    def build_entity_channel(self, world, positions) -> np.ndarray:
+        """Return an occupancy map for the provided world-space positions."""
+        channel = np.zeros(
+            (world.coverage_grid_size, world.coverage_grid_size),
+            dtype=np.float32,
+        )
+        if not positions:
+            return channel
+
+        positions_array = np.asarray(positions, dtype=np.float32).reshape(-1, 2)
+        clipped_x = np.clip(positions_array[:, 0], 0.0, max(world.area.width - 1, 0))
+        clipped_y = np.clip(positions_array[:, 1], 0.0, max(world.area.height - 1, 0))
+        grid_x = np.minimum((clipped_x / world.coverage_cell_width).astype(np.int32), world.coverage_grid_size - 1)
+        grid_y = np.minimum((clipped_y / world.coverage_cell_height).astype(np.int32), world.coverage_grid_size - 1)
+        channel[grid_y, grid_x] = 1.0
+        return channel
+
+    def build_padded_entity_channel(self, world, positions, pad: int | None = None) -> np.ndarray:
+        """Return a padded occupancy map for the provided world-space positions."""
+        pad = world.relative_pad if pad is None else int(pad)
+        channel = np.zeros(
+            (world.coverage_grid_size + 2 * pad, world.coverage_grid_size + 2 * pad),
+            dtype=np.float32,
+        )
+        if not positions:
+            return channel
+
+        positions_array = np.asarray(positions, dtype=np.float32).reshape(-1, 2)
+        clipped_x = np.clip(positions_array[:, 0], 0.0, max(world.area.width - 1, 0))
+        clipped_y = np.clip(positions_array[:, 1], 0.0, max(world.area.height - 1, 0))
+        grid_x = np.minimum((clipped_x / world.coverage_cell_width).astype(np.int32), world.coverage_grid_size - 1)
+        grid_y = np.minimum((clipped_y / world.coverage_cell_height).astype(np.int32), world.coverage_grid_size - 1)
+        channel[grid_y + pad, grid_x + pad] = 1.0
+        return channel
+
+    def crop_padded_channel(self, world, padded_channel: np.ndarray, window_size: int) -> np.ndarray:
+        """Crop a self-centered window from an already padded 2D map."""
+        self_grid_x, self_grid_y = self._position_to_grid(self.x, self.y, world)
+        half = window_size // 2
+        start_y = self_grid_y + world.relative_pad - half
+        start_x = self_grid_x + world.relative_pad - half
+        end_y = start_y + window_size
+        end_x = start_x + window_size
+        return padded_channel[start_y:end_y, start_x:end_x]
+
+    def build_multi_channel_view(
+        self,
+        world,
+        padded_channels: list[np.ndarray],
+        window_size: int,
+        upsample: int = 1,
+    ) -> np.ndarray:
+        """Stack centered channel crops into one HWC observation tensor."""
+        cropped_channels = [
+            self.crop_padded_channel(world, channel, window_size)
+            for channel in padded_channels
+        ]
+        stacked = np.stack(cropped_channels, axis=-1).astype(np.float32, copy=False)
+        if upsample > 1:
+            stacked = np.repeat(np.repeat(stacked, upsample, axis=0), upsample, axis=1)
+        return stacked
+
+    def build_global_map_view(self, world, padded_channels: list[np.ndarray]) -> np.ndarray:
+        """Return a 40x40 self-centered global observation view."""
+        return self.build_multi_channel_view(world, padded_channels, self.GLOBAL_MAP_SIZE)
+
+    def build_local_map_view(self, world, padded_channels: list[np.ndarray]) -> np.ndarray:
+        """Return a zoomed 20x20 local view from a narrower real window."""
+        scale = max(self.LOCAL_MAP_SIZE // self.LOCAL_REAL_MAP_SIZE, 1)
+        return self.build_multi_channel_view(
+            world,
+            padded_channels,
+            self.LOCAL_REAL_MAP_SIZE,
+            upsample=scale,
+        )
 
     def build_sector_features(self, world) -> np.ndarray:
         """Build flattened sector coverage and sector-position features."""

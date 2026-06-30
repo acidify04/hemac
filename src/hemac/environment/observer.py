@@ -51,7 +51,7 @@ class Observer(BaseAgent):
         self.altitude = 100
         self.steering_angle = np.pi / 18  # angular velocity
         self.sensor = sensor
-        self.sensor.sensing_range = max(float(self.sensor.sensing_range) / 3.0, 1.0)
+        self.sensor.sensing_range = max(float(self.sensor.sensing_range), 1.0)
         self.sensing_range = sensor.sensing_range
 
         if discrete_action_space:
@@ -68,31 +68,28 @@ class Observer(BaseAgent):
         """
         2D velocity control compatible with the drone action format: [vx, vy, aux].
         """
-        self.base_obs_len = 11
         self.observation_space = gymnasium.spaces.Dict(
             {
-                "vector": gymnasium.spaces.Box(
-                    low=-19.0,
-                    high=19.0,
-                    shape=(self.base_obs_len + 2,),
-                    dtype=np.float32,
-                ),
-                "relative_map": gymnasium.spaces.Box(
+                "global_map": gymnasium.spaces.Box(
                     low=0.0,
                     high=1.0,
-                    shape=(self.RELATIVE_MAP_SIZE, self.RELATIVE_MAP_SIZE, 3),
+                    shape=(self.GLOBAL_MAP_SIZE, self.GLOBAL_MAP_SIZE, 5),
+                    dtype=np.float32,
+                ),
+                "local_map": gymnasium.spaces.Box(
+                    low=0.0,
+                    high=1.0,
+                    shape=(self.LOCAL_MAP_SIZE, self.LOCAL_MAP_SIZE, 5),
+                    dtype=np.float32,
+                ),
+                "vector": gymnasium.spaces.Box(
+                    low=-self.max_speed,
+                    high=self.max_speed,
+                    shape=(self.ACTION_HISTORY_LENGTH * self.ACTION_DIM,),
                     dtype=np.float32,
                 ),
             }
         )
-        """
-        [POI, x_g, y_g, theta, x, y, _...]: POI is treated as a bool corresponding to the
-        presence of in POI in the FOV (1000 = True, -1000 = False).
-        [x_g, y_g] are the goal's absolute coordinates
-        theta is the agent's absolute orientation
-        [x, y] is the agent's absolute position
-        _ is a placeholer to maintain consistent observation spaces between agents (when padding is required)
-        """
 
     def reset(self, seed=None, options=None):
         """Reset observer."""
@@ -103,6 +100,7 @@ class Observer(BaseAgent):
         self.detected = set()
         self.min_dist_record = float('inf')
         self.latest_detected = np.empty((0, 2), dtype=np.int32)
+        self.reset_action_history()
         self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
 
     def sync_pose_state(self):
@@ -129,6 +127,7 @@ class Observer(BaseAgent):
 
         vx = float(np.clip(action[0], -self.max_speed, self.max_speed))
         vy = float(np.clip(action[1], -self.max_speed, self.max_speed))
+        self.push_action_history([vx, vy, float(action[2]) if len(action) > 2 else 0.0])
         if not np.isclose(vx, 0.0) or not np.isclose(vy, 0.0):
             self.orientation = math.atan2(vy, vx) % (2 * np.pi)
         self.x += vx * self.time_factor
@@ -192,43 +191,43 @@ class Observer(BaseAgent):
         else:
             return True
 
-    def get_fov_obs(self, world, goals) -> dict[str, np.ndarray]:
-        """Return observations given world and sensor.
-
-        Args:
-        ----
-            world (_type_): Pygame object.
-            goals (_type_): List of goals.
-
-        Returns:
-        -------
-            list: Observations.
-
-        """
-        if goals:
-            goal = goals[0]
-            if self.sensor and hasattr(self.sensor, "is_point_detected"):
+    def get_fov_obs(self, world, agents, goals) -> dict[str, np.ndarray]:
+        """Return the observer's global/local-map observation."""
+        if goals and self.sensor and hasattr(self.sensor, "is_point_detected"):
+            for goal in goals:
                 if self.sensor.is_point_detected((goal.rect.x, goal.rect.y)):
                     self.goal_in_view = True
                     goal.detected = True
                     self.goal_estimation = (goal.x, goal.y)
                     world.goal_position = (goal.x, goal.y)
+                    break
 
-        distances = self.obstacles_in_quadrants(world)
-        norm_dists = np.clip(distances / max(self.sensing_range, 1e-6), 0.0, 1.0)
+        drone_positions = [
+            (agent.x, agent.y)
+            for agent in agents
+            if agent.__class__.__name__ == "Drone"
+        ]
+        goal_positions = [(goal.x, goal.y) for goal in goals]
 
-        vector_obs = np.zeros(self.base_obs_len + 2, dtype=np.float32)
-        vector_obs[0] = float(((self.orientation % (2 * np.pi)) / np.pi) - 1.0)
-        vector_obs[1 : 1 + norm_dists.size] = norm_dists
-        vector_obs[-2:] = self.build_goal_relative_sector(world)
+        padded_channels = [
+            world.padded_coverage_map,
+            world.padded_search_mask,
+            world.padded_explored_obstacle_map,
+            self.build_padded_entity_channel(world, drone_positions),
+            self.build_padded_entity_channel(world, goal_positions),
+        ]
+        global_map = self.build_global_map_view(world, padded_channels)
+        local_map = self.build_local_map_view(world, padded_channels)
+
         return {
-            "vector": vector_obs,
-            "relative_map": self.build_relative_sector_map(world),
+            "global_map": global_map,
+            "local_map": local_map,
+            "vector": self.build_action_history_vector(),
         }
 
     def observe(self, world, agents, goals):
         """Observe observer."""
-        return self.get_fov_obs(world, goals)
+        return self.get_fov_obs(world, agents, goals)
     
     def obstacles_in_quadrants(self, world):
         """Find distances to obstacles in the 4 quadrants."""
