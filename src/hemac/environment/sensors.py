@@ -234,7 +234,8 @@ class ForwardFacingCamera(Sensor):
 class RoundCamera(Sensor):
     """Instanciate Front Camera."""
 
-    sensing_range: int = 75
+    # sensing_range: int = 75
+    sensing_range: int = 80
     depth_precision: int = 20
     angular_precision: int = 10
     pos: tuple | None = None

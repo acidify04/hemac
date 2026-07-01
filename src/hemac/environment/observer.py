@@ -51,7 +51,7 @@ class Observer(BaseAgent):
         self.altitude = 100
         self.steering_angle = np.pi / 18  # angular velocity
         self.sensor = sensor
-        self.sensor.sensing_range = max(float(self.sensor.sensing_range), 1.0)
+        self.sensor.sensing_range = max(float(self.sensor.sensing_range) / 2, 1.0)
         self.sensing_range = sensor.sensing_range
 
         if discrete_action_space:
@@ -219,11 +219,6 @@ class Observer(BaseAgent):
         global_map = self.build_global_map_view(world, padded_channels)
         local_map = self.build_local_map_view(
             world,
-            static_channels=[
-                world.observation_coverage_map,
-                world.search_mask,
-                world.explored_obstacle_map,
-            ],
             entity_position_groups=[
                 drone_positions,
                 goal_positions,

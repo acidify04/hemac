@@ -10,6 +10,7 @@ import pygame
 
 from shapely.geometry import Point, Polygon
 from shapely.prepared import prep
+from shapely import contains_xy
 
 from hemac.helpers.helper import game_ref_to_world_ref, world_ref_to_game_ref, sample_point_in_polygon
 
@@ -60,6 +61,8 @@ class World(pygame.sprite.Sprite):
         self.coverage_cell_area = self.coverage_cell_width * self.coverage_cell_height
         self.detected = set()
         self.detected_mask = np.zeros((self.area.height, self.area.width), dtype=bool)
+        self.search_pixel_mask = self._build_search_pixel_mask()
+        self.obstacle_pixel_mask = np.zeros((self.area.height, self.area.width), dtype=np.float32)
         self.coverage_counts = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.int32)
         self.coverage_map = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
         self.observation_coverage_map = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
@@ -114,6 +117,125 @@ class World(pygame.sprite.Sprite):
         edges = [(1, 2), (2, 3), (3, 4), (4, 5), (4, 6), (5, 7)]
         adjacency_list = build_adjacency_dict(nodes, edges)
         self.roads = {"nodes": nodes, "edges": edges, "adjacency_list": adjacency_list}
+
+    @staticmethod
+    def _build_integral_image(mask: np.ndarray) -> np.ndarray:
+        """Return a summed-area table with one-cell zero padding."""
+        float_mask = np.asarray(mask, dtype=np.float32)
+        return np.pad(
+            float_mask.cumsum(axis=0).cumsum(axis=1),
+            ((1, 0), (1, 0)),
+            mode="constant",
+            constant_values=0.0,
+        )
+
+    @staticmethod
+    def _integral_box_sums(integral: np.ndarray, x_edges: np.ndarray, y_edges: np.ndarray) -> np.ndarray:
+        """Return per-bin sums from a summed-area table."""
+        x0 = x_edges[:-1]
+        x1 = x_edges[1:]
+        y0 = y_edges[:-1]
+        y1 = y_edges[1:]
+        return (
+            integral[y1[:, None], x1[None, :]]
+            - integral[y0[:, None], x1[None, :]]
+            - integral[y1[:, None], x0[None, :]]
+            + integral[y0[:, None], x0[None, :]]
+        )
+
+    def _build_search_pixel_mask(self) -> np.ndarray:
+        """Rasterize the search area at world-pixel resolution."""
+        mask = np.zeros((self.area.height, self.area.width), dtype=np.float32)
+        if self.search_area_is_rect:
+            minx, miny, maxx, maxy = self.search_bounds
+            x0 = max(int(np.floor(minx)), 0)
+            x1 = min(int(np.ceil(maxx)), self.area.width)
+            y0 = max(int(np.floor(miny)), 0)
+            y1 = min(int(np.ceil(maxy)), self.area.height)
+            if x1 > x0 and y1 > y0:
+                mask[y0:y1, x0:x1] = 1.0
+            return mask
+
+        pixel_x = np.arange(self.area.width, dtype=np.float32) + 0.5
+        pixel_y = np.arange(self.area.height, dtype=np.float32) + 0.5
+        grid_x, grid_y = np.meshgrid(pixel_x, pixel_y, indexing="xy")
+        return contains_xy(self.search_area, grid_x, grid_y).astype(np.float32)
+
+    def build_local_area_channels(
+        self,
+        center_x: float,
+        center_y: float,
+        sensing_range: float,
+        grid_size: int,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Return local coverage, boundary, and obstacle channels over the sensing window."""
+        grid_size = max(int(grid_size), 1)
+        sensing_range = max(float(sensing_range), 1e-6)
+
+        min_x = float(center_x) - sensing_range
+        max_x = float(center_x) + sensing_range
+        min_y = float(center_y) - sensing_range
+        max_y = float(center_y) + sensing_range
+
+        x_edges_world = np.linspace(min_x, max_x, grid_size + 1, dtype=np.float32)
+        y_edges_world = np.linspace(min_y, max_y, grid_size + 1, dtype=np.float32)
+        cell_width = (2.0 * sensing_range) / float(grid_size)
+        cell_area = max(cell_width * cell_width, 1e-6)
+
+        crop_x0 = max(int(np.floor(min_x)), 0)
+        crop_x1 = min(int(np.ceil(max_x)), self.area.width)
+        crop_y0 = max(int(np.floor(min_y)), 0)
+        crop_y1 = min(int(np.ceil(max_y)), self.area.height)
+
+        search_crop = self.search_pixel_mask[crop_y0:crop_y1, crop_x0:crop_x1]
+        obstacle_crop = self.obstacle_pixel_mask[crop_y0:crop_y1, crop_x0:crop_x1]
+        detected_crop = self.detected_mask[crop_y0:crop_y1, crop_x0:crop_x1].astype(np.float32, copy=False)
+        detected_search_crop = detected_crop * search_crop
+
+        search_integral = self._build_integral_image(search_crop)
+        obstacle_integral = self._build_integral_image(obstacle_crop)
+        detected_integral = self._build_integral_image(detected_search_crop)
+
+        x_edges = np.clip(np.rint(x_edges_world).astype(np.int32), crop_x0, crop_x1) - crop_x0
+        y_edges = np.clip(np.rint(y_edges_world).astype(np.int32), crop_y0, crop_y1) - crop_y0
+        x_edges = np.maximum.accumulate(x_edges)
+        y_edges = np.maximum.accumulate(y_edges)
+        x_edges[0] = 0
+        y_edges[0] = 0
+        x_edges[-1] = crop_x1 - crop_x0
+        y_edges[-1] = crop_y1 - crop_y0
+
+        search_sum = self._integral_box_sums(search_integral, x_edges, y_edges)
+        obstacle_sum = self._integral_box_sums(obstacle_integral, x_edges, y_edges)
+        detected_sum = self._integral_box_sums(detected_integral, x_edges, y_edges)
+
+        boundary_channel = np.clip(search_sum / cell_area, 0.0, 1.0).astype(np.float32, copy=False)
+        coverage_channel = np.zeros_like(boundary_channel)
+        valid_search = search_sum > 0.0
+        coverage_channel[valid_search] = np.clip(
+            detected_sum[valid_search] / search_sum[valid_search],
+            0.0,
+            1.0,
+        )
+
+        obstacle_channel = np.zeros_like(boundary_channel)
+        obstacle_channel[valid_search] = np.clip(
+            obstacle_sum[valid_search] / search_sum[valid_search],
+            0.0,
+            1.0,
+        )
+        obstacle_channel[detected_sum <= 0.0] = 0.0
+
+        offsets = (
+            (np.arange(grid_size, dtype=np.float32) + 0.5) * cell_width
+        ) - sensing_range
+        rel_x, rel_y = np.meshgrid(offsets, offsets, indexing="xy")
+        visible_mask = (rel_x * rel_x) + (rel_y * rel_y) <= sensing_range * sensing_range
+        coverage_channel[~visible_mask] = 0.0
+        boundary_channel[~visible_mask] = 0.0
+        obstacle_channel[~visible_mask] = 0.0
+
+        return coverage_channel, boundary_channel, obstacle_channel
 
     @staticmethod
     def _is_axis_aligned_rect(polygon: Polygon) -> bool:
@@ -331,6 +453,7 @@ class World(pygame.sprite.Sprite):
         self.obstacle_map.fill(0.0)
         self.explored_obstacle_map.fill(0.0)
         self.padded_explored_obstacle_map.fill(0.0)
+        self.obstacle_pixel_mask.fill(0.0)
         self._refresh_obstacle_cache()
 
     @staticmethod
@@ -375,12 +498,20 @@ class World(pygame.sprite.Sprite):
     def _rebuild_obstacle_map(self) -> None:
         """Refresh the obstacle occupancy grid used by agent observations."""
         self.obstacle_map.fill(0.0)
+        self.obstacle_pixel_mask.fill(0.0)
         if not self.obstacles:
             self._refresh_obstacle_cache()
             self._refresh_padded_observation_maps()
             return
 
         for obstacle in self.obstacles:
+            world_left = max(int(obstacle.left), 0)
+            world_right = min(int(obstacle.right), self.area.width)
+            world_min_y = max(int(self.area.height - obstacle.bottom), 0)
+            world_max_y = min(int(self.area.height - obstacle.top), self.area.height)
+            if world_right > world_left and world_max_y > world_min_y:
+                self.obstacle_pixel_mask[world_min_y:world_max_y, world_left:world_right] = 1.0
+
             min_grid_x = max(int(obstacle.left / self.coverage_cell_width), 0)
             max_grid_x = min(int((max(obstacle.right - 1, obstacle.left)) / self.coverage_cell_width), self.coverage_grid_size - 1)
             min_grid_y = max(

@@ -907,7 +907,7 @@ class HeMAC:
 
         # individual reward
         self.rewards[active_agent] = reward
-        # LOGGER.info(f"reward for {active_agent} at step {self.num_frames}: {reward_dict[active_agent]}")
+        LOGGER.info(f"reward for {active_agent} at step {self.num_frames}: {reward_dict[active_agent]}")
         self.finalize_episode()
 
         # Update environment and check end of episode

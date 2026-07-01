@@ -241,26 +241,19 @@ class BaseAgent(pygame.sprite.Sprite):
     def build_local_map_view(
         self,
         world,
-        static_channels: list[np.ndarray],
         entity_position_groups: list[list[tuple[float, float]]] | None = None,
         sensing_range: float | None = None,
     ) -> np.ndarray:
         """Return a 20x20 agent-centered view over the agent's sensing range."""
         if sensing_range is None:
             sensing_range = getattr(self, "sensing_range", 0.0)
-        grid_x, grid_y, valid_mask = self._local_sampling_indices(world, sensing_range)
-
-        local_channels = [
-            self.build_local_static_channel(
-                world,
-                channel,
-                sensing_range,
-                grid_x=grid_x,
-                grid_y=grid_y,
-                valid_mask=valid_mask,
-            )
-            for channel in static_channels
-        ]
+        coverage_channel, boundary_channel, obstacle_channel = world.build_local_area_channels(
+            center_x=self.x,
+            center_y=self.y,
+            sensing_range=sensing_range,
+            grid_size=self.LOCAL_MAP_SIZE,
+        )
+        local_channels = [coverage_channel, boundary_channel, obstacle_channel]
         for positions in entity_position_groups or []:
             local_channels.append(self.build_local_entity_channel(positions, sensing_range))
 
