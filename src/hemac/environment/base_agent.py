@@ -13,7 +13,6 @@ class BaseAgent(pygame.sprite.Sprite):
     RELATIVE_MAP_SIZE = GRID_RESOLUTION * 2
     GLOBAL_MAP_SIZE = 40
     LOCAL_MAP_SIZE = 20
-    LOCAL_REAL_MAP_SIZE = 10
     ACTION_HISTORY_LENGTH = 5
     ACTION_DIM = 3
 
@@ -139,15 +138,133 @@ class BaseAgent(pygame.sprite.Sprite):
         """Return a 40x40 self-centered global observation view."""
         return self.build_multi_channel_view(world, padded_channels, self.GLOBAL_MAP_SIZE)
 
-    def build_local_map_view(self, world, padded_channels: list[np.ndarray]) -> np.ndarray:
-        """Return a zoomed 20x20 local view from a narrower real window."""
-        scale = max(self.LOCAL_MAP_SIZE // self.LOCAL_REAL_MAP_SIZE, 1)
-        return self.build_multi_channel_view(
-            world,
-            padded_channels,
-            self.LOCAL_REAL_MAP_SIZE,
-            upsample=scale,
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def _local_sampling_template(local_map_size: int, sensing_range: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Return cached relative sample offsets and a circular visibility mask."""
+        local_map_size = max(int(local_map_size), 1)
+        sensing_range = max(float(sensing_range), 1e-6)
+        cell_size = (2.0 * sensing_range) / float(local_map_size)
+        offsets = (
+            (np.arange(local_map_size, dtype=np.float32) + 0.5) * cell_size
+        ) - sensing_range
+        rel_x, rel_y = np.meshgrid(offsets, offsets, indexing="xy")
+        visible_mask = (rel_x * rel_x) + (rel_y * rel_y) <= sensing_range * sensing_range
+        rel_x.setflags(write=False)
+        rel_y.setflags(write=False)
+        visible_mask.setflags(write=False)
+        return rel_x, rel_y, visible_mask
+
+    def _local_sampling_indices(
+        self,
+        world,
+        sensing_range: float,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Return per-cell world-grid indices and validity for the local sensing view."""
+        rel_x, rel_y, visible_mask = self._local_sampling_template(
+            self.LOCAL_MAP_SIZE,
+            sensing_range,
         )
+        sample_x = rel_x + float(self.x)
+        sample_y = rel_y + float(self.y)
+        in_world = (
+            (sample_x >= 0.0)
+            & (sample_x < float(world.area.width))
+            & (sample_y >= 0.0)
+            & (sample_y < float(world.area.height))
+        )
+        valid_mask = visible_mask & in_world
+
+        clipped_x = np.clip(sample_x, 0.0, max(float(world.area.width) - 1.0, 0.0))
+        clipped_y = np.clip(sample_y, 0.0, max(float(world.area.height) - 1.0, 0.0))
+        grid_x = np.minimum(
+            (clipped_x / world.coverage_cell_width).astype(np.int32),
+            world.coverage_grid_size - 1,
+        )
+        grid_y = np.minimum(
+            (clipped_y / world.coverage_cell_height).astype(np.int32),
+            world.coverage_grid_size - 1,
+        )
+        return grid_x, grid_y, valid_mask
+
+    def build_local_static_channel(
+        self,
+        world,
+        channel: np.ndarray,
+        sensing_range: float,
+        grid_x: np.ndarray | None = None,
+        grid_y: np.ndarray | None = None,
+        valid_mask: np.ndarray | None = None,
+    ) -> np.ndarray:
+        """Sample one grid-aligned world channel over the local sensing window."""
+        if grid_x is None or grid_y is None or valid_mask is None:
+            grid_x, grid_y, valid_mask = self._local_sampling_indices(world, sensing_range)
+
+        local_channel = np.zeros(
+            (self.LOCAL_MAP_SIZE, self.LOCAL_MAP_SIZE),
+            dtype=np.float32,
+        )
+        local_channel[valid_mask] = channel[grid_y[valid_mask], grid_x[valid_mask]]
+        return local_channel
+
+    def build_local_entity_channel(
+        self,
+        positions,
+        sensing_range: float,
+    ) -> np.ndarray:
+        """Rasterize world-space entity positions into the local sensing view."""
+        local_channel = np.zeros(
+            (self.LOCAL_MAP_SIZE, self.LOCAL_MAP_SIZE),
+            dtype=np.float32,
+        )
+        if not positions:
+            return local_channel
+
+        sensing_range = max(float(sensing_range), 1e-6)
+        positions_array = np.asarray(positions, dtype=np.float32).reshape(-1, 2)
+        rel_x = positions_array[:, 0] - float(self.x)
+        rel_y = positions_array[:, 1] - float(self.y)
+        in_range = (rel_x * rel_x) + (rel_y * rel_y) <= sensing_range * sensing_range
+        if not np.any(in_range):
+            return local_channel
+
+        rel_x = rel_x[in_range]
+        rel_y = rel_y[in_range]
+        span = 2.0 * sensing_range
+        local_x = np.floor(((rel_x + sensing_range) / span) * self.LOCAL_MAP_SIZE).astype(np.int32)
+        local_y = np.floor(((rel_y + sensing_range) / span) * self.LOCAL_MAP_SIZE).astype(np.int32)
+        local_x = np.clip(local_x, 0, self.LOCAL_MAP_SIZE - 1)
+        local_y = np.clip(local_y, 0, self.LOCAL_MAP_SIZE - 1)
+        local_channel[local_y, local_x] = 1.0
+        return local_channel
+
+    def build_local_map_view(
+        self,
+        world,
+        static_channels: list[np.ndarray],
+        entity_position_groups: list[list[tuple[float, float]]] | None = None,
+        sensing_range: float | None = None,
+    ) -> np.ndarray:
+        """Return a 20x20 agent-centered view over the agent's sensing range."""
+        if sensing_range is None:
+            sensing_range = getattr(self, "sensing_range", 0.0)
+        grid_x, grid_y, valid_mask = self._local_sampling_indices(world, sensing_range)
+
+        local_channels = [
+            self.build_local_static_channel(
+                world,
+                channel,
+                sensing_range,
+                grid_x=grid_x,
+                grid_y=grid_y,
+                valid_mask=valid_mask,
+            )
+            for channel in static_channels
+        ]
+        for positions in entity_position_groups or []:
+            local_channels.append(self.build_local_entity_channel(positions, sensing_range))
+
+        return np.stack(local_channels, axis=-1).astype(np.float32, copy=False)
 
     def build_sector_features(self, world) -> np.ndarray:
         """Build flattened sector coverage and sector-position features."""

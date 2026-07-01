@@ -2,11 +2,13 @@ import argparse
 import os
 from datetime import datetime
 from pathlib import Path
+import pickle
 import random
 import math
 import sys
 
-PROJECT_SRC = Path(__file__).resolve().parent / "src"
+PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_SRC = PROJECT_ROOT / "src"
 if str(PROJECT_SRC) not in sys.path:
     sys.path.insert(0, str(PROJECT_SRC))
 
@@ -44,6 +46,14 @@ GOAL_CONFIG = {
     "spawn_quadrant": "bottom_right",
 }
 
+OBSERVER_CHECKPOINT_CANDIDATES = [
+    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_00900",
+]
+DRONE_CHECKPOINT_CANDIDATES = [
+    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_00900",
+    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_00900",
+]
+
 NUM_EVAL_SEEDS = 10
 VISUALIZATION_DIR = Path("./visualization")
 GLOBAL_MAP_SIZE = 40
@@ -74,6 +84,41 @@ def find_latest_checkpoint():
         raise FileNotFoundError("No checkpoint_* directory found in ./hemac_checkpoints or ./src/train/hemac_checkpoints")
 
     return max(checkpoints, key=lambda path: path.stat().st_mtime)
+
+
+def resolve_checkpoint_path(candidates, label):
+    """Return the first existing checkpoint directory from the candidate list."""
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate.resolve()
+
+    candidate_text = ", ".join(str(path) for path in candidates)
+    raise FileNotFoundError(f"No {label} checkpoint found. Checked: {candidate_text}")
+
+
+def load_policy_weights_from_checkpoint(checkpoint_dir, policy_id):
+    """Load one policy's weight dict from an RLlib checkpoint directory."""
+    policy_state_path = Path(checkpoint_dir) / "policies" / policy_id / "policy_state.pkl"
+    if not policy_state_path.is_file():
+        raise FileNotFoundError(
+            f"Policy checkpoint not found for {policy_id}: {policy_state_path}"
+        )
+
+    with policy_state_path.open("rb") as file_obj:
+        policy_state = pickle.load(file_obj)
+
+    weights = policy_state.get("weights")
+    if not isinstance(weights, dict) or not weights:
+        raise ValueError(
+            f"Checkpoint {policy_state_path} does not contain valid weights for {policy_id}."
+        )
+    return weights
+
+
+def restore_policy_from_checkpoint(algo, policy_id, checkpoint_dir):
+    """Overwrite one policy inside a restored RLlib Algorithm."""
+    weights = load_policy_weights_from_checkpoint(checkpoint_dir, policy_id)
+    algo.set_weights({policy_id: weights})
 
 
 def hold_window_open(seconds=5.0):
@@ -655,7 +700,7 @@ def run_trained_model_simulation(playback_mode="step"):
         # 훈련 때 사용했던 동일한 스펙을 반환해야 합니다. (render_mode 제외)
         train_env_config = {
             "n_observers": 1,
-            "observer_speed": 25, 
+            "observer_speed": 10,
             "n_drones": 3,
             "n_provisioners": 0,
             "known_goals": False,
@@ -665,8 +710,8 @@ def run_trained_model_simulation(playback_mode="step"):
                 "drone_max_thrust": 8,
                 "drones_starting_pos": DRONE_START_POSITIONS,
             },
-            "min_obstacles": 5,
-            "max_obstacles": 7,
+            "min_obstacles": 7,
+            "max_obstacles": 10,
             "poi_config": [GOAL_CONFIG],
         }
         env = HeMAC_v0.env(**train_env_config)
@@ -675,21 +720,31 @@ def run_trained_model_simulation(playback_mode="step"):
     # 학습 때 사용했던 정확히 그 이름으로 등록합니다.
     register_env("hemac_asymmetric_env", env_creator)
 
-    # 2. 저장된 체크포인트로부터 알고리즘(모델) 로드
-    # 저장된 폴더 경로를 지정합니다. (예: ./hemac_checkpoints 하위의 실제 체크포인트 폴더)
-    # checkpoint_path = os.path.abspath(find_latest_checkpoint())
-    checkpoint_path = os.path.abspath("./src/train/hemac_checkpoints/checkpoint_10000")
-    print(f"[{checkpoint_path}] 경로에서 학습된 모델을 불러오는 중...")
-    algo = Algorithm.from_checkpoint(checkpoint_path)
+    # 2. 정책별 체크포인트를 따로 로드합니다.
+    observer_checkpoint_path = resolve_checkpoint_path(
+        OBSERVER_CHECKPOINT_CANDIDATES,
+        "observer",
+    )
+    drone_checkpoint_path = resolve_checkpoint_path(
+        DRONE_CHECKPOINT_CANDIDATES,
+        "drone",
+    )
+
+    print(f"[{drone_checkpoint_path}] 경로에서 base 알고리즘을 불러오는 중...")
+    algo = Algorithm.from_checkpoint(str(drone_checkpoint_path))
+    restore_policy_from_checkpoint(algo, "observer_policy", observer_checkpoint_path)
+    restore_policy_from_checkpoint(algo, "drone_policy", drone_checkpoint_path)
+    print(f"[observer_policy] <- {observer_checkpoint_path}")
+    print(f"[drone_policy] <- {drone_checkpoint_path}")
 
     # 3. 평가용 비대칭 환경 구성 (학습 때 사용한 스펙과 완벽히 동일해야 합니다)
     env_config = {
         # 유인기 1대 (느린 속도)
         "n_observers": 1,
-        "observer_speed": 25, 
+        "observer_speed": 10,
 
         # 무인기 3대 (빠른 속도)
-        "n_drones": 0,
+        "n_drones": 3,
         "n_provisioners": 0,
         "known_goals": False,
         "max_cycles": 400,
@@ -700,8 +755,8 @@ def run_trained_model_simulation(playback_mode="step"):
         },
         
         # 맵 및 목적지 설정
-        "min_obstacles": 10,
-        "max_obstacles": 13,
+        "min_obstacles": 7,
+        "max_obstacles": 10,
         "poi_config": [GOAL_CONFIG],
         
         # [핵심] 화면 시각화 활성화

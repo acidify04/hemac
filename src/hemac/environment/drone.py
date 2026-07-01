@@ -397,7 +397,20 @@ class Drone(BaseAgent):
             self.build_padded_entity_channel(world, goal_positions),
         ]
         global_map = self.build_global_map_view(world, padded_channels)
-        local_map = self.build_local_map_view(world, padded_channels)
+        local_map = self.build_local_map_view(
+            world,
+            static_channels=[
+                world.observation_coverage_map,
+                world.search_mask,
+                world.explored_obstacle_map,
+            ],
+            entity_position_groups=[
+                other_drone_positions,
+                observer_positions,
+                goal_positions,
+            ],
+            sensing_range=self.sensing_range,
+        )
 
         return {
             "global_map": global_map,

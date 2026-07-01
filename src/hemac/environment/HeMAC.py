@@ -892,10 +892,11 @@ class HeMAC:
                 if goal_dist < agent.sensing_range:  # goal까지의 거리가 sensing range보다 가까워지면 발견
                     agent.found_goal = True
                     self.found_goal = True
+                    reward += 300
+                    reward_dict[active_agent].append(300)
                     self._mark_mission_success(
                         active_agent=active_agent,
                         reward_dict=reward_dict,
-                        reward_bonus=300.0,
                     )
 
             newly_detected_count = self._update_detected_cache(agent)
@@ -906,7 +907,7 @@ class HeMAC:
 
         # individual reward
         self.rewards[active_agent] = reward
-        LOGGER.info(f"reward for {active_agent} at step {self.num_frames}: {reward_dict[active_agent]}")
+        # LOGGER.info(f"reward for {active_agent} at step {self.num_frames}: {reward_dict[active_agent]}")
         self.finalize_episode()
 
         # Update environment and check end of episode
