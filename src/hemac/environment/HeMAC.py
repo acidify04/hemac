@@ -38,6 +38,7 @@ import gymnasium.spaces
 import numpy as np
 import pygame
 import math
+import random
 from gymnasium.utils import EzPickle, seeding
 from pettingzoo import AECEnv
 from pettingzoo.utils import wrappers
@@ -765,6 +766,7 @@ class HeMAC:
 
         agent = self.agents_list[self.agent_name_mapping[active_agent]]
         agent.update(self.area, self.world, action, self.found_goal)
+        self.world.reveal_warning_zones_for_agent(agent)
 
         # Update position and uncertainty of objectives
         for goal in self.goals:
@@ -785,6 +787,19 @@ class HeMAC:
                 reward_dict[active_agent].append(-300)
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
                     LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
+            elif self.world.is_in_warning_zone(agent.x, agent.y):  # 위험구역에 들어간 경우
+                if random.random() < 0.5:  # 50% 확률로 충돌 처리
+                    self.collided = True
+                    self.drone_crash = True
+                    self.drone_crash_to_warning_zone = True
+                    self.terminate = True
+                    reward -= 300  # Penalty for entering a warning zone
+                    reward_dict[active_agent].append(-300)
+                # else:
+                #     reward -= 50  # Penalty for entering a warning zone without collision
+                #     reward_dict[active_agent].append(-50)
+                if self.render_mode == "human" or self.render_mode == "rgb_array":
+                    LOGGER.info(f"drone entered a warning zone. pos: {(agent.x, agent.y)}")
             else:
                 obstacle_idx = agent.rect.collidelist(self.world.obstacles)
                 if obstacle_idx != -1:
@@ -844,6 +859,19 @@ class HeMAC:
                 reward_dict[active_agent].append(-300)
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
                     LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
+            elif self.world.is_in_warning_zone(agent.x, agent.y):
+                if random.random() < 0.5:  # 50% 확률로 충돌 처리
+                    self.collided = True
+                    self.observer_crash = True
+                    self.terminate = True
+                    self.observer_crash_to_obstacle = True
+                    reward -= 300  # Penalty for entering a warning zone
+                    reward_dict[active_agent].append(-300)
+                # else:
+                #     reward -= 50  # Penalty for entering a warning zone without collision
+                #     reward_dict[active_agent].append(-50)
+                if self.render_mode == "human" or self.render_mode == "rgb_array":
+                    LOGGER.info(f"observer entered a warning zone. pos: {(agent.x, agent.y)}")
             else:
                 obstacle_idx = agent.rect.collidelist(self.world.obstacles)
                 if obstacle_idx != -1:

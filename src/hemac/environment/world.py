@@ -19,6 +19,9 @@ class World(pygame.sprite.Sprite):
     """World class."""
 
     BASE_OBSTACLE_CLEARANCE = 150
+    OBSTACLE_WARNING_RADIUS = 60
+    OBSTACLE_WARNING_FILL = (255, 80, 80, 55)
+    OBSTACLE_WARNING_OUTLINE = (255, 120, 120, 150)
 
     def __init__(
         self,
@@ -63,12 +66,16 @@ class World(pygame.sprite.Sprite):
         self.detected_mask = np.zeros((self.area.height, self.area.width), dtype=bool)
         self.search_pixel_mask = self._build_search_pixel_mask()
         self.obstacle_pixel_mask = np.zeros((self.area.height, self.area.width), dtype=np.float32)
+        self.warning_pixel_mask = np.zeros((self.area.height, self.area.width), dtype=np.float32)
+        self.observed_warning_pixel_mask = np.zeros((self.area.height, self.area.width), dtype=np.float32)
         self.coverage_counts = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.int32)
         self.coverage_map = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
         self.observation_coverage_map = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
         self.search_mask = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
         self.obstacle_map = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
         self.explored_obstacle_map = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
+        self.warning_range_map = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
+        self.explored_warning_range_map = np.zeros((self.coverage_grid_size, self.coverage_grid_size), dtype=np.float32)
         self.coverage_counts_flat = self.coverage_counts.reshape(-1)
         self.coverage_map_flat = self.coverage_map.reshape(-1)
         self.relative_pad = self.coverage_grid_size
@@ -97,8 +104,15 @@ class World(pygame.sprite.Sprite):
             mode="constant",
             constant_values=0.0,
         )
+        self.padded_explored_warning_range_map = np.pad(
+            self.explored_warning_range_map,
+            ((self.relative_pad, self.relative_pad), (self.relative_pad, self.relative_pad)),
+            mode="constant",
+            constant_values=0.0,
+        )
         self.obstacle_bounds = np.empty((0, 4), dtype=np.int32)
         self.obstacle_centers = np.empty((0, 2), dtype=np.float32)
+        self.revealed_warning_obstacles = np.zeros((0,), dtype=bool)
         minx, miny, maxx, maxy = self.search_bounds
         self.search_diagonal = float(np.hypot(maxx - minx, maxy - miny))
 
@@ -167,8 +181,8 @@ class World(pygame.sprite.Sprite):
         center_y: float,
         sensing_range: float,
         grid_size: int,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Return local coverage, boundary, and obstacle channels over the sensing window."""
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Return local coverage, boundary, obstacle, and warning channels over the sensing window."""
         grid_size = max(int(grid_size), 1)
         sensing_range = max(float(sensing_range), 1e-6)
 
@@ -189,11 +203,13 @@ class World(pygame.sprite.Sprite):
 
         search_crop = self.search_pixel_mask[crop_y0:crop_y1, crop_x0:crop_x1]
         obstacle_crop = self.obstacle_pixel_mask[crop_y0:crop_y1, crop_x0:crop_x1]
+        warning_crop = self.observed_warning_pixel_mask[crop_y0:crop_y1, crop_x0:crop_x1] * search_crop
         detected_crop = self.detected_mask[crop_y0:crop_y1, crop_x0:crop_x1].astype(np.float32, copy=False)
         detected_search_crop = detected_crop * search_crop
 
         search_integral = self._build_integral_image(search_crop)
         obstacle_integral = self._build_integral_image(obstacle_crop)
+        warning_integral = self._build_integral_image(warning_crop)
         detected_integral = self._build_integral_image(detected_search_crop)
 
         x_edges = np.clip(np.rint(x_edges_world).astype(np.int32), crop_x0, crop_x1) - crop_x0
@@ -207,6 +223,7 @@ class World(pygame.sprite.Sprite):
 
         search_sum = self._integral_box_sums(search_integral, x_edges, y_edges)
         obstacle_sum = self._integral_box_sums(obstacle_integral, x_edges, y_edges)
+        warning_sum = self._integral_box_sums(warning_integral, x_edges, y_edges)
         detected_sum = self._integral_box_sums(detected_integral, x_edges, y_edges)
 
         boundary_channel = np.clip(search_sum / cell_area, 0.0, 1.0).astype(np.float32, copy=False)
@@ -226,6 +243,13 @@ class World(pygame.sprite.Sprite):
         )
         obstacle_channel[detected_sum <= 0.0] = 0.0
 
+        warning_channel = np.zeros_like(boundary_channel)
+        warning_channel[valid_search] = np.clip(
+            warning_sum[valid_search] / search_sum[valid_search],
+            0.0,
+            1.0,
+        )
+
         offsets = (
             (np.arange(grid_size, dtype=np.float32) + 0.5) * cell_width
         ) - sensing_range
@@ -234,8 +258,133 @@ class World(pygame.sprite.Sprite):
         coverage_channel[~visible_mask] = 0.0
         boundary_channel[~visible_mask] = 0.0
         obstacle_channel[~visible_mask] = 0.0
+        warning_channel[~visible_mask] = 0.0
 
-        return coverage_channel, boundary_channel, obstacle_channel
+        return coverage_channel, boundary_channel, obstacle_channel, warning_channel
+
+    def _paint_disk_on_world_mask(self, mask: np.ndarray, center_x: float, center_y: float, radius: float) -> None:
+        """Rasterize one circular warning zone into a world-space pixel mask."""
+        radius = max(float(radius), 0.0)
+        if radius <= 0.0:
+            return
+
+        x0 = max(int(np.floor(center_x - radius)), 0)
+        x1 = min(int(np.ceil(center_x + radius)) + 1, self.area.width)
+        y0 = max(int(np.floor(center_y - radius)), 0)
+        y1 = min(int(np.ceil(center_y + radius)) + 1, self.area.height)
+        if x1 <= x0 or y1 <= y0:
+            return
+
+        sample_x = np.arange(x0, x1, dtype=np.float32) + 0.5
+        sample_y = np.arange(y0, y1, dtype=np.float32)[:, None] + 0.5
+        dx = sample_x[None, :] - float(center_x)
+        dy = sample_y - float(center_y)
+        disk = ((dx * dx) + (dy * dy) <= radius * radius).astype(np.float32, copy=False)
+        mask[y0:y1, x0:x1] = np.maximum(mask[y0:y1, x0:x1], disk)
+
+    def _rebuild_warning_range_map(self) -> None:
+        """Aggregate the warning pixel mask into the 20x20 coverage grid."""
+        self.warning_range_map.fill(0.0)
+        if not np.any(self.warning_pixel_mask):
+            return
+
+        visible_warning_mask = self.warning_pixel_mask * self.search_pixel_mask
+        warning_integral = self._build_integral_image(visible_warning_mask)
+        x_edges = np.rint(np.linspace(0.0, float(self.area.width), self.coverage_grid_size + 1)).astype(np.int32)
+        y_edges = np.rint(np.linspace(0.0, float(self.area.height), self.coverage_grid_size + 1)).astype(np.int32)
+        x_edges[0] = 0
+        y_edges[0] = 0
+        x_edges[-1] = self.area.width
+        y_edges[-1] = self.area.height
+        warning_sum = self._integral_box_sums(warning_integral, x_edges, y_edges)
+        self.warning_range_map[:, :] = np.clip(
+            warning_sum / max(self.coverage_cell_area, 1e-6),
+            0.0,
+            1.0,
+        )
+
+    def _rebuild_observed_warning_map(self) -> None:
+        """Aggregate revealed warning zones into the observation grid."""
+        self.explored_warning_range_map.fill(0.0)
+        self.padded_explored_warning_range_map.fill(0.0)
+        if not np.any(self.observed_warning_pixel_mask):
+            return
+
+        visible_warning_mask = self.observed_warning_pixel_mask * self.search_pixel_mask
+        warning_integral = self._build_integral_image(visible_warning_mask)
+        x_edges = np.rint(np.linspace(0.0, float(self.area.width), self.coverage_grid_size + 1)).astype(np.int32)
+        y_edges = np.rint(np.linspace(0.0, float(self.area.height), self.coverage_grid_size + 1)).astype(np.int32)
+        x_edges[0] = 0
+        y_edges[0] = 0
+        x_edges[-1] = self.area.width
+        y_edges[-1] = self.area.height
+        warning_sum = self._integral_box_sums(warning_integral, x_edges, y_edges)
+        self.explored_warning_range_map[:, :] = np.clip(
+            warning_sum / max(self.coverage_cell_area, 1e-6),
+            0.0,
+            1.0,
+        )
+        self.padded_explored_warning_range_map[
+            self.relative_pad : self.relative_pad + self.coverage_grid_size,
+            self.relative_pad : self.relative_pad + self.coverage_grid_size,
+        ] = self.explored_warning_range_map
+
+    def reveal_warning_zones_for_obstacles(self, obstacle_indices) -> bool:
+        """Reveal warning circles for newly observed obstacles."""
+        if not self.obstacles:
+            return False
+
+        new_indices = []
+        for obstacle_idx in obstacle_indices:
+            idx = int(obstacle_idx)
+            if idx < 0 or idx >= len(self.obstacles):
+                continue
+            if idx < len(self.revealed_warning_obstacles) and self.revealed_warning_obstacles[idx]:
+                continue
+            new_indices.append(idx)
+
+        if not new_indices:
+            return False
+
+        for idx in new_indices:
+            obstacle = self.obstacles[idx]
+            self._paint_disk_on_world_mask(
+                self.observed_warning_pixel_mask,
+                center_x=float(obstacle.centerx),
+                center_y=float(self.area.height - obstacle.centery),
+                radius=float(self.OBSTACLE_WARNING_RADIUS),
+            )
+            self.revealed_warning_obstacles[idx] = True
+
+        self._rebuild_observed_warning_map()
+        return True
+
+    def reveal_warning_zones_for_agent(self, agent) -> bool:
+        """Reveal warning zones only when an agent sensor sees an obstacle."""
+        if not self.obstacles or not hasattr(agent, "sensor") or agent.sensor is None:
+            return False
+        if not hasattr(agent.sensor, "is_point_detected"):
+            return False
+
+        visible_indices = []
+        for obstacle_idx, obstacle in enumerate(self.obstacles):
+            if obstacle_idx < len(self.revealed_warning_obstacles) and self.revealed_warning_obstacles[obstacle_idx]:
+                continue
+            if agent.sensor.is_point_detected(obstacle.center):
+                visible_indices.append(obstacle_idx)
+
+        return self.reveal_warning_zones_for_obstacles(visible_indices)
+
+    def is_in_warning_zone(self, x: float, y: float, *, require_detected: bool = False) -> bool:
+        """Return True when a world-space point lies inside any obstacle warning circle."""
+        if not (0.0 <= x < float(self.area.width) and 0.0 <= y < float(self.area.height)):
+            return False
+
+        grid_x = min(max(int(np.floor(x)), 0), self.area.width - 1)
+        grid_y = min(max(int(np.floor(y)), 0), self.area.height - 1)
+        if require_detected and not self.detected_mask[grid_y, grid_x]:
+            return False
+        return bool(self.warning_pixel_mask[grid_y, grid_x] > 0.0)
 
     @staticmethod
     def _is_axis_aligned_rect(polygon: Polygon) -> bool:
@@ -276,6 +425,7 @@ class World(pygame.sprite.Sprite):
         if not self.obstacles:
             self.obstacle_bounds = np.empty((0, 4), dtype=np.int32)
             self.obstacle_centers = np.empty((0, 2), dtype=np.float32)
+            self.revealed_warning_obstacles = np.zeros((0,), dtype=bool)
             return
 
         self.obstacle_bounds = np.array(
@@ -283,6 +433,7 @@ class World(pygame.sprite.Sprite):
             dtype=np.int32,
         )
         self.obstacle_centers = np.array([rect.center for rect in self.obstacles], dtype=np.float32)
+        self.revealed_warning_obstacles = np.zeros((len(self.obstacles),), dtype=bool)
 
     def _refresh_padded_observation_maps(self, touched_flat: np.ndarray | None = None) -> None:
         """Keep cached padded observation maps in sync with coverage updates."""
@@ -321,6 +472,7 @@ class World(pygame.sprite.Sprite):
                 self.relative_pad : self.relative_pad + self.coverage_grid_size,
                 self.relative_pad : self.relative_pad + self.coverage_grid_size,
             ] = self.explored_obstacle_map
+            self._rebuild_observed_warning_map()
             return
 
         touched_flat = np.asarray(touched_flat, dtype=np.int32).reshape(-1)
@@ -359,8 +511,15 @@ class World(pygame.sprite.Sprite):
         self.observation_coverage_map.fill(0.0)
         self.obstacle_map.fill(0.0)
         self.explored_obstacle_map.fill(0.0)
+        self.warning_range_map.fill(0.0)
+        self.explored_warning_range_map.fill(0.0)
+        self.obstacle_pixel_mask.fill(0.0)
+        self.warning_pixel_mask.fill(0.0)
+        self.observed_warning_pixel_mask.fill(0.0)
         self.padded_coverage_map.fill(0.0)
         self.padded_explored_obstacle_map.fill(0.0)
+        self.padded_explored_warning_range_map.fill(0.0)
+        self.revealed_warning_obstacles = np.zeros((len(self.obstacles),), dtype=bool)
         self.base.center = (150, 150)
         # collision = True
         # while collision:
@@ -452,8 +611,13 @@ class World(pygame.sprite.Sprite):
         self.obstacles.clear()  # Clear the list of obstacles
         self.obstacle_map.fill(0.0)
         self.explored_obstacle_map.fill(0.0)
+        self.warning_range_map.fill(0.0)
+        self.explored_warning_range_map.fill(0.0)
         self.padded_explored_obstacle_map.fill(0.0)
+        self.padded_explored_warning_range_map.fill(0.0)
         self.obstacle_pixel_mask.fill(0.0)
+        self.warning_pixel_mask.fill(0.0)
+        self.observed_warning_pixel_mask.fill(0.0)
         self._refresh_obstacle_cache()
 
     @staticmethod
@@ -499,7 +663,12 @@ class World(pygame.sprite.Sprite):
         """Refresh the obstacle occupancy grid used by agent observations."""
         self.obstacle_map.fill(0.0)
         self.obstacle_pixel_mask.fill(0.0)
+        self.warning_pixel_mask.fill(0.0)
+        self.observed_warning_pixel_mask.fill(0.0)
         if not self.obstacles:
+            self.warning_range_map.fill(0.0)
+            self.explored_warning_range_map.fill(0.0)
+            self.padded_explored_warning_range_map.fill(0.0)
             self._refresh_obstacle_cache()
             self._refresh_padded_observation_maps()
             return
@@ -511,6 +680,12 @@ class World(pygame.sprite.Sprite):
             world_max_y = min(int(self.area.height - obstacle.top), self.area.height)
             if world_right > world_left and world_max_y > world_min_y:
                 self.obstacle_pixel_mask[world_min_y:world_max_y, world_left:world_right] = 1.0
+            self._paint_disk_on_world_mask(
+                self.warning_pixel_mask,
+                center_x=float(obstacle.centerx),
+                center_y=float(self.area.height - obstacle.centery),
+                radius=float(self.OBSTACLE_WARNING_RADIUS),
+            )
 
             min_grid_x = max(int(obstacle.left / self.coverage_cell_width), 0)
             max_grid_x = min(int((max(obstacle.right - 1, obstacle.left)) / self.coverage_cell_width), self.coverage_grid_size - 1)
@@ -535,6 +710,7 @@ class World(pygame.sprite.Sprite):
                     self.obstacle_map[grid_y, grid_x] += overlap_area / max(self.coverage_cell_area, 1e-6)
 
         np.clip(self.obstacle_map, 0.0, 1.0, out=self.obstacle_map)
+        self._rebuild_warning_range_map()
         self._refresh_obstacle_cache()
         self._refresh_padded_observation_maps()
 
@@ -542,7 +718,8 @@ class World(pygame.sprite.Sprite):
         """Generate random obstacles."""
         blocked_rects = [rect for rect in (avoid_rects or []) if rect is not None]
         for i in range(n_obstacles):
-            w, h = self.randomizer.integers(10, 150), self.randomizer.integers(10, 150)
+            # w, h = self.randomizer.integers(10, 150), self.randomizer.integers(10, 150)
+            w, h = 1, 1
             obstacle = pygame.Rect(0, 0, w, h)
             valid_coord = False
             tries = 0
@@ -592,6 +769,23 @@ class World(pygame.sprite.Sprite):
             draw_road(start, end, screen)
 
         # Obstacles
+        obstacle_warning_overlay = pygame.Surface(self.area.size, pygame.SRCALPHA)
+        for obstacle in self.obstacles:
+            pygame.draw.circle(
+                obstacle_warning_overlay,
+                self.OBSTACLE_WARNING_FILL,
+                obstacle.center,
+                self.OBSTACLE_WARNING_RADIUS,
+            )
+            pygame.draw.circle(
+                obstacle_warning_overlay,
+                self.OBSTACLE_WARNING_OUTLINE,
+                obstacle.center,
+                self.OBSTACLE_WARNING_RADIUS,
+                width=2,
+            )
+        screen.blit(obstacle_warning_overlay, (0, 0))
+
         for obstacle in self.obstacles:
             pygame.draw.rect(screen, (150, 0, 0), obstacle)
 

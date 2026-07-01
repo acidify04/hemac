@@ -247,13 +247,13 @@ class BaseAgent(pygame.sprite.Sprite):
         """Return a 20x20 agent-centered view over the agent's sensing range."""
         if sensing_range is None:
             sensing_range = getattr(self, "sensing_range", 0.0)
-        coverage_channel, boundary_channel, obstacle_channel = world.build_local_area_channels(
+        coverage_channel, boundary_channel, obstacle_channel, warning_channel = world.build_local_area_channels(
             center_x=self.x,
             center_y=self.y,
             sensing_range=sensing_range,
             grid_size=self.LOCAL_MAP_SIZE,
         )
-        local_channels = [coverage_channel, boundary_channel, obstacle_channel]
+        local_channels = [coverage_channel, boundary_channel, obstacle_channel, warning_channel]
         for positions in entity_position_groups or []:
             local_channels.append(self.build_local_entity_channel(positions, sensing_range))
 
@@ -277,17 +277,18 @@ class BaseAgent(pygame.sprite.Sprite):
         return obs
 
     def build_relative_sector_map(self, world) -> np.ndarray:
-        """Build a self-centered 40x40x3 map of coverage, valid-search, and explored obstacles."""
+        """Build a self-centered 40x40x4 map of coverage, valid-search, obstacles, and warning zones."""
         self_grid_x, self_grid_y = self._position_to_grid(self.x, self.y, world)
         start_y = self_grid_y
         start_x = self_grid_x
         end_y = start_y + self.RELATIVE_MAP_SIZE
         end_x = start_x + self.RELATIVE_MAP_SIZE
 
-        relative_map = np.empty((self.RELATIVE_MAP_SIZE, self.RELATIVE_MAP_SIZE, 3), dtype=np.float32)
+        relative_map = np.empty((self.RELATIVE_MAP_SIZE, self.RELATIVE_MAP_SIZE, 4), dtype=np.float32)
         relative_map[:, :, 0] = world.padded_coverage_map[start_y:end_y, start_x:end_x]
         relative_map[:, :, 1] = world.padded_search_mask[start_y:end_y, start_x:end_x]
         relative_map[:, :, 2] = world.padded_explored_obstacle_map[start_y:end_y, start_x:end_x]
+        relative_map[:, :, 3] = world.padded_explored_warning_range_map[start_y:end_y, start_x:end_x]
         return relative_map
 
     @staticmethod

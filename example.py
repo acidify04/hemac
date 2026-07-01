@@ -47,11 +47,11 @@ GOAL_CONFIG = {
 }
 
 OBSERVER_CHECKPOINT_CANDIDATES = [
-    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_02100",
+    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_00200",
 ]
 DRONE_CHECKPOINT_CANDIDATES = [
-    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_02100",
-    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_02100",
+    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_00200",
+    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_00200",
 ]
 
 NUM_EVAL_SEEDS = 10
@@ -270,9 +270,9 @@ def _observation_size(observation):
 def _map_channel_labels(agent_id, map_kind, channel_count):
     """Return human-readable channel labels for the current observation schema."""
     if "observer" in agent_id:
-        labels = ["coverage", "boundary", "obstacle", "drones", "goal"]
+        labels = ["coverage", "boundary", "obstacle", "warning", "drones", "goal"]
     else:
-        labels = ["coverage", "boundary", "obstacle", "other_drones", "observer", "goal"]
+        labels = ["coverage", "boundary", "obstacle", "warning", "other_drones", "observer", "goal"]
 
     if channel_count > len(labels):
         labels.extend([f"channel_{idx}" for idx in range(len(labels), channel_count)])
@@ -310,6 +310,7 @@ def _draw_map_thumbnail(panel, map_array, agent_id, map_kind, top_left, max_size
     coverage = map_array[:, :, channel_index["coverage"]] if "coverage" in channel_index else None
     boundary = map_array[:, :, channel_index["boundary"]] if "boundary" in channel_index else None
     obstacle = map_array[:, :, channel_index["obstacle"]] if "obstacle" in channel_index else None
+    warning = map_array[:, :, channel_index["warning"]] if "warning" in channel_index else None
     drone_layer = map_array[:, :, channel_index["drones"]] if "drones" in channel_index else None
     if drone_layer is None and "other_drones" in channel_index:
         drone_layer = map_array[:, :, channel_index["other_drones"]]
@@ -322,8 +323,9 @@ def _draw_map_thumbnail(panel, map_array, agent_id, map_kind, top_left, max_size
             boundary_value = float(boundary[grid_y, grid_x]) if boundary is not None else 1.0
             coverage_value = float(coverage[grid_y, grid_x]) if coverage is not None else 0.0
             obstacle_value = float(obstacle[grid_y, grid_x]) if obstacle is not None else 0.0
+            warning_value = float(warning[grid_y, grid_x]) if warning is not None else 0.0
 
-            if boundary is not None and boundary_value <= 0.0 and obstacle_value <= 0.0:
+            if boundary is not None and boundary_value <= 0.0 and obstacle_value <= 0.0 and warning_value <= 0.0:
                 color = (10, 14, 18)
             else:
                 if coverage is not None:
@@ -342,6 +344,8 @@ def _draw_map_thumbnail(panel, map_array, agent_id, map_kind, top_left, max_size
                     )
                 if obstacle_value > 0.0:
                     color = _blend_color(color, (190, 72, 52), min(obstacle_value, 1.0))
+                if warning_value > 0.0:
+                    color = _blend_color(color, (255, 150, 150), min(0.65 * warning_value, 1.0))
 
             rect = pygame.Rect(
                 heatmap_x + grid_x * cell_size,
@@ -374,7 +378,7 @@ def _map_stat_lines(prefix, map_array, agent_id, map_kind):
     channel_labels = _map_channel_labels(agent_id, map_kind, map_array.shape[-1])
     for idx, label in enumerate(channel_labels):
         channel = map_array[:, :, idx]
-        if label in {"coverage", "boundary", "obstacle"}:
+        if label in {"coverage", "boundary", "obstacle", "warning"}:
             lines.append(f"{prefix}.{label}: mean {float(np.mean(channel)):.3f}")
         else:
             lines.append(f"{prefix}.{label}: sum {float(np.sum(channel)):.1f}")
@@ -489,7 +493,7 @@ def draw_observation_panel(
 
         legend_y = panel_height - 38
         legend_lines = [
-            "bg: coverage/boundary, red: obstacle",
+            "bg: coverage/boundary, red: obstacle, rose: warning",
             "cyan: drone, gold: observer, pink x: goal",
         ]
         for idx, legend in enumerate(legend_lines):

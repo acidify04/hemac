@@ -73,13 +73,13 @@ class Observer(BaseAgent):
                 "global_map": gymnasium.spaces.Box(
                     low=0.0,
                     high=1.0,
-                    shape=(self.GLOBAL_MAP_SIZE, self.GLOBAL_MAP_SIZE, 5),
+                    shape=(self.GLOBAL_MAP_SIZE, self.GLOBAL_MAP_SIZE, 6),
                     dtype=np.float32,
                 ),
                 "local_map": gymnasium.spaces.Box(
                     low=0.0,
                     high=1.0,
-                    shape=(self.LOCAL_MAP_SIZE, self.LOCAL_MAP_SIZE, 5),
+                    shape=(self.LOCAL_MAP_SIZE, self.LOCAL_MAP_SIZE, 6),
                     dtype=np.float32,
                 ),
                 "vector": gymnasium.spaces.Box(
@@ -213,6 +213,7 @@ class Observer(BaseAgent):
             world.padded_coverage_map,
             world.padded_search_mask,
             world.padded_explored_obstacle_map,
+            world.padded_explored_warning_range_map,
             self.build_padded_entity_channel(world, drone_positions),
             self.build_padded_entity_channel(world, goal_positions),
         ]
