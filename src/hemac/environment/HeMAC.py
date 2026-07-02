@@ -409,6 +409,13 @@ class HeMAC:
             num_obstacles = self.randomizer.integers(self.min_obstacles, self.max_obstacles)
             goal_rects = [goal.rect for goal in self.goals if goal.rect is not None]
             self.world.generate_obstacles(num_obstacles, avoid_rects=goal_rects)
+            for goal in self.goals:
+                goal.spawn_poi(
+                    self.search_area,
+                    obstacles=self.world.obstacles,
+                    warning_zone_checker=self.world.game_rect_intersects_warning_zone,
+                )
+            self._sync_goal_position()
 
         # reset agents to initial state
         observer_spawned = False

@@ -13,6 +13,7 @@ src/train/old
 src/train/trained_checkpoints/
 src/train/drone_checkpoints*
 src/train/observer_checkpoints*
+src/train/*_checkpoints*
 src/hemac/__pycache__/
 src/hemac/environment/__pycache__/
 src/hemac/helpers/__pycache__/

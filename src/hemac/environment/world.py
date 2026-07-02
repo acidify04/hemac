@@ -386,6 +386,20 @@ class World(pygame.sprite.Sprite):
             return False
         return bool(self.warning_pixel_mask[grid_y, grid_x] > 0.0)
 
+    def game_rect_intersects_warning_zone(self, rect: pygame.Rect | None) -> bool:
+        """Return True when any part of a game-space rect overlaps a warning zone."""
+        if rect is None:
+            return False
+
+        world_left = max(int(rect.left), 0)
+        world_right = min(int(rect.right), self.area.width)
+        world_min_y = max(int(self.area.height - rect.bottom), 0)
+        world_max_y = min(int(self.area.height - rect.top), self.area.height)
+        if world_right <= world_left or world_max_y <= world_min_y:
+            return False
+
+        return bool(np.any(self.warning_pixel_mask[world_min_y:world_max_y, world_left:world_right] > 0.0))
+
     @staticmethod
     def _is_axis_aligned_rect(polygon: Polygon) -> bool:
         """Return True when the polygon matches an axis-aligned rectangle."""

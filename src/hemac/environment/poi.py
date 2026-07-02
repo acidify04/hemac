@@ -107,7 +107,7 @@ class PointOfInterest:
                 return _waypoints
         return None
 
-    def spawn_poi(self, area, obstacles=None) -> list:
+    def spawn_poi(self, area, obstacles=None, warning_zone_checker=None) -> list:
         """Spawn POI randomly inside patrolling area."""
         pos = [0, 0]
         max_attempts = 1000  # maximum number of attempts to avoid infinite loops
@@ -115,12 +115,13 @@ class PointOfInterest:
         inside_area = False
         no_collision = False
         respects_boundary_margin = False
+        outside_warning_zone = False
         boundary_margin = max(float(self.config.get("boundary_margin", 0)), 0.0)
 
         # min_x, max_x = self.spawn_range["x_range"]
         # min_y, max_y = self.spawn_range["y_range"]
 
-        while not (inside_area and no_collision and respects_boundary_margin) and attempts < max_attempts:
+        while not (inside_area and no_collision and respects_boundary_margin and outside_warning_zone) and attempts < max_attempts:
             attempts += 1
 
             if self.config.get("spawn_mode") == "random":
@@ -166,10 +167,11 @@ class PointOfInterest:
 
             # Check if POI collides with obstacles
             no_collision = not any(self.rect.colliderect(obstacle) for obstacle in (obstacles or []))
+            outside_warning_zone = True if warning_zone_checker is None else not bool(warning_zone_checker(self.rect))
 
             # print(f"inside area: {inside_area}")
 
-        if not (inside_area and no_collision and respects_boundary_margin):
+        if not (inside_area and no_collision and respects_boundary_margin and outside_warning_zone):
             print("POI could not be positioned after several attempts.")
 
         return pos

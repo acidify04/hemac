@@ -563,7 +563,7 @@ def main():
     )
 
     print("학습 루프 시작...")
-    num_iterations = 10000 
+    num_iterations = 10000000000 
     
     for i in range(num_iterations):
         result = algo.train()
