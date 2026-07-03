@@ -100,6 +100,7 @@ class HeMAC:
         detection_max_total: float = 3.0,
         drone_only_success_min_coverage_ratio: float = 0.7,
         drone_only_success_reward: float = 300.0,
+        log_step_rewards: bool = False,
     ):
         self.number_of_POIs = len(poi_config) if poi_config and len(poi_config) else 0
         self.goals = []
@@ -143,6 +144,7 @@ class HeMAC:
             max(0.0, min(drone_only_success_min_coverage_ratio, 1.0))
         )
         self.drone_only_success_reward = float(drone_only_success_reward)
+        self.log_step_rewards = bool(log_step_rewards)
 
         # players
         self.n_observers = n_observers
@@ -773,7 +775,7 @@ class HeMAC:
 
         agent = self.agents_list[self.agent_name_mapping[active_agent]]
         agent.update(self.area, self.world, action, self.found_goal)
-        self.world.reveal_warning_zones_for_agent(agent)
+        self.world.update_obstacle_observations_for_agent(agent)
 
         # Update position and uncertainty of objectives
         for goal in self.goals:
@@ -798,7 +800,7 @@ class HeMAC:
                 if random.random() < 0.5:  # 50% 확률로 충돌 처리
                     self.collided = True
                     self.drone_crash = True
-                    self.drone_crash_to_warning_zone = True
+                    self.drone_crash_to_obstacle = True
                     self.terminate = True
                     reward -= 300  # Penalty for entering a warning zone
                     reward_dict[active_agent].append(-300)
@@ -942,7 +944,8 @@ class HeMAC:
 
         # individual reward
         self.rewards[active_agent] = reward
-        LOGGER.info(f"reward for {active_agent} at step {self.num_frames}: {reward_dict[active_agent]}")
+        if self.log_step_rewards:
+            LOGGER.info(f"reward for {active_agent} at step {self.num_frames}: {reward_dict[active_agent]}")
         self.finalize_episode()
 
         # Update environment and check end of episode

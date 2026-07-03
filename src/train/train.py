@@ -558,7 +558,7 @@ def main():
 
     wandb.init(
         project="HeMAC-RL",
-        name="PPO-Drone-Training-With-Frozen-Observer",
+        name="PPO-Agent-Training-With-Moving-Obstacles",
         config=config.to_dict(),
     )
 
