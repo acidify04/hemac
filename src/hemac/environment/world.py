@@ -22,6 +22,10 @@ class World(pygame.sprite.Sprite):
     BASE_OBSTACLE_CLEARANCE = 150
     OBSTACLE_WARNING_RADIUS = 60
     OBSTACLE_MOVE_DELTAS = ((1, 0), (-1, 0), (0, 1), (0, -1))
+    OBSTACLE_DIRECTION_HOLD_STEPS = 50
+    OBSTACLE_SPEED_HOLD_STEPS = 50
+    OBSTACLE_MIN_SPEED = 3
+    OBSTACLE_MAX_SPEED = 7
     OBSTACLE_WARNING_FILL = (255, 80, 80, 55)
     OBSTACLE_WARNING_OUTLINE = (255, 120, 120, 150)
     OBSERVED_OBSTACLE_DECAY = 0.9
@@ -130,6 +134,10 @@ class World(pygame.sprite.Sprite):
         self._observed_obstacle_integral = None
         self._observed_warning_integral = None
         self.actual_obstacle_confidences = np.zeros((0,), dtype=np.float32)
+        self.obstacle_move_direction_indices = np.zeros((0,), dtype=np.int8)
+        self.obstacle_move_steps_remaining = np.zeros((0,), dtype=np.int32)
+        self.obstacle_move_speeds = np.zeros((0,), dtype=np.int16)
+        self.obstacle_speed_steps_remaining = np.zeros((0,), dtype=np.int32)
         self._last_obstacle_confidence_decay_timestep = -1
         self.observed_obstacle_confidences = {}
         self.observed_obstacle_rects = []
@@ -561,6 +569,10 @@ class World(pygame.sprite.Sprite):
             self.obstacle_centers = np.empty((0, 2), dtype=np.float32)
             self.obstacle_keys = set()
             self.actual_obstacle_confidences = np.zeros((0,), dtype=np.float32)
+            self.obstacle_move_direction_indices = np.zeros((0,), dtype=np.int8)
+            self.obstacle_move_steps_remaining = np.zeros((0,), dtype=np.int32)
+            self.obstacle_move_speeds = np.zeros((0,), dtype=np.int16)
+            self.obstacle_speed_steps_remaining = np.zeros((0,), dtype=np.int32)
             self.revealed_warning_obstacles = np.zeros((0,), dtype=bool)
             return
 
@@ -577,7 +589,50 @@ class World(pygame.sprite.Sprite):
             copy_len = min(previous.shape[0], obstacle_count)
             if copy_len > 0:
                 self.actual_obstacle_confidences[:copy_len] = previous[:copy_len]
+        self._sync_obstacle_motion_state(obstacle_count)
         self.revealed_warning_obstacles = np.zeros((len(self.obstacles),), dtype=bool)
+
+    def _sync_obstacle_motion_state(self, obstacle_count: int | None = None) -> None:
+        """Resize per-obstacle motion state arrays while preserving existing values."""
+        if obstacle_count is None:
+            obstacle_count = len(self.obstacles)
+        obstacle_count = max(int(obstacle_count), 0)
+
+        if obstacle_count == 0:
+            self.obstacle_move_direction_indices = np.zeros((0,), dtype=np.int8)
+            self.obstacle_move_steps_remaining = np.zeros((0,), dtype=np.int32)
+            self.obstacle_move_speeds = np.zeros((0,), dtype=np.int16)
+            self.obstacle_speed_steps_remaining = np.zeros((0,), dtype=np.int32)
+            return
+
+        if (
+            self.obstacle_move_direction_indices.shape[0] == obstacle_count
+            and self.obstacle_move_speeds.shape[0] == obstacle_count
+        ):
+            return
+
+        previous_directions = self.obstacle_move_direction_indices
+        previous_steps = self.obstacle_move_steps_remaining
+        previous_speeds = self.obstacle_move_speeds
+        previous_speed_steps = self.obstacle_speed_steps_remaining
+        self.obstacle_move_direction_indices = np.full((obstacle_count,), -1, dtype=np.int8)
+        self.obstacle_move_steps_remaining = np.zeros((obstacle_count,), dtype=np.int32)
+        self.obstacle_move_speeds = np.zeros((obstacle_count,), dtype=np.int16)
+        self.obstacle_speed_steps_remaining = np.zeros((obstacle_count,), dtype=np.int32)
+        copy_len = min(previous_directions.shape[0], obstacle_count)
+        if copy_len > 0:
+            self.obstacle_move_direction_indices[:copy_len] = previous_directions[:copy_len]
+            self.obstacle_move_steps_remaining[:copy_len] = previous_steps[:copy_len]
+        speed_copy_len = min(previous_speeds.shape[0], obstacle_count)
+        if speed_copy_len > 0:
+            self.obstacle_move_speeds[:speed_copy_len] = previous_speeds[:speed_copy_len]
+            self.obstacle_speed_steps_remaining[:speed_copy_len] = previous_speed_steps[:speed_copy_len]
+
+    def _sample_obstacle_speed(self) -> int:
+        """Sample a random obstacle speed in cells per world step."""
+        min_speed = max(int(self.OBSTACLE_MIN_SPEED), 1)
+        max_speed = max(int(self.OBSTACLE_MAX_SPEED), min_speed)
+        return int(self.randomizer.integers(min_speed, max_speed + 1))
 
     @staticmethod
     def _rect_key(rect: pygame.Rect) -> tuple[int, int, int, int]:
@@ -1176,38 +1231,87 @@ class World(pygame.sprite.Sprite):
             screen.blit(confidence_text, label_rect)
 
     def _move_obstacles_one_step(self) -> bool:
-        """Move each obstacle by one random grid step without overlap or leaving the search area."""
+        """Move each obstacle while keeping piecewise-constant direction and speed."""
         if not self.obstacles:
             return False
 
+        self._sync_obstacle_motion_state()
         obstacle_indices = self.randomizer.permutation(len(self.obstacles))
         original_rects = [obstacle.copy() for obstacle in self.obstacles]
         stationary_keys = {self._rect_key(rect) for rect in original_rects}
         planned_rects = [rect.copy() for rect in original_rects]
-        planned_keys = set()
+        planned_path_keys = set()
+        next_direction_indices = self.obstacle_move_direction_indices.copy()
+        next_steps_remaining = self.obstacle_move_steps_remaining.copy()
+        next_speeds = self.obstacle_move_speeds.copy()
+        next_speed_steps_remaining = self.obstacle_speed_steps_remaining.copy()
         moved = False
 
         for obstacle_idx in obstacle_indices:
-            current_rect = original_rects[int(obstacle_idx)]
+            idx = int(obstacle_idx)
+            current_rect = original_rects[idx]
             current_key = self._rect_key(current_rect)
             stationary_keys.discard(current_key)
 
             chosen_rect = current_rect.copy()
-            delta_indices = self.randomizer.permutation(len(self.OBSTACLE_MOVE_DELTAS))
-            for delta_idx in delta_indices:
-                dx, dy = self.OBSTACLE_MOVE_DELTAS[int(delta_idx)]
-                candidate = current_rect.move(dx, dy)
-                candidate_key = self._rect_key(candidate)
-                if candidate_key in stationary_keys or candidate_key in planned_keys:
+            chosen_direction_idx = -1
+            chosen_steps_remaining = 0
+            current_direction_idx = int(self.obstacle_move_direction_indices[idx])
+            current_steps_remaining = int(self.obstacle_move_steps_remaining[idx])
+            current_speed = int(self.obstacle_move_speeds[idx])
+            current_speed_steps_remaining = int(self.obstacle_speed_steps_remaining[idx])
+            if current_speed > 0 and current_speed_steps_remaining > 0:
+                chosen_speed = current_speed
+                chosen_speed_steps_remaining = current_speed_steps_remaining - 1
+            else:
+                chosen_speed = self._sample_obstacle_speed()
+                chosen_speed_steps_remaining = self.OBSTACLE_SPEED_HOLD_STEPS - 1
+
+            candidate_direction_indices = []
+            if 0 <= current_direction_idx < len(self.OBSTACLE_MOVE_DELTAS) and current_steps_remaining > 0:
+                candidate_direction_indices.append(current_direction_idx)
+
+            for random_direction_idx in self.randomizer.permutation(len(self.OBSTACLE_MOVE_DELTAS)):
+                direction_idx = int(random_direction_idx)
+                if direction_idx in candidate_direction_indices:
                     continue
-                if not self._rect_within_search_area(candidate):
+                if current_steps_remaining <= 0 and direction_idx == current_direction_idx:
                     continue
+                candidate_direction_indices.append(direction_idx)
+
+            for direction_idx in candidate_direction_indices:
+                dx, dy = self.OBSTACLE_MOVE_DELTAS[direction_idx]
+                candidate = current_rect.copy()
+                candidate_path_keys = []
+                path_is_valid = True
+                for _ in range(chosen_speed):
+                    candidate = candidate.move(dx, dy)
+                    candidate_key = self._rect_key(candidate)
+                    if candidate_key in stationary_keys or candidate_key in planned_path_keys:
+                        path_is_valid = False
+                        break
+                    if not self._rect_within_search_area(candidate):
+                        path_is_valid = False
+                        break
+                    candidate_path_keys.append(candidate_key)
+                if not path_is_valid:
+                    continue
+
                 chosen_rect = candidate
+                chosen_direction_idx = direction_idx
+                if direction_idx == current_direction_idx and current_steps_remaining > 0:
+                    chosen_steps_remaining = current_steps_remaining - 1
+                else:
+                    chosen_steps_remaining = self.OBSTACLE_DIRECTION_HOLD_STEPS - 1
                 moved = moved or (candidate_key != current_key)
+                planned_path_keys.update(candidate_path_keys)
                 break
 
-            planned_rects[int(obstacle_idx)] = chosen_rect
-            planned_keys.add(self._rect_key(chosen_rect))
+            planned_rects[idx] = chosen_rect
+            next_direction_indices[idx] = chosen_direction_idx
+            next_steps_remaining[idx] = chosen_steps_remaining
+            next_speeds[idx] = chosen_speed
+            next_speed_steps_remaining[idx] = chosen_speed_steps_remaining
 
         for obstacle, new_rect in zip(self.obstacles, planned_rects):
             obstacle.x = new_rect.x
@@ -1215,6 +1319,10 @@ class World(pygame.sprite.Sprite):
             obstacle.width = new_rect.width
             obstacle.height = new_rect.height
 
+        self.obstacle_move_direction_indices = next_direction_indices
+        self.obstacle_move_steps_remaining = next_steps_remaining
+        self.obstacle_move_speeds = next_speeds
+        self.obstacle_speed_steps_remaining = next_speed_steps_remaining
         if moved:
             self._rebuild_obstacle_map()
         return moved
