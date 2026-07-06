@@ -734,6 +734,7 @@ class World(pygame.sprite.Sprite):
                     center_x,
                     center_y,
                     float(self.OBSTACLE_WARNING_RADIUS),
+                    values=valid_confidences,
                 )
 
             self.padded_explored_obstacle_map[
@@ -763,6 +764,7 @@ class World(pygame.sprite.Sprite):
                 center_x=float(obstacle.centerx),
                 center_y=float(self.area.height - obstacle.centery),
                 radius=float(self.OBSTACLE_WARNING_RADIUS),
+                value=belief_value,
             )
 
             min_grid_x = max(int(obstacle.left / self.coverage_cell_width), 0)
