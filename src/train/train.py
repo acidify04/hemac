@@ -46,7 +46,7 @@ TRAIN_DIR = Path(__file__).resolve().parent
 TRAIN_NUM_DRONES = len(DRONE_START_POSITIONS)
 FROZEN_OBSERVER_CHECKPOINT = TRAIN_DIR / "observer_checkpoints" / "checkpoint_10000"
 
-VIDEO_LOG_INTERVAL = 100
+VIDEO_LOG_INTERVAL = 300
 VIDEO_FPS = 12
 VIDEO_SEED = 0
 VIDEO_OUTPUT_DIR = Path("./wandb_media")
@@ -58,6 +58,51 @@ CURRICULUM_COVERAGE_LEVELS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 CURRICULUM_PROMOTION_SUCCESS_RATE = 0.8
 CURRICULUM_STABILITY_WINDOW = 5
 CURRENT_DRONE_SUCCESS_MIN_COVERAGE_RATIO = CURRICULUM_COVERAGE_LEVELS[0]
+OBSTACLE_CURRICULUM_LEVELS = [
+    {
+        "min_obstacles": 1,
+        "max_obstacles": 2,
+        "obstacle_min_speed": 1,
+        "obstacle_max_speed": 1,
+    },
+    {
+        "min_obstacles": 2,
+        "max_obstacles": 3,
+        "obstacle_min_speed": 1,
+        "obstacle_max_speed": 2,
+    },
+    {
+        "min_obstacles": 3,
+        "max_obstacles": 4,
+        "obstacle_min_speed": 1,
+        "obstacle_max_speed": 3,
+    },
+    {
+        "min_obstacles": 4,
+        "max_obstacles": 5,
+        "obstacle_min_speed": 2,
+        "obstacle_max_speed": 4,
+    },
+    {
+        "min_obstacles": 5,
+        "max_obstacles": 6,
+        "obstacle_min_speed": 2,
+        "obstacle_max_speed": 5,
+    },
+    {
+        "min_obstacles": 6,
+        "max_obstacles": 8,
+        "obstacle_min_speed": 2,
+        "obstacle_max_speed": 6,
+    },
+    {
+        "min_obstacles": 7,
+        "max_obstacles": 10,
+        "obstacle_min_speed": 3,
+        "obstacle_max_speed": 7,
+    },
+]
+CURRENT_OBSTACLE_DIFFICULTY = dict(OBSTACLE_CURRICULUM_LEVELS[0])
 
 
 class CoverageCurriculum:
@@ -114,23 +159,111 @@ class CoverageCurriculum:
         return True
 
 
+class ObstacleDifficultyCurriculum:
+    """Promote obstacle count/speed once training success stays high enough."""
+
+    def __init__(self, levels, promotion_success_rate=0.8, stability_window=5):
+        if not levels:
+            raise ValueError("Obstacle curriculum requires at least one level.")
+        self.levels = [_normalize_obstacle_difficulty(level) for level in levels]
+        self.promotion_success_rate = float(promotion_success_rate)
+        self.recent_success_rates = deque(maxlen=max(int(stability_window), 1))
+        self.stage_index = 0
+
+    @property
+    def current_level(self):
+        return dict(self.levels[self.stage_index])
+
+    @property
+    def stage_number(self):
+        return self.stage_index + 1
+
+    @property
+    def num_stages(self):
+        return len(self.levels)
+
+    @property
+    def is_finished(self):
+        return self.stage_index >= len(self.levels) - 1
+
+    @property
+    def recent_success_mean(self):
+        if not self.recent_success_rates:
+            return 0.0
+        return float(np.mean(self.recent_success_rates))
+
+    @property
+    def recent_success_min(self):
+        if not self.recent_success_rates:
+            return 0.0
+        return float(np.min(self.recent_success_rates))
+
+    def record_success(self, success_rate):
+        """Return True when it is time to promote to the next obstacle level."""
+        self.recent_success_rates.append(float(success_rate))
+        if self.is_finished:
+            return False
+        if len(self.recent_success_rates) < self.recent_success_rates.maxlen:
+            return False
+        if min(self.recent_success_rates) < self.promotion_success_rate:
+            return False
+
+        self.stage_index += 1
+        self.recent_success_rates.clear()
+        return True
+
+
 def set_current_drone_success_min_coverage_ratio(value):
     """Update the default success threshold used by newly-created environments."""
     global CURRENT_DRONE_SUCCESS_MIN_COVERAGE_RATIO
     CURRENT_DRONE_SUCCESS_MIN_COVERAGE_RATIO = float(value)
 
 
-def _set_drone_success_ratio_on_env(env, coverage_ratio):
-    """Push the curriculum target through wrappers down to the live HeMAC env."""
+def _normalize_obstacle_difficulty(level):
+    """Return a sanitized obstacle-difficulty config."""
+    if not isinstance(level, dict):
+        raise TypeError(f"Obstacle difficulty level must be a dict, got {type(level)!r}.")
+
+    min_obstacles = max(int(level.get("min_obstacles", 0)), 0)
+    max_obstacles = max(int(level.get("max_obstacles", min_obstacles)), min_obstacles)
+    obstacle_min_speed = max(int(level.get("obstacle_min_speed", 1)), 1)
+    obstacle_max_speed = max(int(level.get("obstacle_max_speed", obstacle_min_speed)), obstacle_min_speed)
+    return {
+        "min_obstacles": min_obstacles,
+        "max_obstacles": max_obstacles,
+        "obstacle_min_speed": obstacle_min_speed,
+        "obstacle_max_speed": obstacle_max_speed,
+    }
+
+
+def set_current_obstacle_difficulty(level):
+    """Update the default obstacle difficulty used by newly-created environments."""
+    global CURRENT_OBSTACLE_DIFFICULTY
+    CURRENT_OBSTACLE_DIFFICULTY = _normalize_obstacle_difficulty(level)
+
+
+def _iter_wrapped_envs(env):
+    """Yield one environment plus any nested wrappers/unwrapped instances."""
     queue = [env]
     visited = set()
-    updated = 0
 
     while queue:
         current = queue.pop(0)
         if current is None or id(current) in visited:
             continue
         visited.add(id(current))
+        yield current
+
+        for attr_name in ("env", "unwrapped"):
+            nested = getattr(current, attr_name, None)
+            if nested is not None and nested is not current:
+                queue.append(nested)
+
+
+def _set_drone_success_ratio_on_env(env, coverage_ratio):
+    """Push the curriculum target through wrappers down to the live HeMAC env."""
+    updated = 0
+    for current in _iter_wrapped_envs(env):
 
         if hasattr(current, "drone_only_success_min_coverage_ratio"):
             current.drone_only_success_min_coverage_ratio = float(coverage_ratio)
@@ -140,10 +273,40 @@ def _set_drone_success_ratio_on_env(env, coverage_ratio):
         if isinstance(kwargs, dict):
             kwargs["drone_only_success_min_coverage_ratio"] = float(coverage_ratio)
 
-        for attr_name in ("env", "unwrapped"):
-            nested = getattr(current, attr_name, None)
-            if nested is not None and nested is not current:
-                queue.append(nested)
+    return updated
+
+
+def _set_obstacle_difficulty_on_env(env, level):
+    """Push obstacle difficulty through wrappers down to the live HeMAC env."""
+    difficulty = _normalize_obstacle_difficulty(level)
+    updated = 0
+
+    for current in _iter_wrapped_envs(env):
+        applied = False
+        if hasattr(current, "set_obstacle_difficulty"):
+            current.set_obstacle_difficulty(**difficulty)
+            applied = True
+        else:
+            if hasattr(current, "min_obstacles"):
+                current.min_obstacles = int(difficulty["min_obstacles"])
+                applied = True
+            if hasattr(current, "max_obstacles"):
+                current.max_obstacles = int(difficulty["max_obstacles"])
+                applied = True
+            world = getattr(current, "world", None)
+            if world is not None and hasattr(world, "set_obstacle_speed_range"):
+                world.set_obstacle_speed_range(
+                    difficulty["obstacle_min_speed"],
+                    difficulty["obstacle_max_speed"],
+                )
+                applied = True
+
+        kwargs = getattr(current, "_kwargs", None)
+        if isinstance(kwargs, dict):
+            kwargs.update(difficulty)
+
+        if applied:
+            updated += 1
 
     return updated
 
@@ -187,8 +350,34 @@ def apply_curriculum_to_algo(algo, coverage_ratio):
     return updated_count
 
 
+def apply_obstacle_curriculum_to_algo(algo, level):
+    """Update both current workers and future rollouts to the new obstacle difficulty."""
+    difficulty = _normalize_obstacle_difficulty(level)
+    set_current_obstacle_difficulty(difficulty)
+
+    env_runner_group = get_env_runner_group(algo)
+
+    updated_count = 0
+    if env_runner_group is not None and hasattr(env_runner_group, "foreach_env"):
+        results = env_runner_group.foreach_env(
+            lambda env: _set_obstacle_difficulty_on_env(env, difficulty)
+        )
+        for worker_results in results:
+            if isinstance(worker_results, list):
+                updated_count += sum(int(value) for value in worker_results)
+            else:
+                updated_count += int(worker_results)
+
+    env_config = getattr(algo.config, "env_config", None)
+    if isinstance(env_config, dict):
+        env_config.update(difficulty)
+
+    return updated_count
+
+
 def build_env_config(render_mode=None):
     """Return the shared environment config for training and evaluation."""
+    obstacle_difficulty = dict(CURRENT_OBSTACLE_DIFFICULTY)
     env_config = {
         "n_observers": 1,
         "observer_speed": 10,
@@ -201,8 +390,10 @@ def build_env_config(render_mode=None):
             "drone_max_thrust": 8,
             "drones_starting_pos": DRONE_START_POSITIONS,
         },
-        "min_obstacles": 7,
-        "max_obstacles": 10,
+        "min_obstacles": obstacle_difficulty["min_obstacles"],
+        "max_obstacles": obstacle_difficulty["max_obstacles"],
+        "obstacle_min_speed": obstacle_difficulty["obstacle_min_speed"],
+        "obstacle_max_speed": obstacle_difficulty["obstacle_max_speed"],
         "poi_config": [GOAL_CONFIG],
         "drone_only_success_min_coverage_ratio": CURRENT_DRONE_SUCCESS_MIN_COVERAGE_RATIO,
         "drone_only_success_reward": 300.0,
@@ -457,16 +648,24 @@ def main():
     ray.init()
     register_hemac_rllib_models()
 
+    obstacle_curriculum = ObstacleDifficultyCurriculum(
+        levels=OBSTACLE_CURRICULUM_LEVELS,
+        promotion_success_rate=CURRICULUM_PROMOTION_SUCCESS_RATE,
+        stability_window=CURRICULUM_STABILITY_WINDOW,
+    )
+    set_current_obstacle_difficulty(obstacle_curriculum.current_level)
+
     env_config = build_env_config()
     curriculum_enabled = env_config.get("n_observers", 0) == 0 and env_config.get("n_drones", 0) > 0
-    curriculum = None
+    coverage_curriculum = None
     if curriculum_enabled:
-        curriculum = CoverageCurriculum(
+        coverage_curriculum = CoverageCurriculum(
             levels=CURRICULUM_COVERAGE_LEVELS,
             promotion_success_rate=CURRICULUM_PROMOTION_SUCCESS_RATE,
             stability_window=CURRICULUM_STABILITY_WINDOW,
         )
-        set_current_drone_success_min_coverage_ratio(curriculum.current_coverage_ratio)
+        set_current_drone_success_min_coverage_ratio(coverage_curriculum.current_coverage_ratio)
+        env_config["drone_only_success_min_coverage_ratio"] = coverage_curriculum.current_coverage_ratio
 
     env_name = "hemac_asymmetric_env"
     register_env(env_name, env_creator)
@@ -504,7 +703,7 @@ def main():
         .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
         .framework("torch")
         .callbacks(HeMACCallbacks)
-        .environment(env=env_name)
+        .environment(env=env_name, env_config=env_config)
         .env_runners(
             num_env_runners=NUM_ENV_RUNNERS,
             rollout_fragment_length=ROLLOUT_FRAGMENT_LENGTH,
@@ -540,15 +739,32 @@ def main():
     #     algo, FROZEN_OBSERVER_CHECKPOINT
     # )
     # print(f"[observer] loaded frozen observer policy from {observer_checkpoint_path}")
-    updated_envs = 0
-    if curriculum is not None:
-        updated_envs = apply_curriculum_to_algo(algo, curriculum.current_coverage_ratio)
-        if updated_envs <= 0:
+    obstacle_updated_envs = apply_obstacle_curriculum_to_algo(
+        algo, obstacle_curriculum.current_level
+    )
+    if obstacle_updated_envs <= 0:
+        print("[warn] obstacle curriculum target was not applied to any live env at startup.")
+    current_obstacle_level = obstacle_curriculum.current_level
+    print(
+        "[obstacle curriculum] start stage "
+        f"{obstacle_curriculum.stage_number}/{obstacle_curriculum.num_stages} "
+        f"(obstacles={current_obstacle_level['min_obstacles']}-{current_obstacle_level['max_obstacles']}, "
+        f"speed={current_obstacle_level['obstacle_min_speed']}-{current_obstacle_level['obstacle_max_speed']}, "
+        f"updated_envs={obstacle_updated_envs})"
+    )
+
+    coverage_updated_envs = 0
+    if coverage_curriculum is not None:
+        coverage_updated_envs = apply_curriculum_to_algo(
+            algo, coverage_curriculum.current_coverage_ratio
+        )
+        if coverage_updated_envs <= 0:
             print("[warn] curriculum target was not applied to any live env at startup.")
         print(
             "[curriculum] start stage "
-            f"{curriculum.stage_number}/{curriculum.num_stages} "
-            f"(coverage >= {curriculum.current_coverage_ratio:.1f}, updated_envs={updated_envs})"
+            f"{coverage_curriculum.stage_number}/{coverage_curriculum.num_stages} "
+            f"(coverage >= {coverage_curriculum.current_coverage_ratio:.1f}, "
+            f"updated_envs={coverage_updated_envs})"
         )
     else:
         print("[curriculum] disabled because this run includes an observer.")
@@ -568,8 +784,10 @@ def main():
     for i in range(num_iterations):
         result = algo.train()
         mean_reward = result.get('env_runners', {}).get('episode_reward_mean', result.get('episode_reward_mean', 0))
-        curriculum_promoted = False
-        curriculum_updated_envs = 0
+        obstacle_curriculum_promoted = False
+        obstacle_curriculum_updated_envs = 0
+        coverage_curriculum_promoted = False
+        coverage_curriculum_updated_envs = 0
         
         print(f"\n--- Iteration {i+1} ---")
         print(f"Mean Reward: {mean_reward:.2f}")
@@ -587,19 +805,35 @@ def main():
         drone_log_std_stats = get_policy_log_std_stats(algo, "drone_policy") or {}
         rollout_success_rate = float(custom_metrics.get("success_rate_mean", 0.0))
 
-        if curriculum is not None:
-            curriculum_promoted = curriculum.record_success(rollout_success_rate)
-            if curriculum_promoted:
-                curriculum_updated_envs = apply_curriculum_to_algo(
-                    algo, curriculum.current_coverage_ratio
+        obstacle_curriculum_promoted = obstacle_curriculum.record_success(rollout_success_rate)
+        if obstacle_curriculum_promoted:
+            obstacle_curriculum_updated_envs = apply_obstacle_curriculum_to_algo(
+                algo, obstacle_curriculum.current_level
+            )
+            if obstacle_curriculum_updated_envs <= 0:
+                print("[warn] obstacle curriculum promoted, but no live env received the new obstacle target.")
+            current_obstacle_level = obstacle_curriculum.current_level
+            print(
+                "[obstacle curriculum] promoted to stage "
+                f"{obstacle_curriculum.stage_number}/{obstacle_curriculum.num_stages} "
+                f"(obstacles={current_obstacle_level['min_obstacles']}-{current_obstacle_level['max_obstacles']}, "
+                f"speed={current_obstacle_level['obstacle_min_speed']}-{current_obstacle_level['obstacle_max_speed']}, "
+                f"updated_envs={obstacle_curriculum_updated_envs})"
+            )
+
+        if coverage_curriculum is not None:
+            coverage_curriculum_promoted = coverage_curriculum.record_success(rollout_success_rate)
+            if coverage_curriculum_promoted:
+                coverage_curriculum_updated_envs = apply_curriculum_to_algo(
+                    algo, coverage_curriculum.current_coverage_ratio
                 )
-                if curriculum_updated_envs <= 0:
+                if coverage_curriculum_updated_envs <= 0:
                     print("[warn] curriculum promoted, but no live env received the new coverage target.")
                 print(
                     "[curriculum] promoted to stage "
-                    f"{curriculum.stage_number}/{curriculum.num_stages} "
-                    f"(coverage >= {curriculum.current_coverage_ratio:.1f}, "
-                    f"updated_envs={curriculum_updated_envs})"
+                    f"{coverage_curriculum.stage_number}/{coverage_curriculum.num_stages} "
+                    f"(coverage >= {coverage_curriculum.current_coverage_ratio:.1f}, "
+                    f"updated_envs={coverage_curriculum_updated_envs})"
                 )
 
         print(f">>> [디버깅] custom_metrics: {visible_custom_metrics}")
@@ -627,26 +861,41 @@ def main():
             # "metrics/steps_after_goal_found": custom_metrics.get("steps_after_goal_found_mean", 0),
             "metrics/drone_crash_to_obstacle_rate": custom_metrics.get("drone_crash_to_obstacle_rate_mean", 0),
             "metrics/observer_crash_to_obstacle_rate": custom_metrics.get("observer_crash_to_obstacle_rate_mean", 0),
-            "curriculum/stage_number": curriculum.stage_number if curriculum is not None else 0.0,
-            "curriculum/num_stages": curriculum.num_stages if curriculum is not None else 0.0,
+            "curriculum/stage_number": (
+                coverage_curriculum.stage_number if coverage_curriculum is not None else 0.0
+            ),
+            "curriculum/num_stages": (
+                coverage_curriculum.num_stages if coverage_curriculum is not None else 0.0
+            ),
             "curriculum/current_coverage_target": (
-                curriculum.current_coverage_ratio if curriculum is not None else 0.0
+                coverage_curriculum.current_coverage_ratio if coverage_curriculum is not None else 0.0
             ),
             "curriculum/recent_success_mean": (
-                curriculum.recent_success_mean if curriculum is not None else 0.0
+                coverage_curriculum.recent_success_mean if coverage_curriculum is not None else 0.0
             ),
             "curriculum/recent_success_min": (
-                curriculum.recent_success_min if curriculum is not None else 0.0
+                coverage_curriculum.recent_success_min if coverage_curriculum is not None else 0.0
             ),
             "curriculum/promotion_success_rate": (
-                CURRICULUM_PROMOTION_SUCCESS_RATE if curriculum is not None else 0.0
+                CURRICULUM_PROMOTION_SUCCESS_RATE if coverage_curriculum is not None else 0.0
             ),
             "curriculum/stability_window": (
-                CURRICULUM_STABILITY_WINDOW if curriculum is not None else 0.0
+                CURRICULUM_STABILITY_WINDOW if coverage_curriculum is not None else 0.0
             ),
             "curriculum/is_finished": (
-                1.0 if curriculum is not None and curriculum.is_finished else 0.0
+                1.0 if coverage_curriculum is not None and coverage_curriculum.is_finished else 0.0
             ),
+            "obstacle_curriculum/stage_number": obstacle_curriculum.stage_number,
+            "obstacle_curriculum/num_stages": obstacle_curriculum.num_stages,
+            "obstacle_curriculum/recent_success_mean": obstacle_curriculum.recent_success_mean,
+            "obstacle_curriculum/recent_success_min": obstacle_curriculum.recent_success_min,
+            "obstacle_curriculum/promotion_success_rate": CURRICULUM_PROMOTION_SUCCESS_RATE,
+            "obstacle_curriculum/stability_window": CURRICULUM_STABILITY_WINDOW,
+            "obstacle_curriculum/is_finished": 1.0 if obstacle_curriculum.is_finished else 0.0,
+            "obstacle_curriculum/min_obstacles": obstacle_curriculum.current_level["min_obstacles"],
+            "obstacle_curriculum/max_obstacles": obstacle_curriculum.current_level["max_obstacles"],
+            "obstacle_curriculum/min_speed": obstacle_curriculum.current_level["obstacle_min_speed"],
+            "obstacle_curriculum/max_speed": obstacle_curriculum.current_level["obstacle_max_speed"],
         }
 
         if (i + 1) % VIDEO_LOG_INTERVAL == 0:
@@ -702,19 +951,21 @@ def main():
                 print(f"[warn] eval drone crash logging skipped at iteration {i + 1}: {exc}")
 
         log_payload["curriculum/stage_number"] = (
-            curriculum.stage_number if curriculum is not None else 0.0
+            coverage_curriculum.stage_number if coverage_curriculum is not None else 0.0
         )
         log_payload["curriculum/current_coverage_target"] = (
-            curriculum.current_coverage_ratio if curriculum is not None else 0.0
+            coverage_curriculum.current_coverage_ratio if coverage_curriculum is not None else 0.0
         )
         log_payload["curriculum/recent_success_mean"] = (
-            curriculum.recent_success_mean if curriculum is not None else 0.0
+            coverage_curriculum.recent_success_mean if coverage_curriculum is not None else 0.0
         )
         log_payload["curriculum/recent_success_min"] = (
-            curriculum.recent_success_min if curriculum is not None else 0.0
+            coverage_curriculum.recent_success_min if coverage_curriculum is not None else 0.0
         )
-        log_payload["curriculum/just_promoted"] = 1.0 if curriculum_promoted else 0.0
-        log_payload["curriculum/updated_envs"] = float(curriculum_updated_envs)
+        log_payload["curriculum/just_promoted"] = 1.0 if coverage_curriculum_promoted else 0.0
+        log_payload["curriculum/updated_envs"] = float(coverage_curriculum_updated_envs)
+        log_payload["obstacle_curriculum/just_promoted"] = 1.0 if obstacle_curriculum_promoted else 0.0
+        log_payload["obstacle_curriculum/updated_envs"] = float(obstacle_curriculum_updated_envs)
 
         wandb.log(log_payload)
         

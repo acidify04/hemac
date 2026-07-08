@@ -28,7 +28,7 @@ class World(pygame.sprite.Sprite):
     OBSTACLE_MAX_SPEED = 7
     OBSTACLE_WARNING_FILL = (255, 80, 80, 55)
     OBSTACLE_WARNING_OUTLINE = (255, 120, 120, 150)
-    OBSERVED_OBSTACLE_DECAY = 0.9
+    OBSERVED_OBSTACLE_DECAY = 0.98
 
     def __init__(
         self,
@@ -38,6 +38,8 @@ class World(pygame.sprite.Sprite):
         randomizer: np.random.Generator,
         time_factor: int = 1,
         initial_prior: bool = False,
+        obstacle_min_speed: int | None = None,
+        obstacle_max_speed: int | None = None,
     ):
         """Overwrite constructor."""
         self.area = game_area
@@ -61,6 +63,12 @@ class World(pygame.sprite.Sprite):
         self.randomizer = randomizer
         self.time_factor = time_factor
         self.timestep = 0
+        self.obstacle_min_speed = self.OBSTACLE_MIN_SPEED
+        self.obstacle_max_speed = self.OBSTACLE_MAX_SPEED
+        self.set_obstacle_speed_range(
+            self.obstacle_min_speed if obstacle_min_speed is None else obstacle_min_speed,
+            self.obstacle_max_speed if obstacle_max_speed is None else obstacle_max_speed,
+        )
         self.simulation_start_time = datetime.now(UTC).timestamp()  # set to current timestamp
         self.observer_communication = [0.0, 0.0]
         self.goal_known = False
@@ -630,9 +638,21 @@ class World(pygame.sprite.Sprite):
 
     def _sample_obstacle_speed(self) -> int:
         """Sample a random obstacle speed in cells per world step."""
-        min_speed = max(int(self.OBSTACLE_MIN_SPEED), 1)
-        max_speed = max(int(self.OBSTACLE_MAX_SPEED), min_speed)
+        min_speed = max(int(self.obstacle_min_speed), 1)
+        max_speed = max(int(self.obstacle_max_speed), min_speed)
         return int(self.randomizer.integers(min_speed, max_speed + 1))
+
+    def set_obstacle_speed_range(self, min_speed: int, max_speed: int) -> None:
+        """Update the obstacle speed sampling range."""
+        self.obstacle_min_speed = max(int(min_speed), 1)
+        self.obstacle_max_speed = max(int(max_speed), self.obstacle_min_speed)
+        if hasattr(self, "obstacle_move_speeds") and self.obstacle_move_speeds.size > 0:
+            np.clip(
+                self.obstacle_move_speeds,
+                self.obstacle_min_speed,
+                self.obstacle_max_speed,
+                out=self.obstacle_move_speeds,
+            )
 
     @staticmethod
     def _rect_key(rect: pygame.Rect) -> tuple[int, int, int, int]:

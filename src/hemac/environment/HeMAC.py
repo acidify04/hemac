@@ -100,6 +100,8 @@ class HeMAC:
         detection_max_total: float = 3.0,
         drone_only_success_min_coverage_ratio: float = 0.7,
         drone_only_success_reward: float = 300.0,
+        obstacle_min_speed: int | None = None,
+        obstacle_max_speed: int | None = None,
         log_step_rewards: bool = False,
     ):
         self.number_of_POIs = len(poi_config) if poi_config and len(poi_config) else 0
@@ -126,6 +128,7 @@ class HeMAC:
             POI config: {poi_config}
             Drone-only success min coverage ratio: {drone_only_success_min_coverage_ratio}
             Drone-only success reward: {drone_only_success_reward}
+            Obstacle speed range: ({obstacle_min_speed}, {obstacle_max_speed})
             """)
 
         pygame.init()
@@ -268,6 +271,8 @@ class HeMAC:
             search_area=self.search_area,
             randomizer=randomizer,
             time_factor=self.time_factor,
+            obstacle_min_speed=obstacle_min_speed,
+            obstacle_max_speed=obstacle_max_speed,
         )
         self.search_grid_rects = self._build_search_grid_cache()
 
@@ -386,6 +391,29 @@ class HeMAC:
         self.infos = dict(zip(self.agents, [{}] * len(self.agents)))
         self.score = 0
 
+    def set_obstacle_difficulty(
+        self,
+        *,
+        min_obstacles: int | None = None,
+        max_obstacles: int | None = None,
+        obstacle_min_speed: int | None = None,
+        obstacle_max_speed: int | None = None,
+    ) -> None:
+        """Update obstacle count and speed difficulty for subsequent steps/resets."""
+        if min_obstacles is not None or max_obstacles is not None:
+            next_min_obstacles = self.min_obstacles if min_obstacles is None else int(min_obstacles)
+            next_max_obstacles = self.max_obstacles if max_obstacles is None else int(max_obstacles)
+            self.min_obstacles = max(next_min_obstacles, 0)
+            self.max_obstacles = max(next_max_obstacles, self.min_obstacles)
+
+        if obstacle_min_speed is not None or obstacle_max_speed is not None:
+            current_min_speed = getattr(self.world, "obstacle_min_speed", None)
+            current_max_speed = getattr(self.world, "obstacle_max_speed", None)
+            self.world.set_obstacle_speed_range(
+                current_min_speed if obstacle_min_speed is None else obstacle_min_speed,
+                current_max_speed if obstacle_max_speed is None else obstacle_max_speed,
+            )
+
     def reset(self, seed=None, options=None):
         """Reset the environment."""
         # reset goals
@@ -407,8 +435,10 @@ class HeMAC:
         self.detection_reward = 0
 
         # spawn obstacles
-        if self.max_obstacles > 0:  # TODO: reset all world components inside world reset() (obstacles, etc.)
-            num_obstacles = self.randomizer.integers(self.min_obstacles, self.max_obstacles)
+        min_obstacles = max(int(self.min_obstacles), 0)
+        max_obstacles = max(int(self.max_obstacles), min_obstacles)
+        if max_obstacles > 0:  # TODO: reset all world components inside world reset() (obstacles, etc.)
+            num_obstacles = int(self.randomizer.integers(min_obstacles, max_obstacles + 1))
             goal_rects = [goal.rect for goal in self.goals if goal.rect is not None]
             self.world.generate_obstacles(num_obstacles, avoid_rects=goal_rects)
             for goal in self.goals:
