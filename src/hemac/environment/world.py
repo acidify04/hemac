@@ -148,6 +148,7 @@ class World(pygame.sprite.Sprite):
         self.obstacle_speed_steps_remaining = np.zeros((0,), dtype=np.int32)
         self._last_obstacle_confidence_decay_timestep = -1
         self.observed_obstacle_confidences = {}
+        self.last_observed_rect_keys_by_obstacle = []
         self.observed_obstacle_rects = []
         self.obstacle_bounds = np.empty((0, 4), dtype=np.int32)
         self.obstacle_centers = np.empty((0, 2), dtype=np.float32)
@@ -577,6 +578,7 @@ class World(pygame.sprite.Sprite):
             self.obstacle_centers = np.empty((0, 2), dtype=np.float32)
             self.obstacle_keys = set()
             self.actual_obstacle_confidences = np.zeros((0,), dtype=np.float32)
+            self.last_observed_rect_keys_by_obstacle = []
             self.obstacle_move_direction_indices = np.zeros((0,), dtype=np.int8)
             self.obstacle_move_steps_remaining = np.zeros((0,), dtype=np.int32)
             self.obstacle_move_speeds = np.zeros((0,), dtype=np.int16)
@@ -597,6 +599,12 @@ class World(pygame.sprite.Sprite):
             copy_len = min(previous.shape[0], obstacle_count)
             if copy_len > 0:
                 self.actual_obstacle_confidences[:copy_len] = previous[:copy_len]
+        if len(self.last_observed_rect_keys_by_obstacle) != obstacle_count:
+            previous_keys = self.last_observed_rect_keys_by_obstacle
+            self.last_observed_rect_keys_by_obstacle = [None] * obstacle_count
+            copy_len = min(len(previous_keys), obstacle_count)
+            if copy_len > 0:
+                self.last_observed_rect_keys_by_obstacle[:copy_len] = previous_keys[:copy_len]
         self._sync_obstacle_motion_state(obstacle_count)
         self.revealed_warning_obstacles = np.zeros((len(self.obstacles),), dtype=bool)
 
@@ -672,6 +680,16 @@ class World(pygame.sprite.Sprite):
             for rect_key, confidence in self.observed_obstacle_confidences.items()
             if confidence > 0.0
         ]
+
+    def _clear_observed_obstacle_key(self, rect_key) -> bool:
+        """Remove one remembered obstacle location from shared observation state."""
+        removed = self.observed_obstacle_confidences.pop(rect_key, None) is not None
+        if removed and self.last_observed_rect_keys_by_obstacle:
+            self.last_observed_rect_keys_by_obstacle = [
+                None if key == rect_key else key
+                for key in self.last_observed_rect_keys_by_obstacle
+            ]
+        return removed
 
     def _decay_observed_obstacle_confidences(self) -> bool:
         """Apply one-step decay to the remembered obstacle confidences."""
@@ -858,16 +876,34 @@ class World(pygame.sprite.Sprite):
             observed_visible = visibility_mask(observed_centers)
             for rect_key, is_visible in zip(observed_keys, observed_visible):
                 if is_visible and rect_key not in actual_obstacle_lookup:
-                    self.observed_obstacle_confidences.pop(rect_key, None)
-                    changed = True
+                    changed = self._clear_observed_obstacle_key(rect_key) or changed
 
         if self.obstacles:
             obstacle_centers = np.asarray([obstacle.center for obstacle in self.obstacles], dtype=np.float32)
             obstacle_visible = visibility_mask(obstacle_centers)
+            visible_current_keys = set()
+            previous_keys_to_clear = set()
+
             for obstacle_idx, (obstacle, is_visible) in enumerate(zip(self.obstacles, obstacle_visible)):
                 if not is_visible:
                     continue
                 obstacle_key = self._rect_key(obstacle)
+                visible_current_keys.add(obstacle_key)
+                previous_key = None
+                if obstacle_idx < len(self.last_observed_rect_keys_by_obstacle):
+                    previous_key = self.last_observed_rect_keys_by_obstacle[obstacle_idx]
+                if previous_key is not None and previous_key != obstacle_key:
+                    previous_keys_to_clear.add(previous_key)
+
+            for rect_key in previous_keys_to_clear - visible_current_keys:
+                changed = self._clear_observed_obstacle_key(rect_key) or changed
+
+            for obstacle_idx, (obstacle, is_visible) in enumerate(zip(self.obstacles, obstacle_visible)):
+                if not is_visible:
+                    continue
+                obstacle_key = self._rect_key(obstacle)
+                if obstacle_idx < len(self.last_observed_rect_keys_by_obstacle):
+                    self.last_observed_rect_keys_by_obstacle[obstacle_idx] = obstacle_key
                 previous_confidence = self.observed_obstacle_confidences.get(obstacle_key)
                 if previous_confidence != 1.0:
                     self.observed_obstacle_confidences[obstacle_key] = 1.0
@@ -939,6 +975,7 @@ class World(pygame.sprite.Sprite):
         self.actual_obstacle_confidences = np.zeros((len(self.obstacles),), dtype=np.float32)
         self._last_obstacle_confidence_decay_timestep = -1
         self.observed_obstacle_confidences = {}
+        self.last_observed_rect_keys_by_obstacle = [None] * len(self.obstacles)
         self.observed_obstacle_rects = []
         self._invalidate_local_area_integrals(observed_obstacle=True, observed_warning=True)
         self.revealed_warning_obstacles = np.zeros((len(self.obstacles),), dtype=bool)
@@ -1044,6 +1081,7 @@ class World(pygame.sprite.Sprite):
         self.actual_obstacle_confidences = np.zeros((0,), dtype=np.float32)
         self._last_obstacle_confidence_decay_timestep = -1
         self.observed_obstacle_confidences = {}
+        self.last_observed_rect_keys_by_obstacle = []
         self.observed_obstacle_rects = []
         self._invalidate_local_area_integrals(observed_obstacle=True, observed_warning=True)
         self._refresh_obstacle_cache()

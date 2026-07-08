@@ -47,11 +47,11 @@ GOAL_CONFIG = {
 }
 
 OBSERVER_CHECKPOINT_CANDIDATES = [
-    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_06700",
+    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_09800",
 ]
 DRONE_CHECKPOINT_CANDIDATES = [
-    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_06700",
-    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_06700",
+    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_09800",
+    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_09800",
 ]
 
 NUM_EVAL_SEEDS = 10
@@ -714,8 +714,8 @@ def run_trained_model_simulation(playback_mode="step"):
                 "drone_max_thrust": 8,
                 "drones_starting_pos": DRONE_START_POSITIONS,
             },
-            "min_obstacles": 7,
-            "max_obstacles": 10,
+            "min_obstacles": 3,
+            "max_obstacles": 4,
             "poi_config": [GOAL_CONFIG],
         }
         env = HeMAC_v0.env(**train_env_config)
@@ -759,8 +759,8 @@ def run_trained_model_simulation(playback_mode="step"):
         },
         
         # 맵 및 목적지 설정
-        "min_obstacles": 7,
-        "max_obstacles": 10,
+        "min_obstacles": 3,
+        "max_obstacles": 4,
         "poi_config": [GOAL_CONFIG],
         
         # [핵심] 화면 시각화 활성화
