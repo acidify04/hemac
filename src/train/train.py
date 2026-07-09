@@ -1,5 +1,5 @@
+import argparse
 import logging
-import os
 import pickle
 from collections import deque
 from datetime import datetime
@@ -8,6 +8,7 @@ import sys
 
 import numpy as np
 import ray
+from ray.rllib.algorithms.algorithm import Algorithm
 from ray.tune.registry import register_env
 from ray.rllib.env.wrappers.pettingzoo_env import PettingZooEnv
 from ray.rllib.algorithms.ppo import PPOConfig
@@ -58,6 +59,12 @@ CURRICULUM_COVERAGE_LEVELS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 CURRICULUM_PROMOTION_SUCCESS_RATE = 0.8
 CURRICULUM_STABILITY_WINDOW = 5
 CURRENT_DRONE_SUCCESS_MIN_COVERAGE_RATIO = CURRICULUM_COVERAGE_LEVELS[0]
+DEFAULT_CHECKPOINT_DIR = TRAIN_DIR / "hemac_checkpoints"
+DEFAULT_WANDB_PROJECT = "HeMAC-RL"
+DEFAULT_WANDB_RUN_NAME = "PPO-Agent-Training-With-Moving-Obstacles"
+DEFAULT_NUM_ITERATIONS = 10_000_000_000
+DEFAULT_CHECKPOINT_INTERVAL = 100
+DEFAULT_NUM_GPUS = 1
 OBSTACLE_CURRICULUM_LEVELS = [
     {
         "min_obstacles": 1,
@@ -643,102 +650,305 @@ def restore_frozen_observer_policy(algo, checkpoint_dir):
     return Path(checkpoint_dir)
 
 
-def main():
-    LOGGER.setLevel(logging.WARNING)
-    ray.init()
-    register_hemac_rllib_models()
+def parse_args():
+    """Parse CLI arguments for training."""
+    parser = argparse.ArgumentParser(description="Train HeMAC PPO policies.")
+    parser.add_argument(
+        "--checkpoint-dir",
+        type=Path,
+        default=DEFAULT_CHECKPOINT_DIR,
+        help="Directory where training checkpoints are saved.",
+    )
+    parser.add_argument(
+        "--resume-from",
+        "--load-checkpoint",
+        dest="resume_from",
+        default=None,
+        help="Checkpoint directory to restore before continuing training. Use 'latest' to load the newest checkpoint under --checkpoint-dir.",
+    )
+    parser.add_argument(
+        "--restore-observer-from",
+        type=Path,
+        default=None,
+        help="Observer checkpoint directory to load before training starts.",
+    )
+    parser.add_argument(
+        "--num-iterations",
+        type=int,
+        default=DEFAULT_NUM_ITERATIONS,
+        help="Additional PPO training iterations to run.",
+    )
+    parser.add_argument(
+        "--save-every",
+        type=int,
+        default=DEFAULT_CHECKPOINT_INTERVAL,
+        help="Checkpoint save interval in training iterations.",
+    )
+    parser.add_argument(
+        "--video-log-interval",
+        type=int,
+        default=VIDEO_LOG_INTERVAL,
+        help="Evaluation/video logging interval in training iterations.",
+    )
+    parser.add_argument(
+        "--wandb-project",
+        default=DEFAULT_WANDB_PROJECT,
+        help="Weights & Biases project name.",
+    )
+    parser.add_argument(
+        "--wandb-run-name",
+        default=DEFAULT_WANDB_RUN_NAME,
+        help="Weights & Biases run name.",
+    )
+    parser.add_argument(
+        "--num-env-runners",
+        type=int,
+        default=NUM_ENV_RUNNERS,
+        help="Number of RLlib environment runners.",
+    )
+    parser.add_argument(
+        "--rollout-fragment-length",
+        type=int,
+        default=ROLLOUT_FRAGMENT_LENGTH,
+        help="Rollout fragment length for PPO sampling.",
+    )
+    parser.add_argument(
+        "--sample-timeout-s",
+        type=float,
+        default=SAMPLE_TIMEOUT_S,
+        help="RLlib sample timeout in seconds.",
+    )
+    parser.add_argument(
+        "--num-gpus",
+        type=int,
+        default=DEFAULT_NUM_GPUS,
+        help="Number of GPUs requested by RLlib.",
+    )
+    return parser.parse_args()
 
+
+def resolve_checkpoint_path(checkpoint_path, checkpoint_dir):
+    """Resolve a checkpoint path or the newest checkpoint under the checkpoint dir."""
+    if checkpoint_path is None:
+        return None
+
+    if checkpoint_path == "latest":
+        candidate_root = Path(checkpoint_dir)
+    else:
+        candidate_root = Path(checkpoint_path)
+
+    if candidate_root.is_dir() and candidate_root.name.startswith("checkpoint_"):
+        return candidate_root.resolve()
+
+    if not candidate_root.exists():
+        raise FileNotFoundError(f"Checkpoint path does not exist: {candidate_root}")
+
+    checkpoints = sorted(
+        (
+            path for path in candidate_root.iterdir()
+            if path.is_dir() and path.name.startswith("checkpoint_")
+        ),
+        key=lambda path: path.stat().st_mtime,
+    )
+    if not checkpoints:
+        raise FileNotFoundError(
+            f"No checkpoint_* directory found under: {candidate_root}"
+        )
+    return checkpoints[-1].resolve()
+
+
+def _find_coverage_stage_index(levels, coverage_ratio):
+    """Return the curriculum stage index that matches the given coverage ratio."""
+    target_ratio = float(coverage_ratio)
+    for stage_index, level in enumerate(levels):
+        if np.isclose(float(level), target_ratio):
+            return stage_index
+    raise ValueError(
+        f"Coverage ratio {target_ratio} does not match any configured curriculum stage."
+    )
+
+
+def _find_obstacle_stage_index(levels, obstacle_level):
+    """Return the obstacle-curriculum stage index that matches the given level."""
+    normalized_target = _normalize_obstacle_difficulty(obstacle_level)
+    for stage_index, level in enumerate(levels):
+        if _normalize_obstacle_difficulty(level) == normalized_target:
+            return stage_index
+    raise ValueError(
+        "Obstacle difficulty "
+        f"{normalized_target} does not match any configured obstacle curriculum stage."
+    )
+
+
+def initialize_curricula_from_env_config(env_config):
+    """Build curriculum objects that match the current environment config."""
     obstacle_curriculum = ObstacleDifficultyCurriculum(
         levels=OBSTACLE_CURRICULUM_LEVELS,
         promotion_success_rate=CURRICULUM_PROMOTION_SUCCESS_RATE,
         stability_window=CURRICULUM_STABILITY_WINDOW,
     )
+    current_obstacle_level = {
+        "min_obstacles": env_config.get(
+            "min_obstacles",
+            OBSTACLE_CURRICULUM_LEVELS[0]["min_obstacles"],
+        ),
+        "max_obstacles": env_config.get(
+            "max_obstacles",
+            OBSTACLE_CURRICULUM_LEVELS[0]["max_obstacles"],
+        ),
+        "obstacle_min_speed": env_config.get(
+            "obstacle_min_speed",
+            OBSTACLE_CURRICULUM_LEVELS[0]["obstacle_min_speed"],
+        ),
+        "obstacle_max_speed": env_config.get(
+            "obstacle_max_speed",
+            OBSTACLE_CURRICULUM_LEVELS[0]["obstacle_max_speed"],
+        ),
+    }
+    obstacle_curriculum.stage_index = _find_obstacle_stage_index(
+        OBSTACLE_CURRICULUM_LEVELS,
+        current_obstacle_level,
+    )
     set_current_obstacle_difficulty(obstacle_curriculum.current_level)
+    env_config.update(obstacle_curriculum.current_level)
 
-    env_config = build_env_config()
-    curriculum_enabled = env_config.get("n_observers", 0) == 0 and env_config.get("n_drones", 0) > 0
     coverage_curriculum = None
+    curriculum_enabled = env_config.get("n_observers", 0) == 0 and env_config.get("n_drones", 0) > 0
     if curriculum_enabled:
         coverage_curriculum = CoverageCurriculum(
             levels=CURRICULUM_COVERAGE_LEVELS,
             promotion_success_rate=CURRICULUM_PROMOTION_SUCCESS_RATE,
             stability_window=CURRICULUM_STABILITY_WINDOW,
         )
-        set_current_drone_success_min_coverage_ratio(coverage_curriculum.current_coverage_ratio)
-        env_config["drone_only_success_min_coverage_ratio"] = coverage_curriculum.current_coverage_ratio
+        current_coverage_ratio = env_config.get(
+            "drone_only_success_min_coverage_ratio",
+            CURRICULUM_COVERAGE_LEVELS[0],
+        )
+        coverage_curriculum.stage_index = _find_coverage_stage_index(
+            CURRICULUM_COVERAGE_LEVELS,
+            current_coverage_ratio,
+        )
+        set_current_drone_success_min_coverage_ratio(
+            coverage_curriculum.current_coverage_ratio
+        )
+        env_config["drone_only_success_min_coverage_ratio"] = (
+            coverage_curriculum.current_coverage_ratio
+        )
+    else:
+        set_current_drone_success_min_coverage_ratio(
+            env_config.get(
+                "drone_only_success_min_coverage_ratio",
+                CURRICULUM_COVERAGE_LEVELS[0],
+            )
+        )
+
+    return obstacle_curriculum, coverage_curriculum
+
+
+def main():
+    args = parse_args()
+    LOGGER.setLevel(logging.WARNING)
+    ray.init()
+    register_hemac_rllib_models()
+
+    checkpoint_dir = args.checkpoint_dir.resolve()
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    resume_checkpoint_path = resolve_checkpoint_path(args.resume_from, checkpoint_dir)
 
     env_name = "hemac_asymmetric_env"
     register_env(env_name, env_creator)
 
-    temp_env = env_creator(env_config)
-    obs_space = temp_env.observation_space
-    act_space = temp_env.action_space
-    temp_env.close()
+    if resume_checkpoint_path is not None:
+        print(f"체크포인트 로드 중: {resume_checkpoint_path}")
+        algo = Algorithm.from_checkpoint(str(resume_checkpoint_path))
+        restored_env_config = getattr(algo.config, "env_config", None)
+        if not isinstance(restored_env_config, dict):
+            raise TypeError(
+                "Restored algorithm does not expose a valid env_config dictionary."
+            )
+        env_config = build_env_config()
+        env_config.update(restored_env_config)
+    else:
+        env_config = build_env_config()
 
-    policies = {}
-    if env_config.get("n_observers", 0) > 0:
-        policies["observer_policy"] = (
-            None,
-            obs_space["observer_0"],
-            act_space["observer_0"],
-            {"model": observer_policy_model_config()},
-        )
-    if env_config.get("n_drones", 0) > 0:
-        policies["drone_policy"] = (
-            None,
-            obs_space["drone_0"],
-            act_space["drone_0"],
-            {"model": drone_policy_model_config()},
+        temp_env = env_creator(env_config)
+        obs_space = temp_env.observation_space
+        act_space = temp_env.action_space
+        temp_env.close()
+
+        policies = {}
+        if env_config.get("n_observers", 0) > 0:
+            policies["observer_policy"] = (
+                None,
+                obs_space["observer_0"],
+                act_space["observer_0"],
+                {"model": observer_policy_model_config()},
+            )
+        if env_config.get("n_drones", 0) > 0:
+            policies["drone_policy"] = (
+                None,
+                obs_space["drone_0"],
+                act_space["drone_0"],
+                {"model": drone_policy_model_config()},
+            )
+
+        def policy_mapping_fn(agent_id, episode, **kwargs):
+            del episode, kwargs
+            if "observer" in agent_id and "observer_policy" in policies:
+                return "observer_policy"
+            if "drone" in agent_id and "drone_policy" in policies:
+                return "drone_policy"
+            raise ValueError(f"No policy configured for agent_id={agent_id}")
+
+        config = (
+            PPOConfig()
+            .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
+            .framework("torch")
+            .callbacks(HeMACCallbacks)
+            .environment(env=env_name, env_config=env_config)
+            .env_runners(
+                num_env_runners=args.num_env_runners,
+                rollout_fragment_length=args.rollout_fragment_length,
+                sample_timeout_s=args.sample_timeout_s,
+            )
+            .multi_agent(
+                policies=policies,
+                policy_mapping_fn=policy_mapping_fn,
+                policies_to_train=["observer_policy", "drone_policy"],
+            )
+            .resources(num_gpus=args.num_gpus)
+            .training(
+                train_batch_size=8000,
+                minibatch_size=512,
+                num_epochs=5,
+                lr_schedule=[
+                    [0, 3e-4],           # [수정] 초기 학습률 증가 (기존 5e-5)
+                    [500 * 8000, 1e-4],  # [수정] 중간 학습률 조정
+                    [10000 * 8000, 1e-5]
+                ],
+                gamma=0.995,
+                grad_clip=1.0,
+                clip_param=0.2,
+                entropy_coeff=PPO_ENTROPY_COEFF,
+                kl_target=0.01,
+            )
+            .debugging(log_level="WARN")
         )
 
-    def policy_mapping_fn(agent_id, episode, **kwargs):
-        if "observer" in agent_id and "observer_policy" in policies:
-            return "observer_policy"
-        if "drone" in agent_id and "drone_policy" in policies:
-            return "drone_policy"
-        raise ValueError(f"No policy configured for agent_id={agent_id}")
+        print("RLlib PPO 알고리즘 빌드 중...")
+        algo = config.build()
 
-    config = (
-        PPOConfig()
-        .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
-        .framework("torch")
-        .callbacks(HeMACCallbacks)
-        .environment(env=env_name, env_config=env_config)
-        .env_runners(
-            num_env_runners=NUM_ENV_RUNNERS,
-            rollout_fragment_length=ROLLOUT_FRAGMENT_LENGTH,
-            sample_timeout_s=SAMPLE_TIMEOUT_S,
-        )
-        .multi_agent(
-            policies=policies,
-            policy_mapping_fn=policy_mapping_fn,
-            policies_to_train=["observer_policy", "drone_policy"],
-        )
-        .resources(num_gpus=1)
-        .training(
-            train_batch_size=8000,
-            minibatch_size=512,
-            num_epochs=5,
-            lr_schedule=[
-                [0, 3e-4],           # [수정] 초기 학습률 증가 (기존 5e-5)
-                [500 * 8000, 1e-4],  # [수정] 중간 학습률 조정
-                [10000 * 8000, 1e-5]
-            ],
-            gamma=0.995, 
-            grad_clip=1.0, 
-            clip_param=0.2,
-            entropy_coeff=PPO_ENTROPY_COEFF,
-            kl_target=0.01,
-        )
-        .debugging(log_level="WARN")
+    obstacle_curriculum, coverage_curriculum = initialize_curricula_from_env_config(
+        env_config
     )
 
-    print("RLlib PPO 알고리즘 빌드 중...")
-    algo = config.build()
-    # observer_checkpoint_path = restore_frozen_observer_policy(
-    #     algo, FROZEN_OBSERVER_CHECKPOINT
-    # )
-    # print(f"[observer] loaded frozen observer policy from {observer_checkpoint_path}")
+    if args.restore_observer_from is not None:
+        observer_checkpoint_path = restore_frozen_observer_policy(
+            algo,
+            args.restore_observer_from,
+        )
+        print(f"[observer] loaded frozen observer policy from {observer_checkpoint_path}")
+
     obstacle_updated_envs = apply_obstacle_curriculum_to_algo(
         algo, obstacle_curriculum.current_level
     )
@@ -768,28 +978,36 @@ def main():
         )
     else:
         print("[curriculum] disabled because this run includes an observer.")
-    
-    checkpoint_dir = "./hemac_checkpoints"
-    os.makedirs(checkpoint_dir, exist_ok=True)
 
     wandb.init(
-        project="HeMAC-RL",
-        name="PPO-Agent-Training-With-Moving-Obstacles",
-        config=config.to_dict(),
+        project=args.wandb_project,
+        name=args.wandb_run_name,
+        config={
+            **algo.config.to_dict(),
+            "resume_from": str(resume_checkpoint_path) if resume_checkpoint_path is not None else None,
+            "restore_observer_from": (
+                str(args.restore_observer_from)
+                if args.restore_observer_from is not None
+                else None
+            ),
+        },
     )
 
     print("학습 루프 시작...")
-    num_iterations = 10000000000 
-    
-    for i in range(num_iterations):
+    start_iteration = int(getattr(algo, "iteration", 0))
+
+    for i in range(args.num_iterations):
         result = algo.train()
+        iteration = int(
+            result.get("training_iteration", start_iteration + i + 1)
+        )
         mean_reward = result.get('env_runners', {}).get('episode_reward_mean', result.get('episode_reward_mean', 0))
         obstacle_curriculum_promoted = False
         obstacle_curriculum_updated_envs = 0
         coverage_curriculum_promoted = False
         coverage_curriculum_updated_envs = 0
         
-        print(f"\n--- Iteration {i+1} ---")
+        print(f"\n--- Iteration {iteration} ---")
         print(f"Mean Reward: {mean_reward:.2f}")
 
         custom_metrics = result.get('custom_metrics', {})
@@ -839,7 +1057,7 @@ def main():
         print(f">>> [디버깅] custom_metrics: {visible_custom_metrics}")
 
         log_payload = {
-            "iteration": i + 1,
+            "iteration": iteration,
             "reward/mean_reward": mean_reward,
             "reward/observer_policy": policy_rewards.get("observer_policy", 0),
             "reward/drone_policy": policy_rewards.get("drone_policy", 0),
@@ -898,15 +1116,15 @@ def main():
             "obstacle_curriculum/max_speed": obstacle_curriculum.current_level["obstacle_max_speed"],
         }
 
-        if (i + 1) % VIDEO_LOG_INTERVAL == 0:
+        if iteration % args.video_log_interval == 0:
             try:
-                video = collect_visualization_video(algo, iteration=i + 1, seed=VIDEO_SEED)
+                video = collect_visualization_video(algo, iteration=iteration, seed=VIDEO_SEED)
                 if video is not None:
                     log_payload["visualization/policy_rollout"] = video
             except Exception as exc:
-                print(f"[warn] visualization logging skipped at iteration {i + 1}: {exc}")
+                print(f"[warn] visualization logging skipped at iteration {iteration}: {exc}")
 
-        if (i + 1) % VIDEO_LOG_INTERVAL == 0:
+        if iteration % args.video_log_interval == 0:
             try:
                 current_eval_seeds = np.random.randint(0, 100000, size=10).tolist()
                 
@@ -926,9 +1144,9 @@ def main():
                 )
                 log_payload["metrics/eval_success_rate_stochastic"] = eval_success_rate_stochastic
             except Exception as exc:
-                print(f"[warn] eval success logging skipped at iteration {i + 1}: {exc}")
+                print(f"[warn] eval success logging skipped at iteration {iteration}: {exc}")
 
-        if (i + 1) % VIDEO_LOG_INTERVAL == 0:
+        if iteration % args.video_log_interval == 0:
             try:
                 current_eval_seeds = np.random.randint(0, 100000, size=10).tolist()
                 
@@ -948,7 +1166,7 @@ def main():
                 )
                 log_payload["metrics/eval_drone_crash_rate_stochastic"] = eval_drone_crash_rate_stochastic
             except Exception as exc:
-                print(f"[warn] eval drone crash logging skipped at iteration {i + 1}: {exc}")
+                print(f"[warn] eval drone crash logging skipped at iteration {iteration}: {exc}")
 
         log_payload["curriculum/stage_number"] = (
             coverage_curriculum.stage_number if coverage_curriculum is not None else 0.0
@@ -969,10 +1187,9 @@ def main():
 
         wandb.log(log_payload)
         
-        if (i + 1) % 100 == 0:
-            # i+1:05d는 숫자를 5자리(예: 00500)로 포맷팅하여 정렬이 잘 되게 합니다.
-            iter_checkpoint_dir = os.path.join(checkpoint_dir, f"checkpoint_{i+1:05d}")
-            algo.save(iter_checkpoint_dir)
+        if iteration % args.save_every == 0:
+            iter_checkpoint_dir = checkpoint_dir / f"checkpoint_{iteration:05d}"
+            algo.save(str(iter_checkpoint_dir))
             print(f"Checkpoint 저장 완료: {iter_checkpoint_dir}")
 
     wandb.finish()
