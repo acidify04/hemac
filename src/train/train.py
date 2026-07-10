@@ -46,7 +46,8 @@ TRAIN_DIR = Path(__file__).resolve().parent
 TRAIN_NUM_DRONES = len(DRONE_START_POSITIONS)
 FROZEN_OBSERVER_CHECKPOINT = TRAIN_DIR / "observer_checkpoints" / "checkpoint_10000"
 
-VIDEO_LOG_INTERVAL = 300
+VISUALIZATION_LOG_INTERVAL = 500
+EVAL_LOG_INTERVAL = 100
 VIDEO_FPS = 12
 VIDEO_SEED = 0
 VIDEO_OUTPUT_DIR = Path("./wandb_media")
@@ -56,7 +57,7 @@ ROLLOUT_FRAGMENT_LENGTH = 100
 SAMPLE_TIMEOUT_S = 180.0
 CURRICULUM_COVERAGE_LEVELS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 CURRICULUM_PROMOTION_SUCCESS_RATE = 0.8
-CURRICULUM_STABILITY_WINDOW = 5
+CURRICULUM_STABILITY_WINDOW = 1
 CURRENT_DRONE_SUCCESS_MIN_COVERAGE_RATIO = CURRICULUM_COVERAGE_LEVELS[0]
 OBSTACLE_CURRICULUM_LEVELS = [
     {
@@ -106,7 +107,7 @@ CURRENT_OBSTACLE_DIFFICULTY = dict(OBSTACLE_CURRICULUM_LEVELS[0])
 
 
 class CoverageCurriculum:
-    """Promote the drone-only success target once training success stays high enough."""
+    """Promote the drone-only success target once evaluation success is high enough."""
 
     def __init__(self, levels, promotion_success_rate=0.8, stability_window=3):
         if not levels:
@@ -145,13 +146,11 @@ class CoverageCurriculum:
         return float(np.min(self.recent_success_rates))
 
     def record_success(self, success_rate):
-        """Return True when it is time to promote to the next curriculum level."""
+        """Promote immediately when the supplied evaluation success crosses the threshold."""
         self.recent_success_rates.append(float(success_rate))
         if self.is_finished:
             return False
-        if len(self.recent_success_rates) < self.recent_success_rates.maxlen:
-            return False
-        if min(self.recent_success_rates) < self.promotion_success_rate:
+        if float(success_rate) < self.promotion_success_rate:
             return False
 
         self.stage_index += 1
@@ -160,7 +159,7 @@ class CoverageCurriculum:
 
 
 class ObstacleDifficultyCurriculum:
-    """Promote obstacle count/speed once training success stays high enough."""
+    """Promote obstacle count/speed once evaluation success is high enough."""
 
     def __init__(self, levels, promotion_success_rate=0.8, stability_window=5):
         if not levels:
@@ -199,13 +198,11 @@ class ObstacleDifficultyCurriculum:
         return float(np.min(self.recent_success_rates))
 
     def record_success(self, success_rate):
-        """Return True when it is time to promote to the next obstacle level."""
+        """Promote immediately when the supplied evaluation success crosses the threshold."""
         self.recent_success_rates.append(float(success_rate))
         if self.is_finished:
             return False
-        if len(self.recent_success_rates) < self.recent_success_rates.maxlen:
-            return False
-        if min(self.recent_success_rates) < self.promotion_success_rate:
+        if float(success_rate) < self.promotion_success_rate:
             return False
 
         self.stage_index += 1
@@ -788,6 +785,7 @@ def main():
         obstacle_curriculum_updated_envs = 0
         coverage_curriculum_promoted = False
         coverage_curriculum_updated_envs = 0
+        eval_success_rate = None
         
         print(f"\n--- Iteration {i+1} ---")
         print(f"Mean Reward: {mean_reward:.2f}")
@@ -804,37 +802,6 @@ def main():
             policy_rewards = result.get('env_runners', {}).get('policy_reward_mean', {})
         drone_log_std_stats = get_policy_log_std_stats(algo, "drone_policy") or {}
         rollout_success_rate = float(custom_metrics.get("success_rate_mean", 0.0))
-
-        obstacle_curriculum_promoted = obstacle_curriculum.record_success(rollout_success_rate)
-        if obstacle_curriculum_promoted:
-            obstacle_curriculum_updated_envs = apply_obstacle_curriculum_to_algo(
-                algo, obstacle_curriculum.current_level
-            )
-            if obstacle_curriculum_updated_envs <= 0:
-                print("[warn] obstacle curriculum promoted, but no live env received the new obstacle target.")
-            current_obstacle_level = obstacle_curriculum.current_level
-            print(
-                "[obstacle curriculum] promoted to stage "
-                f"{obstacle_curriculum.stage_number}/{obstacle_curriculum.num_stages} "
-                f"(obstacles={current_obstacle_level['min_obstacles']}-{current_obstacle_level['max_obstacles']}, "
-                f"speed={current_obstacle_level['obstacle_min_speed']}-{current_obstacle_level['obstacle_max_speed']}, "
-                f"updated_envs={obstacle_curriculum_updated_envs})"
-            )
-
-        if coverage_curriculum is not None:
-            coverage_curriculum_promoted = coverage_curriculum.record_success(rollout_success_rate)
-            if coverage_curriculum_promoted:
-                coverage_curriculum_updated_envs = apply_curriculum_to_algo(
-                    algo, coverage_curriculum.current_coverage_ratio
-                )
-                if coverage_curriculum_updated_envs <= 0:
-                    print("[warn] curriculum promoted, but no live env received the new coverage target.")
-                print(
-                    "[curriculum] promoted to stage "
-                    f"{coverage_curriculum.stage_number}/{coverage_curriculum.num_stages} "
-                    f"(coverage >= {coverage_curriculum.current_coverage_ratio:.1f}, "
-                    f"updated_envs={coverage_curriculum_updated_envs})"
-                )
 
         print(f">>> [디버깅] custom_metrics: {visible_custom_metrics}")
 
@@ -898,7 +865,7 @@ def main():
             "obstacle_curriculum/max_speed": obstacle_curriculum.current_level["obstacle_max_speed"],
         }
 
-        if (i + 1) % VIDEO_LOG_INTERVAL == 0:
+        if (i + 1) % VISUALIZATION_LOG_INTERVAL == 0:
             try:
                 video = collect_visualization_video(algo, iteration=i + 1, seed=VIDEO_SEED)
                 if video is not None:
@@ -906,7 +873,7 @@ def main():
             except Exception as exc:
                 print(f"[warn] visualization logging skipped at iteration {i + 1}: {exc}")
 
-        if (i + 1) % VIDEO_LOG_INTERVAL == 0:
+        if (i + 1) % EVAL_LOG_INTERVAL == 0:
             try:
                 current_eval_seeds = np.random.randint(0, 100000, size=10).tolist()
                 
@@ -928,7 +895,7 @@ def main():
             except Exception as exc:
                 print(f"[warn] eval success logging skipped at iteration {i + 1}: {exc}")
 
-        if (i + 1) % VIDEO_LOG_INTERVAL == 0:
+        if (i + 1) % EVAL_LOG_INTERVAL == 0:
             try:
                 current_eval_seeds = np.random.randint(0, 100000, size=10).tolist()
                 
@@ -949,6 +916,40 @@ def main():
                 log_payload["metrics/eval_drone_crash_rate_stochastic"] = eval_drone_crash_rate_stochastic
             except Exception as exc:
                 print(f"[warn] eval drone crash logging skipped at iteration {i + 1}: {exc}")
+
+        if eval_success_rate is not None:
+            obstacle_curriculum_promoted = obstacle_curriculum.record_success(eval_success_rate)
+            if obstacle_curriculum_promoted:
+                obstacle_curriculum_updated_envs = apply_obstacle_curriculum_to_algo(
+                    algo, obstacle_curriculum.current_level
+                )
+                if obstacle_curriculum_updated_envs <= 0:
+                    print("[warn] obstacle curriculum promoted, but no live env received the new obstacle target.")
+                current_obstacle_level = obstacle_curriculum.current_level
+                print(
+                    "[obstacle curriculum] promoted to stage "
+                    f"{obstacle_curriculum.stage_number}/{obstacle_curriculum.num_stages} "
+                    f"(eval_success_rate={eval_success_rate:.2f}, "
+                    f"obstacles={current_obstacle_level['min_obstacles']}-{current_obstacle_level['max_obstacles']}, "
+                    f"speed={current_obstacle_level['obstacle_min_speed']}-{current_obstacle_level['obstacle_max_speed']}, "
+                    f"updated_envs={obstacle_curriculum_updated_envs})"
+                )
+
+            if coverage_curriculum is not None:
+                coverage_curriculum_promoted = coverage_curriculum.record_success(eval_success_rate)
+                if coverage_curriculum_promoted:
+                    coverage_curriculum_updated_envs = apply_curriculum_to_algo(
+                        algo, coverage_curriculum.current_coverage_ratio
+                    )
+                    if coverage_curriculum_updated_envs <= 0:
+                        print("[warn] curriculum promoted, but no live env received the new coverage target.")
+                    print(
+                        "[curriculum] promoted to stage "
+                        f"{coverage_curriculum.stage_number}/{coverage_curriculum.num_stages} "
+                        f"(eval_success_rate={eval_success_rate:.2f}, "
+                        f"coverage >= {coverage_curriculum.current_coverage_ratio:.1f}, "
+                        f"updated_envs={coverage_curriculum_updated_envs})"
+                    )
 
         log_payload["curriculum/stage_number"] = (
             coverage_curriculum.stage_number if coverage_curriculum is not None else 0.0
