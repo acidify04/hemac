@@ -1093,7 +1093,7 @@ def main():
                 print(f"[warn] visualization logging skipped at iteration {iteration}: {exc}")
 
 
-        if iteration % args.video_log_interval == 0:
+        if iteration % EVAL_LOG_INTERVAL == 0:
             try:
                 current_eval_seeds = np.random.randint(0, 100000, size=10).tolist()
                 
@@ -1116,7 +1116,7 @@ def main():
                 print(f"[warn] eval success logging skipped at iteration {iteration}: {exc}")
 
 
-        if iteration % args.video_log_interval == 0:
+        if iteration % EVAL_LOG_INTERVAL == 0:
             try:
                 current_eval_seeds = np.random.randint(0, 100000, size=10).tolist()
                 
