@@ -80,6 +80,7 @@ class World(pygame.sprite.Sprite):
         self.detected = set()
         self.detected_count = 0
         self.detected_mask = np.zeros((self.area.height, self.area.width), dtype=bool)
+        self.detected_mask_flat = self.detected_mask.reshape(-1)
         self.search_pixel_mask = self._build_search_pixel_mask()
         self.search_pixel_mask_float = self.search_pixel_mask.astype(np.float32, copy=False)
         self.search_integral = self._build_integral_image(self.search_pixel_mask_float)
@@ -139,6 +140,30 @@ class World(pygame.sprite.Sprite):
         self.coverage_y_edges[0] = 0
         self.coverage_x_edges[-1] = self.area.width
         self.coverage_y_edges[-1] = self.area.height
+        self.pixel_to_grid_x = np.minimum(
+            (np.arange(self.area.width, dtype=np.float32) / self.coverage_cell_width).astype(np.int32),
+            self.coverage_grid_size - 1,
+        )
+        self.pixel_to_grid_y = np.minimum(
+            (np.arange(self.area.height, dtype=np.float32) / self.coverage_cell_height).astype(np.int32),
+            self.coverage_grid_size - 1,
+        )
+        self._flat_pixel_to_coverage_cell = (
+            self.pixel_to_grid_y[:, None] * self.coverage_grid_size + self.pixel_to_grid_x[None, :]
+        ).astype(np.int32, copy=False).reshape(-1)
+        coverage_x_widths = np.diff(self.coverage_x_edges)
+        coverage_y_heights = np.diff(self.coverage_y_edges)
+        self._uniform_coverage_cell_width_px = int(coverage_x_widths[0]) if coverage_x_widths.size > 0 else 0
+        self._uniform_coverage_cell_height_px = int(coverage_y_heights[0]) if coverage_y_heights.size > 0 else 0
+        self._can_reshape_coverage_grid = bool(
+            coverage_x_widths.size == self.coverage_grid_size
+            and coverage_y_heights.size == self.coverage_grid_size
+            and self._uniform_coverage_cell_width_px > 0
+            and self._uniform_coverage_cell_height_px > 0
+            and np.all(coverage_x_widths == self._uniform_coverage_cell_width_px)
+            and np.all(coverage_y_heights == self._uniform_coverage_cell_height_px)
+        )
+        self._coverage_aggregation_buffer = np.zeros((self.area.height, self.area.width), dtype=np.float32)
         self._observed_obstacle_integral = None
         self._observed_warning_integral = None
         self.actual_obstacle_confidences = np.zeros((0,), dtype=np.float32)
@@ -197,6 +222,27 @@ class World(pygame.sprite.Sprite):
             - integral[y1[:, None], x0[None, :]]
             + integral[y0[:, None], x0[None, :]]
         )
+
+    def _aggregate_world_mask_to_coverage_grid(self, mask: np.ndarray, out: np.ndarray) -> None:
+        """Aggregate a world-space mask into the fixed coverage grid."""
+        out.fill(0.0)
+        if mask.size == 0:
+            return
+
+        np.multiply(mask, self.search_pixel_mask_float, out=self._coverage_aggregation_buffer)
+        if self._can_reshape_coverage_grid:
+            cell_sums = self._coverage_aggregation_buffer.reshape(
+                self.coverage_grid_size,
+                self._uniform_coverage_cell_height_px,
+                self.coverage_grid_size,
+                self._uniform_coverage_cell_width_px,
+            ).sum(axis=(1, 3), dtype=np.float32)
+        else:
+            integral = self._build_integral_image(self._coverage_aggregation_buffer)
+            cell_sums = self._integral_box_sums(integral, self.coverage_x_edges, self.coverage_y_edges)
+
+        np.divide(cell_sums, max(self.coverage_cell_area, 1e-6), out=out)
+        np.clip(out, 0.0, 1.0, out=out)
 
     @staticmethod
     @lru_cache(maxsize=None)
@@ -312,8 +358,12 @@ class World(pygame.sprite.Sprite):
     def _get_observed_warning_integral(self) -> np.ndarray:
         """Return the cached integral image for observed warning zones inside the search area."""
         if self._observed_warning_integral is None:
-            warning_search = self.observed_warning_pixel_mask * self.search_pixel_mask_float
-            self._observed_warning_integral = self._build_integral_image(warning_search)
+            np.multiply(
+                self.observed_warning_pixel_mask,
+                self.search_pixel_mask_float,
+                out=self._coverage_aggregation_buffer,
+            )
+            self._observed_warning_integral = self._build_integral_image(self._coverage_aggregation_buffer)
         return self._observed_warning_integral
 
     def build_local_area_channels(
@@ -351,14 +401,16 @@ class World(pygame.sprite.Sprite):
         )
         detected_integral = self._build_integral_image(detected_search_crop)
 
-        x_edges = np.clip(np.rint(x_edges_world).astype(np.int32), 0, self.area.width)
-        y_edges = np.clip(np.rint(y_edges_world).astype(np.int32), 0, self.area.height)
+        rounded_x_edges = np.rint(x_edges_world).astype(np.int32)
+        rounded_y_edges = np.rint(y_edges_world).astype(np.int32)
+        x_edges = np.clip(rounded_x_edges, 0, self.area.width)
+        y_edges = np.clip(rounded_y_edges, 0, self.area.height)
         x_edges = np.maximum.accumulate(x_edges)
         y_edges = np.maximum.accumulate(y_edges)
         x_edges[-1] = min(max(int(np.rint(max_x)), 0), self.area.width)
         y_edges[-1] = min(max(int(np.rint(max_y)), 0), self.area.height)
-        x_edges_crop = np.clip(np.rint(x_edges_world).astype(np.int32), crop_x0, crop_x1) - crop_x0
-        y_edges_crop = np.clip(np.rint(y_edges_world).astype(np.int32), crop_y0, crop_y1) - crop_y0
+        x_edges_crop = np.clip(rounded_x_edges, crop_x0, crop_x1) - crop_x0
+        y_edges_crop = np.clip(rounded_y_edges, crop_y0, crop_y1) - crop_y0
         x_edges_crop = np.maximum.accumulate(x_edges_crop)
         y_edges_crop = np.maximum.accumulate(y_edges_crop)
         x_edges_crop[-1] = max(min(int(np.rint(max_x)), crop_x1) - crop_x0, 0)
@@ -433,33 +485,18 @@ class World(pygame.sprite.Sprite):
 
     def _rebuild_warning_range_map(self) -> None:
         """Aggregate the warning pixel mask into the 20x20 coverage grid."""
-        self.warning_range_map.fill(0.0)
-        if not np.any(self.warning_pixel_mask):
-            return
-
-        visible_warning_mask = self.warning_pixel_mask * self.search_pixel_mask_float
-        warning_integral = self._build_integral_image(visible_warning_mask)
-        warning_sum = self._integral_box_sums(warning_integral, self.coverage_x_edges, self.coverage_y_edges)
-        self.warning_range_map[:, :] = np.clip(
-            warning_sum / max(self.coverage_cell_area, 1e-6),
-            0.0,
-            1.0,
-        )
+        self._aggregate_world_mask_to_coverage_grid(self.warning_pixel_mask, self.warning_range_map)
 
     def _rebuild_observed_warning_map(self) -> None:
         """Aggregate revealed warning zones into the observation grid."""
         self.explored_warning_range_map.fill(0.0)
         self.padded_explored_warning_range_map.fill(0.0)
-        if not np.any(self.observed_warning_pixel_mask):
+        if not self.observed_obstacle_confidences:
             return
 
-        visible_warning_mask = self.observed_warning_pixel_mask * self.search_pixel_mask_float
-        warning_integral = self._build_integral_image(visible_warning_mask)
-        warning_sum = self._integral_box_sums(warning_integral, self.coverage_x_edges, self.coverage_y_edges)
-        self.explored_warning_range_map[:, :] = np.clip(
-            warning_sum / max(self.coverage_cell_area, 1e-6),
-            0.0,
-            1.0,
+        self._aggregate_world_mask_to_coverage_grid(
+            self.observed_warning_pixel_mask,
+            self.explored_warning_range_map,
         )
         self.padded_explored_warning_range_map[
             self.relative_pad : self.relative_pad + self.coverage_grid_size,
@@ -483,15 +520,15 @@ class World(pygame.sprite.Sprite):
         if not new_indices:
             return False
 
-        for idx in new_indices:
-            obstacle = self.obstacles[idx]
-            self._paint_disk_on_world_mask(
-                self.observed_warning_pixel_mask,
-                center_x=float(obstacle.centerx),
-                center_y=float(self.area.height - obstacle.centery),
-                radius=float(self.OBSTACLE_WARNING_RADIUS),
-            )
-            self.revealed_warning_obstacles[idx] = True
+        new_indices_array = np.asarray(new_indices, dtype=np.int32)
+        centers = self.obstacle_centers[new_indices_array]
+        self._paint_disks_on_world_mask(
+            self.observed_warning_pixel_mask,
+            centers[:, 0],
+            self.area.height - centers[:, 1],
+            float(self.OBSTACLE_WARNING_RADIUS),
+        )
+        self.revealed_warning_obstacles[new_indices_array] = True
 
         self._rebuild_observed_warning_map()
         return True
@@ -879,8 +916,7 @@ class World(pygame.sprite.Sprite):
                     changed = self._clear_observed_obstacle_key(rect_key) or changed
 
         if self.obstacles:
-            obstacle_centers = np.asarray([obstacle.center for obstacle in self.obstacles], dtype=np.float32)
-            obstacle_visible = visibility_mask(obstacle_centers)
+            obstacle_visible = visibility_mask(self.obstacle_centers)
             visible_current_keys = set()
             previous_keys_to_clear = set()
 
@@ -1007,24 +1043,20 @@ class World(pygame.sprite.Sprite):
                 empty = np.empty((0, 2), dtype=np.int32)
                 return empty if return_new_points else self.detected_count
 
-            valid_points = points_array[valid]
-            if not assume_unique and len(valid_points) > 1:
-                valid_points = np.unique(valid_points, axis=0)
-            valid_x = valid_points[:, 0]
-            valid_y = valid_points[:, 1]
-            unseen = ~self.detected_mask[valid_y, valid_x]
+            valid_x = x[valid]
+            valid_y = y[valid]
+            valid_flat = valid_y * self.area.width + valid_x
+            if not assume_unique and valid_flat.size > 1:
+                valid_flat = np.unique(valid_flat)
+            unseen = ~self.detected_mask_flat[valid_flat]
             if not np.any(unseen):
                 empty = np.empty((0, 2), dtype=np.int32)
                 return empty if return_new_points else self.detected_count
 
-            new_points = valid_points[unseen]
-            new_x = new_points[:, 0]
-            new_y = new_points[:, 1]
-            self.detected_mask[new_y, new_x] = True
-            self.detected_count += int(len(new_points))
-            grid_x = np.minimum((new_x / self.coverage_cell_width).astype(np.int32), self.coverage_grid_size - 1)
-            grid_y = np.minimum((new_y / self.coverage_cell_height).astype(np.int32), self.coverage_grid_size - 1)
-            flat_cells = grid_y * self.coverage_grid_size + grid_x
+            new_flat = valid_flat[unseen]
+            self.detected_mask_flat[new_flat] = True
+            self.detected_count += int(new_flat.size)
+            flat_cells = self._flat_pixel_to_coverage_cell[new_flat]
             cell_counts = np.bincount(flat_cells, minlength=self.coverage_grid_size * self.coverage_grid_size)
             touched_flat = np.flatnonzero(cell_counts)
             self.coverage_counts_flat[touched_flat] += cell_counts[touched_flat]
@@ -1034,7 +1066,12 @@ class World(pygame.sprite.Sprite):
             )
             self._refresh_padded_observation_maps(touched_flat)
 
-            return new_points if return_new_points else self.detected_count
+            if not return_new_points:
+                return self.detected_count
+
+            new_x = new_flat % self.area.width
+            new_y = new_flat // self.area.width
+            return np.column_stack((new_x, new_y)).astype(np.int32, copy=False)
 
         cell_updates = {}
         for x, y in points:
@@ -1294,6 +1331,8 @@ class World(pygame.sprite.Sprite):
         """Move each obstacle while keeping piecewise-constant direction and speed."""
         if not self.obstacles:
             return False
+        if self._all_unit_rects(self.obstacles):
+            return self._move_unit_obstacles_one_step()
 
         self._sync_obstacle_motion_state()
         obstacle_indices = self.randomizer.permutation(len(self.obstacles))
@@ -1378,6 +1417,111 @@ class World(pygame.sprite.Sprite):
             obstacle.y = new_rect.y
             obstacle.width = new_rect.width
             obstacle.height = new_rect.height
+
+        self.obstacle_move_direction_indices = next_direction_indices
+        self.obstacle_move_steps_remaining = next_steps_remaining
+        self.obstacle_move_speeds = next_speeds
+        self.obstacle_speed_steps_remaining = next_speed_steps_remaining
+        if moved:
+            self._rebuild_obstacle_map()
+        return moved
+
+    def _move_unit_obstacles_one_step(self) -> bool:
+        """Fast path for 1x1 obstacles using integer positions and search-mask lookups."""
+        self._sync_obstacle_motion_state()
+        obstacle_indices = self.randomizer.permutation(len(self.obstacles))
+        original_x = np.fromiter((obstacle.x for obstacle in self.obstacles), dtype=np.int32, count=len(self.obstacles))
+        original_y = np.fromiter((obstacle.y for obstacle in self.obstacles), dtype=np.int32, count=len(self.obstacles))
+        original_flat = original_y * self.area.width + original_x
+        stationary_keys = set(original_flat.tolist())
+        planned_x = original_x.copy()
+        planned_y = original_y.copy()
+        planned_path_keys = set()
+        next_direction_indices = self.obstacle_move_direction_indices.copy()
+        next_steps_remaining = self.obstacle_move_steps_remaining.copy()
+        next_speeds = self.obstacle_move_speeds.copy()
+        next_speed_steps_remaining = self.obstacle_speed_steps_remaining.copy()
+        moved = False
+
+        for obstacle_idx in obstacle_indices:
+            idx = int(obstacle_idx)
+            current_x = int(original_x[idx])
+            current_y = int(original_y[idx])
+            current_flat = int(original_flat[idx])
+            stationary_keys.discard(current_flat)
+
+            chosen_x = current_x
+            chosen_y = current_y
+            chosen_direction_idx = -1
+            chosen_steps_remaining = 0
+            current_direction_idx = int(self.obstacle_move_direction_indices[idx])
+            current_steps_remaining = int(self.obstacle_move_steps_remaining[idx])
+            current_speed = int(self.obstacle_move_speeds[idx])
+            current_speed_steps_remaining = int(self.obstacle_speed_steps_remaining[idx])
+            if current_speed > 0 and current_speed_steps_remaining > 0:
+                chosen_speed = current_speed
+                chosen_speed_steps_remaining = current_speed_steps_remaining - 1
+            else:
+                chosen_speed = self._sample_obstacle_speed()
+                chosen_speed_steps_remaining = self.OBSTACLE_SPEED_HOLD_STEPS - 1
+
+            candidate_direction_indices = []
+            if 0 <= current_direction_idx < len(self.OBSTACLE_MOVE_DELTAS) and current_steps_remaining > 0:
+                candidate_direction_indices.append(current_direction_idx)
+
+            for random_direction_idx in self.randomizer.permutation(len(self.OBSTACLE_MOVE_DELTAS)):
+                direction_idx = int(random_direction_idx)
+                if direction_idx in candidate_direction_indices:
+                    continue
+                if current_steps_remaining <= 0 and direction_idx == current_direction_idx:
+                    continue
+                candidate_direction_indices.append(direction_idx)
+
+            for direction_idx in candidate_direction_indices:
+                dx, dy = self.OBSTACLE_MOVE_DELTAS[direction_idx]
+                candidate_x = current_x
+                candidate_y = current_y
+                candidate_path_keys = []
+                path_is_valid = True
+                for _ in range(chosen_speed):
+                    candidate_x += dx
+                    candidate_y += dy
+                    if not (0 <= candidate_x < self.area.width and 0 <= candidate_y < self.area.height):
+                        path_is_valid = False
+                        break
+                    candidate_flat = candidate_y * self.area.width + candidate_x
+                    if candidate_flat in stationary_keys or candidate_flat in planned_path_keys:
+                        path_is_valid = False
+                        break
+                    world_y = self.area.height - candidate_y - 1
+                    if not self.search_pixel_mask[world_y, candidate_x]:
+                        path_is_valid = False
+                        break
+                    candidate_path_keys.append(candidate_flat)
+                if not path_is_valid:
+                    continue
+
+                chosen_x = candidate_x
+                chosen_y = candidate_y
+                chosen_direction_idx = direction_idx
+                if direction_idx == current_direction_idx and current_steps_remaining > 0:
+                    chosen_steps_remaining = current_steps_remaining - 1
+                else:
+                    chosen_steps_remaining = self.OBSTACLE_DIRECTION_HOLD_STEPS - 1
+                moved = moved or (candidate_flat != current_flat)
+                planned_path_keys.update(candidate_path_keys)
+                break
+
+            planned_x[idx] = chosen_x
+            planned_y[idx] = chosen_y
+            next_direction_indices[idx] = chosen_direction_idx
+            next_steps_remaining[idx] = chosen_steps_remaining
+            next_speeds[idx] = chosen_speed
+            next_speed_steps_remaining[idx] = chosen_speed_steps_remaining
+
+        for obstacle, new_x, new_y in zip(self.obstacles, planned_x, planned_y):
+            obstacle.x = int(new_x)
+            obstacle.y = int(new_y)
 
         self.obstacle_move_direction_indices = next_direction_indices
         self.obstacle_move_steps_remaining = next_steps_remaining

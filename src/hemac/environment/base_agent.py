@@ -82,10 +82,10 @@ class BaseAgent(pygame.sprite.Sprite):
             return channel
 
         positions_array = np.asarray(positions, dtype=np.float32).reshape(-1, 2)
-        clipped_x = np.clip(positions_array[:, 0], 0.0, max(world.area.width - 1, 0))
-        clipped_y = np.clip(positions_array[:, 1], 0.0, max(world.area.height - 1, 0))
-        grid_x = np.minimum((clipped_x / world.coverage_cell_width).astype(np.int32), world.coverage_grid_size - 1)
-        grid_y = np.minimum((clipped_y / world.coverage_cell_height).astype(np.int32), world.coverage_grid_size - 1)
+        pixel_x = np.clip(positions_array[:, 0].astype(np.int32), 0, max(world.area.width - 1, 0))
+        pixel_y = np.clip(positions_array[:, 1].astype(np.int32), 0, max(world.area.height - 1, 0))
+        grid_x = world.pixel_to_grid_x[pixel_x]
+        grid_y = world.pixel_to_grid_y[pixel_y]
         channel[grid_y, grid_x] = 1.0
         return channel
 
@@ -100,10 +100,10 @@ class BaseAgent(pygame.sprite.Sprite):
             return channel
 
         positions_array = np.asarray(positions, dtype=np.float32).reshape(-1, 2)
-        clipped_x = np.clip(positions_array[:, 0], 0.0, max(world.area.width - 1, 0))
-        clipped_y = np.clip(positions_array[:, 1], 0.0, max(world.area.height - 1, 0))
-        grid_x = np.minimum((clipped_x / world.coverage_cell_width).astype(np.int32), world.coverage_grid_size - 1)
-        grid_y = np.minimum((clipped_y / world.coverage_cell_height).astype(np.int32), world.coverage_grid_size - 1)
+        pixel_x = np.clip(positions_array[:, 0].astype(np.int32), 0, max(world.area.width - 1, 0))
+        pixel_y = np.clip(positions_array[:, 1].astype(np.int32), 0, max(world.area.height - 1, 0))
+        grid_x = world.pixel_to_grid_x[pixel_x]
+        grid_y = world.pixel_to_grid_y[pixel_y]
         channel[grid_y + pad, grid_x + pad] = 1.0
         return channel
 
@@ -125,8 +125,14 @@ class BaseAgent(pygame.sprite.Sprite):
         upsample: int = 1,
     ) -> np.ndarray:
         """Stack centered channel crops into one HWC observation tensor."""
+        self_grid_x, self_grid_y = self._position_to_grid(self.x, self.y, world)
+        half = window_size // 2
+        start_y = self_grid_y + world.relative_pad - half
+        start_x = self_grid_x + world.relative_pad - half
+        end_y = start_y + window_size
+        end_x = start_x + window_size
         cropped_channels = [
-            self.crop_padded_channel(world, channel, window_size)
+            channel[start_y:end_y, start_x:end_x]
             for channel in padded_channels
         ]
         stacked = np.stack(cropped_channels, axis=-1).astype(np.float32, copy=False)

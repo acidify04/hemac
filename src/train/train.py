@@ -1,7 +1,7 @@
 """
 새 학습: python src/train/train.py --num-iterations 1000
-최신 체크포인트 재개: python src/train/train.py --resume-from latest --num-iterations 500
-특정 체크포인트 재개: python src/train/train.py --load-checkpoint src/train/hemac_checkpoints/checkpoint_06800
+최신 체크포인트 재개: python src/train/train.py --resume-from latest
+특정 체크포인트 재개: python src/train/train.py --load-checkpoint src/train/hemac_checkpoints/checkpoint_07300
 """
 import argparse
 import logging
