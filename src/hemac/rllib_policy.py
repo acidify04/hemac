@@ -274,6 +274,14 @@ class ClampedGaussianTorchModel(TorchModelV2, _SpatialObsEncoder):
             "max": float(log_std.max().cpu().item()),
         }
 
+    def reset_log_std(self, value: float | None = None) -> dict[str, float]:
+        """Reset Gaussian exploration scale without changing policy weights."""
+        reset_value = DRONE_LOG_STD_INIT if value is None else float(value)
+        reset_value = float(np.clip(reset_value, self.log_std_min, self.log_std_max))
+        with torch.no_grad():
+            self.log_std.fill_(reset_value)
+        return self.get_log_std_stats()
+
 
 class SpatialCategoricalTorchModel(TorchModelV2, _SpatialObsEncoder):
     """Discrete-action policy/value model for spatial observations."""

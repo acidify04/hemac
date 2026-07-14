@@ -47,11 +47,11 @@ GOAL_CONFIG = {
 }
 
 OBSERVER_CHECKPOINT_CANDIDATES = [
-    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_06800",
+    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_15300",
 ]
 DRONE_CHECKPOINT_CANDIDATES = [
-    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_06800",
-    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_06800",
+    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_15300",
+    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_15300",
 ]
 
 NUM_EVAL_SEEDS = 10

@@ -18,6 +18,7 @@ from ray.tune.registry import register_env
 from ray.rllib.env.wrappers.pettingzoo_env import PettingZooEnv
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
+from ray.rllib.utils.schedules import PiecewiseSchedule
 import wandb
 from PIL import Image
 
@@ -28,6 +29,7 @@ if str(PROJECT_SRC) not in sys.path:
 from hemac import HeMAC_v0
 from hemac.helpers.logger import LOGGER
 from hemac.rllib_policy import (
+    DRONE_LOG_STD_INIT,
     drone_policy_model_config,
     observer_policy_model_config,
     get_policy_log_std_stats,
@@ -58,6 +60,12 @@ VIDEO_FPS = 12
 VIDEO_SEED = 0
 VIDEO_OUTPUT_DIR = Path("./wandb_media")
 PPO_ENTROPY_COEFF = 0.01
+PPO_INITIAL_LR = 3e-4
+PPO_MID_LR = 1e-4
+PPO_FINAL_LR = 1e-5
+PPO_TRAIN_BATCH_SIZE = 8000
+PPO_LR_MID_OFFSET = 500 * PPO_TRAIN_BATCH_SIZE
+PPO_LR_FINAL_OFFSET = 10000 * PPO_TRAIN_BATCH_SIZE
 NUM_ENV_RUNNERS = 10
 ROLLOUT_FRAGMENT_LENGTH = 100
 SAMPLE_TIMEOUT_S = 180.0
@@ -333,6 +341,118 @@ def get_env_runner_group(algo):
         except TypeError:
             return None
     return workers_attr
+
+
+def build_curriculum_lr_schedule(start_timestep):
+    """Build an LR schedule whose decay restarts at a curriculum promotion."""
+    start_timestep = max(int(start_timestep), 0)
+    schedule = [[0, PPO_INITIAL_LR]]
+    if start_timestep > 0:
+        schedule.append([start_timestep, PPO_INITIAL_LR])
+    schedule.extend(
+        [
+            [start_timestep + PPO_LR_MID_OFFSET, PPO_MID_LR],
+            [start_timestep + PPO_LR_FINAL_OFFSET, PPO_FINAL_LR],
+        ]
+    )
+    return schedule
+
+
+def reset_policy_training_parameters(policy, start_timestep):
+    """Restart one policy's optimization schedule and exploration scale."""
+    lr_schedule = build_curriculum_lr_schedule(start_timestep)
+    policy._lr_schedule = PiecewiseSchedule(
+        lr_schedule,
+        outside_value=lr_schedule[-1][-1],
+        framework=None,
+    )
+    policy.cur_lr = float(PPO_INITIAL_LR)
+
+    # Entropy is currently constant, but assigning it explicitly makes the
+    # reset robust if a resumed checkpoint contains an older decay schedule.
+    policy._entropy_coeff_schedule = None
+    policy.entropy_coeff = float(PPO_ENTROPY_COEFF)
+
+    model = getattr(policy, "model", None)
+    log_std_parameter = getattr(model, "log_std", None)
+    log_std_stats = None
+    if model is not None and hasattr(model, "reset_log_std"):
+        log_std_stats = model.reset_log_std(DRONE_LOG_STD_INIT)
+
+    for optimizer in getattr(policy, "_optimizers", []):
+        for parameter_group in optimizer.param_groups:
+            parameter_group["lr"] = float(PPO_INITIAL_LR)
+        if log_std_parameter is not None:
+            # Adam momentum from the previous stage can immediately undo the
+            # reset, so clear only the state associated with log_std.
+            optimizer.state.pop(log_std_parameter, None)
+
+    policy_config = getattr(policy, "config", None)
+    if isinstance(policy_config, dict):
+        policy_config["lr"] = float(PPO_INITIAL_LR)
+        policy_config["lr_schedule"] = lr_schedule
+        policy_config["entropy_coeff"] = float(PPO_ENTROPY_COEFF)
+        policy_config["entropy_coeff_schedule"] = None
+
+    return {
+        "learning_rate": float(PPO_INITIAL_LR),
+        "entropy_coeff": float(PPO_ENTROPY_COEFF),
+        "log_std": log_std_stats,
+    }
+
+
+def reset_curriculum_training_parameters(algo):
+    """Reset trainable policy hyperparameters after a difficulty promotion."""
+    policies = {}
+    for policy_id in ("observer_policy", "drone_policy"):
+        try:
+            policy = algo.get_policy(policy_id)
+        except Exception:
+            policy = None
+        if policy is not None:
+            policies[policy_id] = policy
+
+    if not policies:
+        return {}
+
+    start_timestep = max(
+        int(getattr(policy, "global_timestep", 0))
+        for policy in policies.values()
+    )
+    reset_stats = {
+        policy_id: reset_policy_training_parameters(policy, start_timestep)
+        for policy_id, policy in policies.items()
+    }
+
+    lr_schedule = build_curriculum_lr_schedule(start_timestep)
+    algo_config = getattr(algo, "config", None)
+    if isinstance(algo_config, dict):
+        algo_config["lr"] = float(PPO_INITIAL_LR)
+        algo_config["lr_schedule"] = lr_schedule
+        algo_config["entropy_coeff"] = float(PPO_ENTROPY_COEFF)
+        algo_config["entropy_coeff_schedule"] = None
+    elif algo_config is not None:
+        # RLlib freezes the live AlgorithmConfig. Replace it with an updated
+        # frozen copy so the restarted schedule is persisted in checkpoints.
+        updated_config = algo_config.copy(copy_frozen=False)
+        updated_config.lr = float(PPO_INITIAL_LR)
+        updated_config.lr_schedule = lr_schedule
+        updated_config.entropy_coeff = float(PPO_ENTROPY_COEFF)
+        updated_config.entropy_coeff_schedule = None
+        updated_config.freeze()
+        algo.config = updated_config
+
+    env_runner_group = get_env_runner_group(algo)
+    if env_runner_group is not None and hasattr(env_runner_group, "sync_weights"):
+        env_runner_group.sync_weights(
+            policies=list(policies),
+            timeout_seconds=max(float(SAMPLE_TIMEOUT_S), 30.0),
+        )
+
+    return {
+        "start_timestep": start_timestep,
+        "policies": reset_stats,
+    }
 
 
 def apply_curriculum_to_algo(algo, coverage_ratio):
@@ -666,7 +786,7 @@ def parse_args():
         "--load-checkpoint",
         dest="resume_from",
         default=None,
-        help="Checkpoint directory to restore before continuing training. Use 'latest' to load the newest checkpoint under --checkpoint-dir.",
+        help="Checkpoint directory to restore before continuing training. Use 'latest' to recursively load the newest checkpoint under --checkpoint-dir.",
     )
     parser.add_argument(
         "--restore-observer-from",
@@ -729,6 +849,12 @@ def parse_args():
     return parser.parse_args()
 
 
+def is_algorithm_checkpoint_dir(path):
+    """Return True when the path looks like a top-level RLlib algorithm checkpoint."""
+    checkpoint_dir = Path(path)
+    return checkpoint_dir.is_dir() and (checkpoint_dir / "algorithm_state.pkl").is_file()
+
+
 def resolve_checkpoint_path(checkpoint_path, checkpoint_dir):
     """Resolve a checkpoint path or the newest checkpoint under the checkpoint dir."""
     if checkpoint_path is None:
@@ -739,24 +865,31 @@ def resolve_checkpoint_path(checkpoint_path, checkpoint_dir):
     else:
         candidate_root = Path(checkpoint_path)
 
-    if candidate_root.is_dir() and candidate_root.name.startswith("checkpoint_"):
+    if is_algorithm_checkpoint_dir(candidate_root):
         return candidate_root.resolve()
 
     if not candidate_root.exists():
         raise FileNotFoundError(f"Checkpoint path does not exist: {candidate_root}")
 
-    checkpoints = sorted(
+    if candidate_root.is_file():
+        if candidate_root.name == "algorithm_state.pkl" and is_algorithm_checkpoint_dir(candidate_root.parent):
+            return candidate_root.parent.resolve()
+        raise FileNotFoundError(
+            f"Checkpoint file is not a valid RLlib algorithm checkpoint marker: {candidate_root}"
+        )
+
+    checkpoint_markers = sorted(
         (
-            path for path in candidate_root.iterdir()
-            if path.is_dir() and path.name.startswith("checkpoint_")
+            path for path in candidate_root.rglob("algorithm_state.pkl")
+            if is_algorithm_checkpoint_dir(path.parent)
         ),
         key=lambda path: path.stat().st_mtime,
     )
-    if not checkpoints:
+    if not checkpoint_markers:
         raise FileNotFoundError(
-            f"No checkpoint_* directory found under: {candidate_root}"
+            f"No RLlib algorithm checkpoint found under: {candidate_root}"
         )
-    return checkpoints[-1].resolve()
+    return checkpoint_markers[-1].parent.resolve()
 
 
 def _find_coverage_stage_index(levels, coverage_ratio):
@@ -920,14 +1053,11 @@ def main():
             )
             .resources(num_gpus=args.num_gpus)
             .training(
-                train_batch_size=8000,
+                train_batch_size=PPO_TRAIN_BATCH_SIZE,
                 minibatch_size=512,
                 num_epochs=5,
-                lr_schedule=[
-                    [0, 3e-4],           # [수정] 초기 학습률 증가 (기존 5e-5)
-                    [500 * 8000, 1e-4],  # [수정] 중간 학습률 조정
-                    [10000 * 8000, 1e-5]
-                ],
+                lr=PPO_INITIAL_LR,
+                lr_schedule=build_curriculum_lr_schedule(0),
                 gamma=0.995,
                 grad_clip=1.0,
                 clip_param=0.2,
@@ -1008,6 +1138,7 @@ def main():
         obstacle_curriculum_updated_envs = 0
         coverage_curriculum_promoted = False
         coverage_curriculum_updated_envs = 0
+        curriculum_parameter_reset = {}
         eval_success_rate = None
         
         print(f"\n--- Iteration {iteration} ---")
@@ -1100,11 +1231,11 @@ def main():
 
         if iteration % EVAL_LOG_INTERVAL == 0:
             try:
-                current_eval_seeds = np.random.randint(0, 100000, size=10).tolist()
+                current_eval_seeds = np.random.randint(0, 100000, size=20).tolist()
                 
                 eval_success_rate = collect_eval_success_rate(
                     algo,
-                    num_episodes=10,
+                    num_episodes=20,
                     seeds=current_eval_seeds,
                     explore=False,
                 )
@@ -1112,7 +1243,7 @@ def main():
 
                 eval_success_rate_stochastic = collect_eval_success_rate(
                     algo,
-                    num_episodes=10,
+                    num_episodes=20,
                     seeds=current_eval_seeds,
                     explore=True,
                 )
@@ -1127,7 +1258,7 @@ def main():
                 
                 eval_drone_crash_rate = collect_eval_drone_crash_rate(
                     algo,
-                    num_episodes=10,
+                    num_episodes=20,
                     seeds=current_eval_seeds,
                     explore=False,
                 )
@@ -1135,7 +1266,7 @@ def main():
 
                 eval_drone_crash_rate_stochastic = collect_eval_drone_crash_rate(
                     algo,
-                    num_episodes=10,
+                    num_episodes=20,
                     seeds=current_eval_seeds,
                     explore=True,
                 )
@@ -1177,6 +1308,22 @@ def main():
                         f"updated_envs={coverage_curriculum_updated_envs})"
                     )
 
+        if obstacle_curriculum_promoted or coverage_curriculum_promoted:
+            curriculum_parameter_reset = reset_curriculum_training_parameters(algo)
+            reset_policy_stats = curriculum_parameter_reset.get("policies", {})
+            reset_summary = ", ".join(
+                f"{policy_id}: lr={stats['learning_rate']:.1e}, "
+                f"entropy={stats['entropy_coeff']:.3g}, "
+                f"log_std={stats['log_std']['mean']:.2f}"
+                for policy_id, stats in reset_policy_stats.items()
+                if stats.get("log_std") is not None
+            )
+            print(
+                "[curriculum] optimizer/exploration parameters reset at timestep "
+                f"{curriculum_parameter_reset.get('start_timestep', 0)}"
+                + (f" ({reset_summary})" if reset_summary else "")
+            )
+
         log_payload["curriculum/stage_number"] = (
             coverage_curriculum.stage_number if coverage_curriculum is not None else 0.0
         )
@@ -1193,6 +1340,16 @@ def main():
         log_payload["curriculum/updated_envs"] = float(coverage_curriculum_updated_envs)
         log_payload["obstacle_curriculum/just_promoted"] = 1.0 if obstacle_curriculum_promoted else 0.0
         log_payload["obstacle_curriculum/updated_envs"] = float(obstacle_curriculum_updated_envs)
+        log_payload["curriculum/parameters_reset"] = 1.0 if curriculum_parameter_reset else 0.0
+        if curriculum_parameter_reset:
+            log_payload["model/learning_rate_after_curriculum_reset"] = PPO_INITIAL_LR
+            log_payload["model/entropy_coeff_after_curriculum_reset"] = PPO_ENTROPY_COEFF
+            for policy_id, stats in curriculum_parameter_reset.get("policies", {}).items():
+                log_std_stats = stats.get("log_std")
+                if log_std_stats is not None:
+                    log_payload[f"model/{policy_id}_log_std_after_curriculum_reset"] = (
+                        log_std_stats["mean"]
+                    )
 
         wandb.log(log_payload)
         

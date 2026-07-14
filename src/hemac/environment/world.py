@@ -28,7 +28,7 @@ class World(pygame.sprite.Sprite):
     OBSTACLE_MAX_SPEED = 7
     OBSTACLE_WARNING_FILL = (255, 80, 80, 55)
     OBSTACLE_WARNING_OUTLINE = (255, 120, 120, 150)
-    OBSERVED_OBSTACLE_DECAY = 0.98
+    OBSERVED_OBSTACLE_DECAY = 0.9
 
     def __init__(
         self,
