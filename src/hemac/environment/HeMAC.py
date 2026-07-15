@@ -246,7 +246,7 @@ class HeMAC:
             poi_spawn_range = {"x_range": (minx, maxx), "y_range": (miny, maxy)}
             first_poi_config = next((cfg for cfg in (poi_config or []) if cfg), None)
             spawn_quadrant = first_poi_config.get("spawn_quadrant") if first_poi_config else None
-            if spawn_quadrant == "bottom_right":
+            if "bottom_right" in spawn_quadrant:
                 midx = (minx + maxx) / 2.0
                 midy = (miny + maxy) / 2.0
                 # World Y grows upward while the rendered map grows downward, so

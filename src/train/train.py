@@ -47,7 +47,7 @@ GOAL_CONFIG = {
     "speed": 0,
     "spawn_mode": "random",
     "boundary_margin": 140,
-    "spawn_quadrant": "bottom_right",
+    "spawn_quadrant": ["bottom_right", "bottom_left", "top_right"],
 }
 
 TRAIN_DIR = Path(__file__).resolve().parent
@@ -81,18 +81,6 @@ DEFAULT_NUM_ITERATIONS = 10_000_000_000
 DEFAULT_CHECKPOINT_INTERVAL = 100
 DEFAULT_NUM_GPUS = 1
 OBSTACLE_CURRICULUM_LEVELS = [
-    {
-        "min_obstacles": 1,
-        "max_obstacles": 2,
-        "obstacle_min_speed": 1,
-        "obstacle_max_speed": 1,
-    },
-    {
-        "min_obstacles": 2,
-        "max_obstacles": 3,
-        "obstacle_min_speed": 1,
-        "obstacle_max_speed": 2,
-    },
     {
         "min_obstacles": 3,
         "max_obstacles": 4,
@@ -452,7 +440,7 @@ def reset_policy_training_parameters(policy, start_timestep):
     log_std_stats = None
     if model is not None and hasattr(model, "reset_log_std"):
         log_std_stats = model.reset_log_std(DRONE_LOG_STD_INIT)
-        reset_log_std_growth_limiter_reference(policy)
+        # reset_log_std_growth_limiter_reference(policy)
 
     for optimizer in getattr(policy, "_optimizers", []):
         for parameter_group in optimizer.param_groups:
@@ -588,7 +576,7 @@ def build_env_config(render_mode=None):
         "n_drones": TRAIN_NUM_DRONES,
         "n_provisioners": 0,
         "known_goals": False,
-        "max_cycles": 400,
+        "max_cycles": 300,
         "drone_config": {
             "drone_max_speed": 25,
             "drone_max_thrust": 8,

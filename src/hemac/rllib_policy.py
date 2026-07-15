@@ -18,7 +18,9 @@ OBSERVER_CUSTOM_MODEL_NAME = "hemac_discrete_spatial_torch"
 DRONE_LOG_STD_INIT = -1.8
 DRONE_LOG_STD_MIN = -2.5
 DRONE_LOG_STD_MAX = -0.35
-DRONE_MODEL_HIDDEN_SIZES = [256, 256]
+DRONE_MODEL_HIDDEN_SIZES = [128, 128]
+GLOBAL_MAP_ENCODER_CHANNELS = (8, 16, 16, 32)
+LOCAL_MAP_ENCODER_CHANNELS = (16, 32, 32, 64)
 
 _MODEL_REGISTERED = False
 
@@ -100,8 +102,16 @@ class _SpatialObsEncoder(nn.Module):
             self.vector_dim = int(np.prod(vector_space.shape))
             self.global_map_channels = int(global_map_space.shape[-1])
             self.local_map_channels = int(local_map_space.shape[-1])
-            self.global_map_encoder = self._build_map_encoder(self.global_map_channels, activation_name)
-            self.local_map_encoder = self._build_map_encoder(self.local_map_channels, activation_name)
+            self.global_map_encoder = self._build_map_encoder(
+                self.global_map_channels,
+                activation_name,
+                GLOBAL_MAP_ENCODER_CHANNELS,
+            )
+            self.local_map_encoder = self._build_map_encoder(
+                self.local_map_channels,
+                activation_name,
+                LOCAL_MAP_ENCODER_CHANNELS,
+            )
             with torch.no_grad():
                 dummy_global_map = torch.zeros(
                     1,
@@ -128,7 +138,11 @@ class _SpatialObsEncoder(nn.Module):
             relative_map_space = source_space.spaces["relative_map"]
             self.vector_dim = int(np.prod(vector_space.shape))
             self.map_channels = int(relative_map_space.shape[-1])
-            self.map_encoder = self._build_map_encoder(self.map_channels, activation_name)
+            self.map_encoder = self._build_map_encoder(
+                self.map_channels,
+                activation_name,
+                GLOBAL_MAP_ENCODER_CHANNELS,
+            )
             with torch.no_grad():
                 dummy_map = torch.zeros(
                     1,
@@ -163,17 +177,18 @@ class _SpatialObsEncoder(nn.Module):
         self.output_dim = last_size
 
     @staticmethod
-    def _build_map_encoder(map_channels, activation_name):
+    def _build_map_encoder(map_channels, activation_name, encoder_channels):
         """Build a compact CNN encoder for one spatial map."""
+        conv1_channels, conv2_channels, conv3_channels, conv4_channels = encoder_channels
         return nn.Sequential(
-            nn.Conv2d(map_channels, 16, kernel_size=5, stride=2, padding=2),
+            nn.Conv2d(map_channels, conv1_channels, kernel_size=5, stride=2, padding=2),
             _activation_module(activation_name),
-            nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(conv1_channels, conv2_channels, kernel_size=3, stride=2, padding=1),
             _activation_module(activation_name),
-            nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(conv2_channels, conv3_channels, kernel_size=3, stride=1, padding=1),
             _activation_module(activation_name),
             nn.MaxPool2d(2),
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(conv3_channels, conv4_channels, kernel_size=3, stride=2, padding=1),
             _activation_module(activation_name),
             nn.Flatten(),
         )
