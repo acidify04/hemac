@@ -66,6 +66,7 @@ PPO_FINAL_LR = 1e-5
 PPO_TRAIN_BATCH_SIZE = 8000
 PPO_LR_MID_OFFSET = 500 * PPO_TRAIN_BATCH_SIZE
 PPO_LR_FINAL_OFFSET = 10000 * PPO_TRAIN_BATCH_SIZE
+LOG_STD_MAX_INCREASE_PER_OPTIMIZER_STEP = 1e-5
 NUM_ENV_RUNNERS = 10
 ROLLOUT_FRAGMENT_LENGTH = 100
 SAMPLE_TIMEOUT_S = 180.0
@@ -358,6 +359,79 @@ def build_curriculum_lr_schedule(start_timestep):
     return schedule
 
 
+def reset_log_std_growth_limiter_reference(policy):
+    """Align a policy's limiter reference with its current log_std value."""
+    limiter_state = getattr(policy, "_hemac_log_std_limiter_state", None)
+    model = getattr(policy, "model", None)
+    log_std_parameter = getattr(model, "log_std", None)
+    if limiter_state is None or log_std_parameter is None:
+        return False
+
+    limiter_state["previous"].copy_(log_std_parameter.detach())
+    return True
+
+
+def install_log_std_growth_limiter(
+    policy,
+    max_increase=LOG_STD_MAX_INCREASE_PER_OPTIMIZER_STEP,
+):
+    """Limit upward log_std movement after every optimizer update."""
+    model = getattr(policy, "model", None)
+    log_std_parameter = getattr(model, "log_std", None)
+    if log_std_parameter is None:
+        return False
+
+    existing_state = getattr(policy, "_hemac_log_std_limiter_state", None)
+    if existing_state is not None:
+        existing_state["max_increase"] = float(max_increase)
+        reset_log_std_growth_limiter_reference(policy)
+        return True
+
+    log_std_parameter.data.clamp_(min=model.log_std_min, max=model.log_std_max)
+
+    limiter_state = {
+        "previous": log_std_parameter.detach().clone(),
+        "max_increase": max(float(max_increase), 0.0),
+    }
+    hook_handles = []
+
+    def limit_log_std_growth(optimizer, args, kwargs):
+        del optimizer, args, kwargs
+        current = log_std_parameter.data
+        max_allowed = limiter_state["previous"] + limiter_state["max_increase"]
+        current.copy_(current.minimum(max_allowed))
+        current.clamp_(min=model.log_std_min, max=model.log_std_max)
+        limiter_state["previous"].copy_(current)
+
+    for optimizer in getattr(policy, "_optimizers", []):
+        contains_log_std = any(
+            any(parameter is log_std_parameter for parameter in group["params"])
+            for group in optimizer.param_groups
+        )
+        if contains_log_std:
+            hook_handles.append(optimizer.register_step_post_hook(limit_log_std_growth))
+
+    if not hook_handles:
+        return False
+
+    policy._hemac_log_std_limiter_state = limiter_state
+    policy._hemac_log_std_limiter_handles = hook_handles
+    return True
+
+
+def install_algorithm_log_std_growth_limiters(algo):
+    """Install log_std growth limiters on all continuous trainable policies."""
+    installed_policy_ids = []
+    for policy_id in ("observer_policy", "drone_policy"):
+        try:
+            policy = algo.get_policy(policy_id)
+        except Exception:
+            policy = None
+        if policy is not None and install_log_std_growth_limiter(policy):
+            installed_policy_ids.append(policy_id)
+    return installed_policy_ids
+
+
 def reset_policy_training_parameters(policy, start_timestep):
     """Restart one policy's optimization schedule and exploration scale."""
     lr_schedule = build_curriculum_lr_schedule(start_timestep)
@@ -378,6 +452,7 @@ def reset_policy_training_parameters(policy, start_timestep):
     log_std_stats = None
     if model is not None and hasattr(model, "reset_log_std"):
         log_std_stats = model.reset_log_std(DRONE_LOG_STD_INIT)
+        reset_log_std_growth_limiter_reference(policy)
 
     for optimizer in getattr(policy, "_optimizers", []):
         for parameter_group in optimizer.param_groups:
@@ -1111,6 +1186,13 @@ def main():
     else:
         print("[curriculum] disabled because this run includes an observer.")
 
+    log_std_limited_policies = install_algorithm_log_std_growth_limiters(algo)
+    print(
+        "[model] log_std growth limit installed "
+        f"(max increase/optimizer step={LOG_STD_MAX_INCREASE_PER_OPTIMIZER_STEP:.1e}, "
+        f"policies={log_std_limited_policies})"
+    )
+
     wandb.init(
         project=args.wandb_project,
         name=args.wandb_run_name,
@@ -1121,6 +1203,9 @@ def main():
                 str(args.restore_observer_from)
                 if args.restore_observer_from is not None
                 else None
+            ),
+            "log_std_max_increase_per_optimizer_step": (
+                LOG_STD_MAX_INCREASE_PER_OPTIMIZER_STEP
             ),
         },
     )
@@ -1168,6 +1253,9 @@ def main():
             # "model/drone_log_std_min": drone_log_std_stats.get("min", 0.0),
             # "model/drone_log_std_max": drone_log_std_stats.get("max", 0.0),
             "model/entropy_coeff": PPO_ENTROPY_COEFF,
+            "model/log_std_max_increase_per_optimizer_step": (
+                LOG_STD_MAX_INCREASE_PER_OPTIMIZER_STEP
+            ),
             "metrics/rollout_success_rate": rollout_success_rate,
             "metrics/goal_found_rate": custom_metrics.get("goal_found_rate_mean", 0),
             "metrics/crash_rate": custom_metrics.get("crash_rate_mean", 0),
