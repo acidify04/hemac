@@ -38,7 +38,6 @@ import gymnasium.spaces
 import numpy as np
 import pygame
 import math
-import random
 from gymnasium.utils import EzPickle, seeding
 from pettingzoo import AECEnv
 from pettingzoo.utils import wrappers
@@ -244,14 +243,6 @@ class HeMAC:
         if poi_spawn_range is None:
             minx, miny, maxx, maxy = self.search_area.bounds
             poi_spawn_range = {"x_range": (minx, maxx), "y_range": (miny, maxy)}
-            first_poi_config = next((cfg for cfg in (poi_config or []) if cfg), None)
-            spawn_quadrant = first_poi_config.get("spawn_quadrant") if first_poi_config else None
-            if "bottom_right" in spawn_quadrant:
-                midx = (minx + maxx) / 2.0
-                midy = (miny + maxy) / 2.0
-                # World Y grows upward while the rendered map grows downward, so
-                # the screen's lower half maps to the lower world-Y range.
-                poi_spawn_range = {"x_range": (midx, maxx), "y_range": (miny, midy)}
         self.poi_spawn_range = poi_spawn_range
         for i in range(self.number_of_POIs):
             _poi_config = poi_config[i] if poi_config and poi_config[i] else None
@@ -275,6 +266,16 @@ class HeMAC:
             obstacle_max_speed=obstacle_max_speed,
         )
         self.search_grid_rects = self._build_search_grid_cache()
+        self.drone_reward_sector_mask = np.ones(
+            (self.world.coverage_grid_size, self.world.coverage_grid_size),
+            dtype=bool,
+        )
+        active_rows = np.flatnonzero(np.any(self.world.search_mask > 0.0, axis=1))
+        active_columns = np.flatnonzero(np.any(self.world.search_mask > 0.0, axis=0))
+        # Coverage y increases upward, so the final active rows are visually at the top.
+        top_rows = active_rows[-4:]
+        left_columns = active_columns[:4]
+        self.drone_reward_sector_mask[np.ix_(top_rows, left_columns)] = False
 
         # init observers
         for i in range(self.n_observers):
@@ -534,6 +535,20 @@ class HeMAC:
             pygame.quit()
             self.screen = None
 
+    def set_randomizer(self, randomizer):
+        """Propagate a reset seed to every component that samples randomness."""
+        self.randomizer = randomizer
+        self.world.randomizer = randomizer
+        for goal in self.goals:
+            goal.randomizer = randomizer
+        for agent in self.agents_list:
+            if hasattr(agent, "randomizer"):
+                agent.randomizer = randomizer
+            if hasattr(agent, "IMU"):
+                agent.IMU.randomizer = randomizer
+            if hasattr(agent, "UWB"):
+                agent.UWB.randomizer = randomizer
+
     def render(self):
         """Render the environment."""
         if self.render_mode is None:
@@ -569,8 +584,17 @@ class HeMAC:
         """Keep the shared goal position aligned with the current goal state."""
         self.world.goal_position = (self.goals[0].x, self.goals[0].y) if self.goals else None
 
-    def _update_detected_cache(self, agent):
+    def _update_detected_cache(self, agent, counted_sector_mask=None):
         """Merge newly detected coordinates into the shared coverage cache."""
+        detection_center = getattr(agent, "latest_detection_center", None)
+        if detection_center is not None:
+            return self.world.register_detected_disk(
+                detection_center[0],
+                detection_center[1],
+                getattr(agent, "latest_detection_radius", 0),
+                counted_sector_mask=counted_sector_mask,
+            )
+
         latest_points = getattr(agent, "latest_detected", agent.detected)
         if isinstance(latest_points, np.ndarray):
             new_points = self.world.register_detected_points(
@@ -578,16 +602,28 @@ class HeMAC:
                 return_new_points=True,
                 assume_unique=True,
             )
-            if len(new_points) == 0:
-                return new_points
-            return new_points
+            return self._count_points_in_sectors(new_points, counted_sector_mask)
 
         new_points = latest_points.difference(self.world.detected)
         if not new_points:
-            return set()
+            return 0
 
         self.world.register_detected_points(new_points)
-        return new_points
+        return self._count_points_in_sectors(new_points, counted_sector_mask)
+
+    def _count_points_in_sectors(self, points, sector_mask):
+        """Count points whose coverage-grid sectors are enabled by a boolean mask."""
+        if sector_mask is None:
+            return len(points)
+        points_array = np.asarray(list(points) if not isinstance(points, np.ndarray) else points, dtype=np.int32)
+        if points_array.size == 0:
+            return 0
+        points_array = points_array.reshape(-1, 2)
+        pixel_x = np.clip(points_array[:, 0], 0, self.world.area.width - 1)
+        pixel_y = np.clip(points_array[:, 1], 0, self.world.area.height - 1)
+        grid_x = self.world.pixel_to_grid_x[pixel_x]
+        grid_y = self.world.pixel_to_grid_y[pixel_y]
+        return int(np.count_nonzero(sector_mask[grid_y, grid_x]))
     
     def _build_search_grid_cache(self):
         """Build renderable cells aligned to the shared coverage grid."""
@@ -669,6 +705,24 @@ class HeMAC:
         explored_area = self.current_explored_area()
         return min(explored_area / total_search_area, 1.0)
 
+    def current_drone_reward_explored_area(self):
+        """Return explored area eligible for drone rewards, excluding the base sectors."""
+        search_cell_coverage = np.minimum(self.world.coverage_map, self.world.search_mask)
+        return float(
+            np.sum(search_cell_coverage, where=self.drone_reward_sector_mask)
+            * self.world.coverage_cell_area
+        )
+
+    def current_drone_reward_coverage_ratio(self):
+        """Return drone-reward coverage over only eligible search sectors."""
+        eligible_search_area = float(
+            np.sum(self.world.search_mask, where=self.drone_reward_sector_mask)
+            * self.world.coverage_cell_area
+        )
+        if eligible_search_area <= 0.0:
+            return 0.0
+        return min(self.current_drone_reward_explored_area() / eligible_search_area, 1.0)
+
     def is_drone_only_mode(self):
         """Return True when the mission is trained with drones only."""
         return self.n_observers == 0 and self.n_drones > 0
@@ -696,7 +750,7 @@ class HeMAC:
         if self.terminate or self.mission_success or not self.found_goal:
             return False
 
-        if self.current_coverage_ratio() < self.drone_only_success_min_coverage_ratio:
+        if self.current_drone_reward_coverage_ratio() < self.drone_only_success_min_coverage_ratio:
             return False
 
         return self._mark_mission_success(
@@ -738,6 +792,8 @@ class HeMAC:
         """Build a final-episode info dict for metrics and evaluation."""
         coverage_ratio = self.current_coverage_ratio()
         total_explored = self.current_explored_area()
+        drone_reward_coverage_ratio = self.current_drone_reward_coverage_ratio()
+        drone_reward_explored_area = self.current_drone_reward_explored_area()
         self.max_coverage_ratio = max(self.max_coverage_ratio, coverage_ratio)
 
         # goal_found_step = self.goal_found_step if self.goal_found_step is not None else self.max_cycles
@@ -764,6 +820,8 @@ class HeMAC:
             "explored_area": total_explored,
             "total_explored": total_explored,
             "coverage_ratio": float(coverage_ratio),
+            "drone_reward_coverage_ratio": float(drone_reward_coverage_ratio),
+            "drone_reward_explored_area": float(drone_reward_explored_area),
             "max_coverage_ratio": float(self.max_coverage_ratio),
             # "goal_found_step": float(goal_found_step),
             "success_step": float(success_step),
@@ -793,6 +851,92 @@ class HeMAC:
             return 0.25 * self.global_reward
         return 0.0
 
+    @staticmethod
+    def _points_near_segment(points, start, end, radius):
+        """Return a mask for points within radius of a movement segment."""
+        points = np.asarray(points, dtype=np.float32).reshape(-1, 2)
+        if points.size == 0:
+            return np.zeros((0,), dtype=bool)
+
+        start = np.asarray(start, dtype=np.float32)
+        end = np.asarray(end, dtype=np.float32)
+        segment = end - start
+        segment_length_sq = float(np.dot(segment, segment))
+        if segment_length_sq <= 1e-12:
+            closest = np.broadcast_to(start, points.shape)
+        else:
+            relative = points - start
+            projection = np.clip((relative @ segment) / segment_length_sq, 0.0, 1.0)
+            closest = start + projection[:, None] * segment
+
+        offsets = points - closest
+        distance_sq = np.einsum("ij,ij->i", offsets, offsets)
+        return distance_sq <= float(radius) ** 2
+
+    def _agent_path_intersects_warning_zone(self, start, end):
+        """Return True when an agent movement segment crosses a warning zone."""
+        centers = self.world.obstacle_warning_centers_world
+        if centers.size == 0:
+            return False
+        return bool(
+            np.any(
+                self._points_near_segment(
+                    centers,
+                    start,
+                    end,
+                    self.world.OBSTACLE_WARNING_RADIUS,
+                )
+            )
+        )
+
+    def _mark_agent_crash(self, agent):
+        """Set the shared and role-specific crash state for one agent."""
+        self.collided = True
+        self.terminate = True
+        if isinstance(agent, Drone):
+            self.drone_crash = True
+            self.drone_crash_to_obstacle = True
+        elif isinstance(agent, Observer):
+            self.observer_crash = True
+            self.observer_crash_to_obstacle = True
+
+    def _apply_obstacle_motion_collisions(self, previous_centers, reward_dict):
+        """Crash agents crossed by obstacles during the latest world update."""
+        current_centers = self.world.obstacle_warning_centers_world
+        previous_centers = np.asarray(previous_centers, dtype=np.float32).reshape(-1, 2)
+        if (
+            previous_centers.size == 0
+            or current_centers.size == 0
+            or len(previous_centers) != len(current_centers)
+            or not self.agents_list
+        ):
+            return []
+
+        agent_positions = np.asarray(
+            [(agent.x, agent.y) for agent in self.agents_list],
+            dtype=np.float32,
+        )
+        hit_mask = np.zeros((len(self.agents_list),), dtype=bool)
+        for previous_center, current_center in zip(previous_centers, current_centers):
+            hit_mask |= self._points_near_segment(
+                agent_positions,
+                previous_center,
+                current_center,
+                self.world.OBSTACLE_WARNING_RADIUS,
+            )
+
+        crashed_agent_names = []
+        for agent_idx in np.flatnonzero(hit_mask):
+            agent_idx = int(agent_idx)
+            agent = self.agents_list[agent_idx]
+            agent_name = self.agents[agent_idx]
+            self._mark_agent_crash(agent)
+            self.rewards[agent_name] -= 300
+            reward_dict[agent_name].append(-300)
+            crashed_agent_names.append(agent_name)
+
+        return crashed_agent_names
+
     def step(self, action, active_agent):
         """Execute a step."""
         if active_agent == self.agents[0]:
@@ -804,6 +948,7 @@ class HeMAC:
         # LOGGER.info(f'reward_dict: {reward_dict}')
 
         agent = self.agents_list[self.agent_name_mapping[active_agent]]
+        previous_agent_position = (float(agent.x), float(agent.y))
         agent.update(self.area, self.world, action, self.found_goal)
         self.world.update_obstacle_observations_for_agent(agent)
 
@@ -826,65 +971,51 @@ class HeMAC:
                 reward_dict[active_agent].append(-300)
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
                     LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
-            elif self.world.is_in_warning_zone(agent.x, agent.y):  # 위험구역에 들어간 경우
-                if random.random() < 0.5:  # 50% 확률로 충돌 처리
-                    self.collided = True
-                    self.drone_crash = True
-                    self.drone_crash_to_obstacle = True
-                    self.terminate = True
-                    reward -= 300  # Penalty for entering a warning zone
-                    reward_dict[active_agent].append(-300)
-                # else:
-                #     reward -= 50  # Penalty for entering a warning zone without collision
-                #     reward_dict[active_agent].append(-50)
+            elif self._agent_path_intersects_warning_zone(
+                previous_agent_position,
+                (agent.x, agent.y),
+            ):
+                self._mark_agent_crash(agent)
+                reward -= 300
+                reward_dict[active_agent].append(-300)
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
-                    LOGGER.info(f"drone entered a warning zone. pos: {(agent.x, agent.y)}")
-            else:
-                obstacle_idx = agent.rect.collidelist(self.world.obstacles)
-                if obstacle_idx != -1:
-                    obstacle = self.world.obstacles[obstacle_idx]
-                    self.collided = True
-                    self.drone_crash = True
-                    self.drone_crash_to_obstacle = True
-                    self.terminate = True
-                    reward -= 300  # Penalty for collision with an obstacle
-                    reward_dict[active_agent].append(-300)
-                    if self.render_mode == "human" or self.render_mode == "rgb_array":
-                        LOGGER.info(
-                            f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
-                        )
+                    LOGGER.info(f"drone crossed a warning zone. pos: {(agent.x, agent.y)}")
 
-            safe_radius = 75.0 # drone sensing range로 설정
-            drone_proximity_penalty = 0.0
-            for other_agent in self.agents_list:
-                if other_agent is agent or not isinstance(other_agent, Drone):
-                    continue
-                drone_distance = dist(other_agent.x, other_agent.y, agent.x, agent.y) # 다른 drone과의 거리
-                if drone_distance < safe_radius:
-                    normalized_gap = (safe_radius - drone_distance) / safe_radius
-                    drone_proximity_penalty += 0.5 * (normalized_gap ** 2) # 드론 간의 근접 패널티
-            if drone_proximity_penalty > 0:
-                reward -= drone_proximity_penalty
-                reward_dict[active_agent].append(-drone_proximity_penalty)
+            if not self.terminate:
+                safe_radius = 75.0
+                drone_proximity_penalty = 0.0
+                for other_agent in self.agents_list:
+                    if other_agent is agent or not isinstance(other_agent, Drone):
+                        continue
+                    drone_distance = dist(other_agent.x, other_agent.y, agent.x, agent.y)
+                    if drone_distance < safe_radius:
+                        normalized_gap = (safe_radius - drone_distance) / safe_radius
+                        drone_proximity_penalty += 0.5 * (normalized_gap ** 2)
+                if drone_proximity_penalty > 0:
+                    reward -= drone_proximity_penalty
+                    reward_dict[active_agent].append(-drone_proximity_penalty)
 
-            # POI tracking reward calculation
-            for goal in self.goals[:]:
-                goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
-                if goal_dist < agent.sensing_range and not self.found_goal:
-                    agent.found_goal = True
-                    self.found_goal = True
-                    reward += 20  # goal 탐색 시
-                    reward_dict[active_agent].append(20)
+                for goal in self.goals[:]:
+                    goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
+                    if goal_dist < agent.sensing_range and not self.found_goal:
+                        agent.found_goal = True
+                        self.found_goal = True
+                        reward += 20
+                        reward_dict[active_agent].append(20)
 
-            # proximity-weighted detection reward: closer detections to any goal give more reward
-            newly_detected_points = self._update_detected_cache(agent)
-            if len(newly_detected_points) > 0:
-                # total_detection_reward = min(self._compute_drone_detection_reward(newly_detected_points), 0.1)
-                total_detection_reward = len(newly_detected_points) / 50000
-                reward += total_detection_reward
-                reward_dict[active_agent].append(total_detection_reward)
+                newly_detected_count = self._update_detected_cache(
+                    agent,
+                    counted_sector_mask=self.drone_reward_sector_mask,
+                )
+                if newly_detected_count > 0:
+                    total_detection_reward = newly_detected_count / 50000
+                    reward += total_detection_reward
+                    reward_dict[active_agent].append(total_detection_reward)
 
-            self._check_drone_only_mission_success(active_agent=active_agent, reward_dict=reward_dict)
+                self._check_drone_only_mission_success(
+                    active_agent=active_agent,
+                    reward_dict=reward_dict,
+                )
 
         elif "observer" in active_agent:
             reward -= 0.05  # step penalty
@@ -898,108 +1029,78 @@ class HeMAC:
                 reward_dict[active_agent].append(-300)
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
                     LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
-            elif self.world.is_in_warning_zone(agent.x, agent.y):
-                if random.random() < 0.5:  # 50% 확률로 충돌 처리
-                    self.collided = True
-                    self.observer_crash = True
-                    self.terminate = True
-                    self.observer_crash_to_obstacle = True
-                    reward -= 300  # Penalty for entering a warning zone
-                    reward_dict[active_agent].append(-300)
-                # else:
-                #     reward -= 50  # Penalty for entering a warning zone without collision
-                #     reward_dict[active_agent].append(-50)
+            elif self._agent_path_intersects_warning_zone(
+                previous_agent_position,
+                (agent.x, agent.y),
+            ):
+                self._mark_agent_crash(agent)
+                reward -= 300
+                reward_dict[active_agent].append(-300)
                 if self.render_mode == "human" or self.render_mode == "rgb_array":
-                    LOGGER.info(f"observer entered a warning zone. pos: {(agent.x, agent.y)}")
-            else:
-                obstacle_idx = agent.rect.collidelist(self.world.obstacles)
-                if obstacle_idx != -1:
-                    obstacle = self.world.obstacles[obstacle_idx]
-                    self.collided = True
-                    self.observer_crash = True
-                    self.observer_crash_to_obstacle = True
-                    self.terminate = True
-                    reward -= 300  # Penalty for collision with an obstacle
-                    reward_dict[active_agent].append(-300)
-                    if self.render_mode == "human" or self.render_mode == "rgb_array":
-                        LOGGER.info(
-                            f"agent {active_agent} collided with obstacle at position [x,y] = {obstacle.center}"
+                    LOGGER.info(f"observer crossed a warning zone. pos: {(agent.x, agent.y)}")
+
+            if not self.terminate:
+                closest_goal = None
+                current_dist = float("inf")
+                for goal in self.goals[:]:
+                    goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
+                    if goal_dist < current_dist:
+                        current_dist = goal_dist
+                        closest_goal = goal
+
+                    if closest_goal is not None:
+                        if not np.isfinite(getattr(agent, "min_dist_record", np.inf)):
+                            agent.min_dist_record = current_dist
+                        elif current_dist < agent.min_dist_record:
+                            progress = agent.min_dist_record - current_dist
+                            progress_reward = progress * 0.01
+                            if np.isfinite(progress_reward) and progress_reward > 0:
+                                reward += progress_reward
+                                reward_dict[active_agent].append(progress_reward)
+                            agent.min_dist_record = current_dist
+
+                    if goal_dist < agent.sensing_range:
+                        agent.found_goal = True
+                        self.found_goal = True
+                        self.global_reward += 300
+                        reward_dict[active_agent].append(300)
+                        success_marked = self._mark_mission_success(
+                            active_agent=active_agent,
+                            reward_dict=reward_dict,
                         )
+                        if success_marked:
+                            break
 
-            closest_goal = None
-            current_dist = float('inf')
-            for goal in self.goals[:]:
-                goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
-                if goal_dist < current_dist:
-                    current_dist = goal_dist
-                    closest_goal = goal
-                
-                if closest_goal is not None:
-                    # Initialize the running best distance on the first valid step.
-                    if not np.isfinite(getattr(agent, "min_dist_record", np.inf)):
-                        agent.min_dist_record = current_dist
-
-                    # Reward only when the observer sets a new closest-distance record.
-                    elif current_dist < agent.min_dist_record:
-                        progress = agent.min_dist_record - current_dist
-                        progress_reward = progress * 0.05
-                        if np.isfinite(progress_reward) and progress_reward > 0:
-                            reward += progress_reward
-                            reward_dict[active_agent].append(progress_reward)
-
-                        heading_reward = heading_alignment_reward(
-                            agent.x, agent.y, agent.orientation, closest_goal.x, closest_goal.y, self.observer_heading_reward_scale
-                        )
-                        if heading_reward > 0:
-                            reward += heading_reward
-                            reward_dict[active_agent].append(heading_reward)
-
-                        agent.min_dist_record = current_dist
-
-                if goal_dist < agent.sensing_range:  # goal까지의 거리가 sensing range보다 가까워지면 발견
-                    agent.found_goal = True
-                    self.found_goal = True
-                    reward += 300
-                    reward_dict[active_agent].append(300)
-                    self._mark_mission_success(
-                        active_agent=active_agent,
-                        reward_dict=reward_dict,
-                    )
-
-            newly_detected_count = self._update_detected_cache(agent)
-            # if newly_detected_count > 0:
-            #     detection_reward = math.sqrt(math.sqrt(newly_detected_count)) / 20
-            #     reward += detection_reward
-            #     reward_dict[active_agent].append(detection_reward)
+                if not self.terminate:
+                    self._update_detected_cache(agent)
 
         # individual reward
         self.rewards[active_agent] = reward
-        if self.log_step_rewards:
-            LOGGER.info(f"reward for {active_agent} at step {self.num_frames}: {reward_dict[active_agent]}")
-        self.finalize_episode()
 
         # Update environment and check end of episode
         if agent == self.agents_list[-1]:
-            if self.collided:
-                self.terminate = True
-                if self.render_mode == "human":
-                    LOGGER.info(f"BOOM! episode length: {self.num_frames + 1}")
-                    self.render()
-                    time.sleep(2)
-
-            self.world.update(self.area)
+            if not self.terminate:
+                previous_obstacle_centers = self.world.obstacle_warning_centers_world.copy()
+                self.world.update(self.area)
+                self._apply_obstacle_motion_collisions(
+                    previous_obstacle_centers,
+                    reward_dict,
+                )
 
             # Termination or continuation of the episode
             if not self.terminate:
                 self.num_frames += 1
                 self.truncate = self.num_frames >= self.max_cycles
 
-            if self.terminate or self.truncate:
-                pass
+        if self.log_step_rewards:
+            LOGGER.info(f"reward for {active_agent} at step {self.num_frames}: {reward_dict[active_agent]}")
+        self.finalize_episode()
 
-            # Refresh episode info after the frame counter/truncation state changes.
-            self._propagate_episode_state(include_global_reward=False)
-
+        if agent == self.agents_list[-1]:
+            if self.collided and self.render_mode == "human":
+                LOGGER.info(f"BOOM! episode length: {self.num_frames + 1}")
+                self.render()
+                time.sleep(2)
             if self.render_mode is not None:
                 self.render()
                 if self.render_mode == "human":
@@ -1074,7 +1175,7 @@ class RawEnv(AECEnv, EzPickle):
         """Reset environment."""
         if seed is not None:
             self._seed(seed=seed)
-        self.env.randomizer = self.randomizer
+        self.env.set_randomizer(self.randomizer)
         self.env.reset()
         self.agents = self.possible_agents[:]
         self.agent_selection = self._agent_selector.reset()

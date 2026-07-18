@@ -66,10 +66,10 @@ PPO_FINAL_LR = 1e-5
 PPO_TRAIN_BATCH_SIZE = 8000
 PPO_LR_MID_OFFSET = 500 * PPO_TRAIN_BATCH_SIZE
 PPO_LR_FINAL_OFFSET = 10000 * PPO_TRAIN_BATCH_SIZE
-LOG_STD_MAX_INCREASE_PER_OPTIMIZER_STEP = 1e-5
-NUM_ENV_RUNNERS = 10
+# LOG_STD_MAX_INCREASE_PER_OPTIMIZER_STEP = 1e-5
+NUM_ENV_RUNNERS = 6
 ROLLOUT_FRAGMENT_LENGTH = 100
-SAMPLE_TIMEOUT_S = 180.0
+SAMPLE_TIMEOUT_S = 300.0
 CURRICULUM_COVERAGE_LEVELS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 CURRICULUM_PROMOTION_SUCCESS_RATE = 0.8
 CURRICULUM_STABILITY_WINDOW = 1
@@ -82,28 +82,28 @@ DEFAULT_CHECKPOINT_INTERVAL = 100
 DEFAULT_NUM_GPUS = 1
 OBSTACLE_CURRICULUM_LEVELS = [
     {
+        "min_obstacles": 1,
+        "max_obstacles": 2,
+        "obstacle_min_speed": 1,
+        "obstacle_max_speed": 1,
+    },
+    {
+        "min_obstacles": 2,
+        "max_obstacles": 3,
+        "obstacle_min_speed": 1,
+        "obstacle_max_speed": 2,
+    },
+    {
         "min_obstacles": 3,
-        "max_obstacles": 4,
+        "max_obstacles": 5,
         "obstacle_min_speed": 1,
         "obstacle_max_speed": 3,
     },
     {
-        "min_obstacles": 4,
-        "max_obstacles": 5,
-        "obstacle_min_speed": 2,
-        "obstacle_max_speed": 4,
-    },
-    {
         "min_obstacles": 5,
-        "max_obstacles": 6,
+        "max_obstacles": 7,
         "obstacle_min_speed": 2,
         "obstacle_max_speed": 5,
-    },
-    {
-        "min_obstacles": 6,
-        "max_obstacles": 8,
-        "obstacle_min_speed": 2,
-        "obstacle_max_speed": 6,
     },
     {
         "min_obstacles": 7,
@@ -359,65 +359,66 @@ def reset_log_std_growth_limiter_reference(policy):
     return True
 
 
-def install_log_std_growth_limiter(
-    policy,
-    max_increase=LOG_STD_MAX_INCREASE_PER_OPTIMIZER_STEP,
-):
-    """Limit upward log_std movement after every optimizer update."""
-    model = getattr(policy, "model", None)
-    log_std_parameter = getattr(model, "log_std", None)
-    if log_std_parameter is None:
-        return False
+# def install_log_std_growth_limiter(
+#     policy,
+#     max_increase=LOG_STD_MAX_INCREASE_PER_OPTIMIZER_STEP,
+# ):
+#     """Limit upward log_std movement after every optimizer update."""
+#     model = getattr(policy, "model", None)
+#     log_std_parameter = getattr(model, "log_std", None)
+#     if log_std_parameter is None:
+#         return False
 
-    existing_state = getattr(policy, "_hemac_log_std_limiter_state", None)
-    if existing_state is not None:
-        existing_state["max_increase"] = float(max_increase)
-        reset_log_std_growth_limiter_reference(policy)
-        return True
+#     existing_state = getattr(policy, "_hemac_log_std_limiter_state", None)
+#     if existing_state is not None:
+#         existing_state["max_increase"] = float(max_increase)
+#         reset_log_std_growth_limiter_reference(policy)
+#         return True
 
-    log_std_parameter.data.clamp_(min=model.log_std_min, max=model.log_std_max)
+#     with log_std_parameter.no_grad():
+#         log_std_parameter.clamp_(min=model.log_std_min, max=model.log_std_max)
 
-    limiter_state = {
-        "previous": log_std_parameter.detach().clone(),
-        "max_increase": max(float(max_increase), 0.0),
-    }
-    hook_handles = []
+#     limiter_state = {
+#         "previous": log_std_parameter.detach().clone(),
+#         "max_increase": max(float(max_increase), 0.0),
+#     }
+#     hook_handles = []
 
-    def limit_log_std_growth(optimizer, args, kwargs):
-        del optimizer, args, kwargs
-        current = log_std_parameter.data
-        max_allowed = limiter_state["previous"] + limiter_state["max_increase"]
-        current.copy_(current.minimum(max_allowed))
-        current.clamp_(min=model.log_std_min, max=model.log_std_max)
-        limiter_state["previous"].copy_(current)
+#     def limit_log_std_growth(optimizer, args, kwargs):
+#         del optimizer, args, kwargs
+#         current = log_std_parameter.data
+#         max_allowed = limiter_state["previous"] + limiter_state["max_increase"]
+#         current.copy_(current.minimum(max_allowed))
+#         current.clamp_(min=model.log_std_min, max=model.log_std_max)
+#         limiter_state["previous"].copy_(current)
 
-    for optimizer in getattr(policy, "_optimizers", []):
-        contains_log_std = any(
-            any(parameter is log_std_parameter for parameter in group["params"])
-            for group in optimizer.param_groups
-        )
-        if contains_log_std:
-            hook_handles.append(optimizer.register_step_post_hook(limit_log_std_growth))
+#     for optimizer in getattr(policy, "_optimizers", []):
+#         contains_log_std = any(
+#             any(parameter is log_std_parameter for parameter in group["params"])
+#             for group in optimizer.param_groups
+#         )
+#         if contains_log_std:
+#             hook_handles.append(optimizer.register_step_post_hook(limit_log_std_growth))
 
-    if not hook_handles:
-        return False
+#     if not hook_handles:
+#         return False
 
-    policy._hemac_log_std_limiter_state = limiter_state
-    policy._hemac_log_std_limiter_handles = hook_handles
-    return True
+#     policy._hemac_log_std_limiter_state = limiter_state
+#     policy._hemac_log_std_limiter_handles = hook_handles
+#     return True
 
 
-def install_algorithm_log_std_growth_limiters(algo):
-    """Install log_std growth limiters on all continuous trainable policies."""
-    installed_policy_ids = []
-    for policy_id in ("observer_policy", "drone_policy"):
-        try:
-            policy = algo.get_policy(policy_id)
-        except Exception:
-            policy = None
-        if policy is not None and install_log_std_growth_limiter(policy):
-            installed_policy_ids.append(policy_id)
-    return installed_policy_ids
+# def install_algorithm_log_std_growth_limiters(algo):
+#     """Install log_std growth limiters on all continuous trainable policies."""
+#     installed_policy_ids = []
+#     for policy_id in ("observer_policy", "drone_policy"):
+#         try:
+#             policy = algo.get_policy(policy_id)
+#         except Exception:
+#             policy = None
+#         if policy is not None and install_log_std_growth_limiter(policy):
+#             installed_policy_ids.append(policy_id)
+#     return installed_policy_ids
 
 
 def reset_policy_training_parameters(policy, start_timestep):
@@ -639,9 +640,11 @@ def extract_final_info_from_wrapped_env(env):
     return {}
 
 
-def run_rollout(algo, seed, render_mode=None, capture_frames=False, explore=False):
+def run_rollout(algo, seed, render_mode=None, capture_frames=False, explore=False, env=None):
     """Run one rollout and return its final info plus optional frames."""
-    env = HeMAC_v0.env(**build_env_config(render_mode=render_mode))
+    owns_env = env is None
+    if env is None:
+        env = HeMAC_v0.env(**build_env_config(render_mode=render_mode))
     env.reset(seed=seed)
 
     frames = []
@@ -686,7 +689,8 @@ def run_rollout(algo, seed, render_mode=None, capture_frames=False, explore=Fals
 
         final_info = extract_final_info_from_wrapped_env(env)
     finally:
-        env.close()
+        if owns_env:
+            env.close()
 
     return final_info, frames
 
@@ -727,34 +731,50 @@ def collect_visualization_video(algo, iteration, seed=VIDEO_SEED):
 
 def collect_eval_success_rate(algo, num_episodes=5, seed=VIDEO_SEED, explore=False, seeds=None):
     """Run evaluation episodes and return average success rate."""
+    return collect_eval_metrics(
+        algo,
+        num_episodes=num_episodes,
+        seed=seed,
+        explore=explore,
+        seeds=seeds,
+    )["success_rate"]
+
+
+def collect_eval_metrics(algo, num_episodes=5, seed=VIDEO_SEED, explore=False, seeds=None):
+    """Run each evaluation rollout once and collect all episode-level rates."""
     successes = []
+    crash_flags = []
     rollout_seeds = seeds if seeds is not None else [seed + episode_idx for episode_idx in range(num_episodes)]
-    for rollout_seed in rollout_seeds:
-        final_info, _ = run_rollout(
-            algo,
-            seed=rollout_seed,
-            render_mode=None,
-            capture_frames=False,
-            explore=explore,
-        )
-        successes.append(1.0 if final_info.get("success", False) else 0.0)
-    return float(np.mean(successes)) if successes else 0.0
+    env = HeMAC_v0.env(**build_env_config(render_mode=None))
+    try:
+        for rollout_seed in rollout_seeds:
+            final_info, _ = run_rollout(
+                algo,
+                seed=rollout_seed,
+                render_mode=None,
+                capture_frames=False,
+                explore=explore,
+                env=env,
+            )
+            successes.append(1.0 if final_info.get("success", False) else 0.0)
+            crash_flags.append(1.0 if final_info.get("drone_crash", False) else 0.0)
+    finally:
+        env.close()
+    return {
+        "success_rate": float(np.mean(successes)) if successes else 0.0,
+        "drone_crash_rate": float(np.mean(crash_flags)) if crash_flags else 0.0,
+    }
 
 
 def collect_eval_drone_crash_rate(algo, num_episodes=5, seed=VIDEO_SEED, explore=False, seeds=None):
     """Run evaluation episodes and return average drone-crash rate."""
-    crash_flags = []
-    rollout_seeds = seeds if seeds is not None else [seed + episode_idx for episode_idx in range(num_episodes)]
-    for rollout_seed in rollout_seeds:
-        final_info, _ = run_rollout(
-            algo,
-            seed=rollout_seed,
-            render_mode=None,
-            capture_frames=False,
-            explore=explore,
-        )
-        crash_flags.append(1.0 if final_info.get("drone_crash", False) else 0.0)
-    return float(np.mean(crash_flags)) if crash_flags else 0.0
+    return collect_eval_metrics(
+        algo,
+        num_episodes=num_episodes,
+        seed=seed,
+        explore=explore,
+        seeds=seeds,
+    )["drone_crash_rate"]
 
 
 class HeMACCallbacks(DefaultCallbacks):
@@ -769,6 +789,8 @@ class HeMACCallbacks(DefaultCallbacks):
         # 최종 값 추출 (어느 방법으로든 찾지 못한 경우 99999.0 등 기본값)
         area = final_info.get("explored_area", 0.0)
         coverage_ratio = final_info.get("coverage_ratio", 0.0)
+        drone_reward_coverage_ratio = final_info.get("drone_reward_coverage_ratio", 0.0)
+        drone_reward_explored_area = final_info.get("drone_reward_explored_area", 0.0)
         goal_found_step = final_info.get("goal_found_step", 0.0)
         success_step = final_info.get("success_step", 0.0)
         steps_after_goal_found = final_info.get("steps_after_goal_found", 0.0)
@@ -776,6 +798,8 @@ class HeMACCallbacks(DefaultCallbacks):
         # wandb 및 터미널 출력용 custom_metrics 할당
         episode.custom_metrics["explored_area"] = float(area)
         episode.custom_metrics["coverage_ratio"] = float(coverage_ratio)
+        episode.custom_metrics["drone_reward_coverage_ratio"] = float(drone_reward_coverage_ratio)
+        episode.custom_metrics["drone_reward_explored_area"] = float(drone_reward_explored_area)
         # episode.custom_metrics["goal_found_step"] = float(goal_found_step)
         episode.custom_metrics["success_step"] = float(success_step)
         # episode.custom_metrics["steps_after_goal_found"] = float(steps_after_goal_found)
@@ -833,6 +857,31 @@ def restore_frozen_observer_policy(algo, checkpoint_dir):
         )
 
     return Path(checkpoint_dir)
+
+
+def restore_algorithm_with_sampling_config(checkpoint_dir, args):
+    """Restore training state while applying the current sampling settings."""
+    state_path = Path(checkpoint_dir) / "algorithm_state.pkl"
+    if not state_path.is_file():
+        raise FileNotFoundError(f"Algorithm state not found: {state_path}")
+
+    with state_path.open("rb") as file_obj:
+        state = pickle.load(file_obj)
+
+    checkpoint_config = state.get("config")
+    if not isinstance(checkpoint_config, dict):
+        raise TypeError(f"Checkpoint does not contain a valid config: {state_path}")
+
+    restored_config = dict(checkpoint_config)
+    restored_config.update(
+        {
+            "num_env_runners": int(args.num_env_runners),
+            "rollout_fragment_length": int(args.rollout_fragment_length),
+            "sample_timeout_s": float(args.sample_timeout_s),
+        }
+    )
+    state["config"] = restored_config
+    return Algorithm.from_state(state)
 
 
 def parse_args():
@@ -967,15 +1016,33 @@ def _find_coverage_stage_index(levels, coverage_ratio):
 
 
 def _find_obstacle_stage_index(levels, obstacle_level):
-    """Return the obstacle-curriculum stage index that matches the given level."""
+    """Return the matching stage, or the nearest stage for an older checkpoint."""
     normalized_target = _normalize_obstacle_difficulty(obstacle_level)
-    for stage_index, level in enumerate(levels):
-        if _normalize_obstacle_difficulty(level) == normalized_target:
+    normalized_levels = [_normalize_obstacle_difficulty(level) for level in levels]
+    for stage_index, level in enumerate(normalized_levels):
+        if level == normalized_target:
             return stage_index
-    raise ValueError(
-        "Obstacle difficulty "
-        f"{normalized_target} does not match any configured obstacle curriculum stage."
+
+    difficulty_keys = (
+        "min_obstacles",
+        "max_obstacles",
+        "obstacle_min_speed",
+        "obstacle_max_speed",
     )
+    nearest_stage_index = min(
+        range(len(normalized_levels)),
+        key=lambda stage_index: sum(
+            abs(normalized_levels[stage_index][key] - normalized_target[key])
+            for key in difficulty_keys
+        ),
+    )
+    LOGGER.warning(
+        "Checkpoint obstacle difficulty %s is not in the current curriculum; "
+        "using nearest stage %s.",
+        normalized_target,
+        normalized_levels[nearest_stage_index],
+    )
+    return nearest_stage_index
 
 
 def initialize_curricula_from_env_config(env_config):
@@ -1058,7 +1125,7 @@ def main():
 
     if resume_checkpoint_path is not None:
         print(f"체크포인트 로드 중: {resume_checkpoint_path}")
-        algo = Algorithm.from_checkpoint(str(resume_checkpoint_path))
+        algo = restore_algorithm_with_sampling_config(resume_checkpoint_path, args)
         restored_env_config = getattr(algo.config, "env_config", None)
         if not isinstance(restored_env_config, dict):
             raise TypeError(
@@ -1133,6 +1200,13 @@ def main():
         print("RLlib PPO 알고리즘 빌드 중...")
         algo = config.build()
 
+    print(
+        "[sampling] "
+        f"env_runners={args.num_env_runners}, "
+        f"fragment_length={args.rollout_fragment_length}, "
+        f"timeout={args.sample_timeout_s:.0f}s"
+    )
+
     obstacle_curriculum, coverage_curriculum = initialize_curricula_from_env_config(
         env_config
     )
@@ -1174,12 +1248,12 @@ def main():
     else:
         print("[curriculum] disabled because this run includes an observer.")
 
-    log_std_limited_policies = install_algorithm_log_std_growth_limiters(algo)
-    print(
-        "[model] log_std growth limit installed "
-        f"(max increase/optimizer step={LOG_STD_MAX_INCREASE_PER_OPTIMIZER_STEP:.1e}, "
-        f"policies={log_std_limited_policies})"
-    )
+    # log_std_limited_policies = install_algorithm_log_std_growth_limiters(algo)
+    # print(
+    #     "[model] log_std growth limit installed "
+    #     f"(max increase/optimizer step={LOG_STD_MAX_INCREASE_PER_OPTIMIZER_STEP:.1e}, "
+    #     f"policies={log_std_limited_policies})"
+    # )
 
     wandb.init(
         project=args.wandb_project,
@@ -1192,9 +1266,9 @@ def main():
                 if args.restore_observer_from is not None
                 else None
             ),
-            "log_std_max_increase_per_optimizer_step": (
-                LOG_STD_MAX_INCREASE_PER_OPTIMIZER_STEP
-            ),
+            # "log_std_max_increase_per_optimizer_step": (
+            #     LOG_STD_MAX_INCREASE_PER_OPTIMIZER_STEP
+            # ),
         },
     )
 
@@ -1203,6 +1277,7 @@ def main():
 
     for i in range(args.num_iterations):
         result = algo.train()
+        local_step = i + 1
         iteration = int(
             result.get("training_iteration", start_iteration + i + 1)
         )
@@ -1234,6 +1309,7 @@ def main():
 
         log_payload = {
             "iteration": iteration,
+            "local_step": local_step,
             "reward/mean_reward": mean_reward,
             "reward/observer_policy": policy_rewards.get("observer_policy", 0),
             "reward/drone_policy": policy_rewards.get("drone_policy", 0),
@@ -1241,9 +1317,9 @@ def main():
             # "model/drone_log_std_min": drone_log_std_stats.get("min", 0.0),
             # "model/drone_log_std_max": drone_log_std_stats.get("max", 0.0),
             "model/entropy_coeff": PPO_ENTROPY_COEFF,
-            "model/log_std_max_increase_per_optimizer_step": (
-                LOG_STD_MAX_INCREASE_PER_OPTIMIZER_STEP
-            ),
+            # "model/log_std_max_increase_per_optimizer_step": (
+            #     LOG_STD_MAX_INCREASE_PER_OPTIMIZER_STEP
+            # ),
             "metrics/rollout_success_rate": rollout_success_rate,
             "metrics/goal_found_rate": custom_metrics.get("goal_found_rate_mean", 0),
             "metrics/crash_rate": custom_metrics.get("crash_rate_mean", 0),
@@ -1251,6 +1327,8 @@ def main():
             "metrics/observer_crash_rate": custom_metrics.get("observer_crash_rate_mean", 0),
             "metrics/explored_area": custom_metrics.get("explored_area_mean", 0),
             "metrics/coverage_ratio": custom_metrics.get("coverage_ratio_mean", 0),
+            "metrics/drone_reward_explored_area": custom_metrics.get("drone_reward_explored_area_mean", 0),
+            "metrics/drone_reward_coverage_ratio": custom_metrics.get("drone_reward_coverage_ratio_mean", 0),
             # "metrics/timeout_rate": custom_metrics.get("timeout_rate_mean", 0),
             "metrics/success_after_goal_found_rate": custom_metrics.get("success_after_goal_found_rate_mean", 0),
             # "metrics/goal_found_step": custom_metrics.get("goal_found_step_mean", 0),
@@ -1298,9 +1376,15 @@ def main():
 
         if iteration % args.video_log_interval == 0:
             try:
-                video = collect_visualization_video(algo, iteration=iteration, seed=VIDEO_SEED)
+                visualization_seed = int(np.random.randint(0, 100000))
+                video = collect_visualization_video(
+                    algo,
+                    iteration=iteration,
+                    seed=visualization_seed,
+                )
                 if video is not None:
                     log_payload["visualization/policy_rollout"] = video
+                    log_payload["visualization/seed"] = visualization_seed
             except Exception as exc:
                 print(f"[warn] visualization logging skipped at iteration {iteration}: {exc}")
 
@@ -1308,47 +1392,27 @@ def main():
         if iteration % EVAL_LOG_INTERVAL == 0:
             try:
                 current_eval_seeds = np.random.randint(0, 100000, size=20).tolist()
-                
-                eval_success_rate = collect_eval_success_rate(
+
+                deterministic_eval = collect_eval_metrics(
                     algo,
                     num_episodes=20,
                     seeds=current_eval_seeds,
                     explore=False,
                 )
+                eval_success_rate = deterministic_eval["success_rate"]
                 log_payload["metrics/eval_success_rate"] = eval_success_rate
+                log_payload["metrics/eval_drone_crash_rate"] = deterministic_eval["drone_crash_rate"]
 
-                eval_success_rate_stochastic = collect_eval_success_rate(
+                stochastic_eval = collect_eval_metrics(
                     algo,
                     num_episodes=20,
                     seeds=current_eval_seeds,
                     explore=True,
                 )
-                log_payload["metrics/eval_success_rate_stochastic"] = eval_success_rate_stochastic
+                log_payload["metrics/eval_success_rate_stochastic"] = stochastic_eval["success_rate"]
+                log_payload["metrics/eval_drone_crash_rate_stochastic"] = stochastic_eval["drone_crash_rate"]
             except Exception as exc:
-                print(f"[warn] eval success logging skipped at iteration {iteration}: {exc}")
-
-
-        if iteration % EVAL_LOG_INTERVAL == 0:
-            try:
-                current_eval_seeds = np.random.randint(0, 100000, size=10).tolist()
-                
-                eval_drone_crash_rate = collect_eval_drone_crash_rate(
-                    algo,
-                    num_episodes=20,
-                    seeds=current_eval_seeds,
-                    explore=False,
-                )
-                log_payload["metrics/eval_drone_crash_rate"] = eval_drone_crash_rate
-
-                eval_drone_crash_rate_stochastic = collect_eval_drone_crash_rate(
-                    algo,
-                    num_episodes=20,
-                    seeds=current_eval_seeds,
-                    explore=True,
-                )
-                log_payload["metrics/eval_drone_crash_rate_stochastic"] = eval_drone_crash_rate_stochastic
-            except Exception as exc:
-                print(f"[warn] eval drone crash logging skipped at iteration {iteration}: {exc}")
+                print(f"[warn] evaluation logging skipped at iteration {iteration}: {exc}")
 
         if eval_success_rate is not None:
             obstacle_curriculum_promoted = obstacle_curriculum.record_success(eval_success_rate)
@@ -1427,7 +1491,7 @@ def main():
                         log_std_stats["mean"]
                     )
 
-        wandb.log(log_payload)
+        wandb.log(log_payload, step=local_step)
         
         if iteration % args.save_every == 0:
             iter_checkpoint_dir = checkpoint_dir / f"checkpoint_{iteration:05d}"

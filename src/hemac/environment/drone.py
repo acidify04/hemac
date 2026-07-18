@@ -140,8 +140,9 @@ class Drone(BaseAgent):
         self.UWB = UWB(randomizer, max_range=200)
         self.randomizer = randomizer
         self.sensor = sensor
-        # self.sensing_range = sensor.sensing_range if isinstance(sensor, RoundCamera) else 50
         self.sensing_range = 120
+        if isinstance(self.sensor, RoundCamera):
+            self.sensor.sensing_range = self.sensing_range
         self.orientation = 0.0
         self.carried_targets = 0
         self.carrying_capacity = 1

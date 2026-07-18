@@ -19,7 +19,9 @@ class BaseAgent(pygame.sprite.Sprite):
     def __init__(self):
         """Overwrite base class constructor."""
         super().__init__()
-        self.latest_detected = np.empty((0, 2), dtype=np.int32)
+        self._latest_detected = np.empty((0, 2), dtype=np.int32)
+        self.latest_detection_center = None
+        self.latest_detection_radius = 0
         self.action_history = np.zeros(
             (self.ACTION_HISTORY_LENGTH, self.ACTION_DIM),
             dtype=np.float32,
@@ -38,9 +40,25 @@ class BaseAgent(pygame.sprite.Sprite):
         return offsets
 
     def update_detected_area(self, sensing_range: float) -> None:
-        """Mark all integer coordinates inside the sensing range as detected."""
-        center = np.array((int(self.x), int(self.y)), dtype=np.int32)
-        self.latest_detected = self._detected_offsets(sensing_range) + center
+        """Record a sensing disk; materialize its coordinates only if requested."""
+        self.latest_detection_center = (int(self.x), int(self.y))
+        self.latest_detection_radius = max(0, int(sensing_range))
+        self._latest_detected = None
+
+    @property
+    def latest_detected(self) -> np.ndarray:
+        """Return the latest sensing coordinates, building them lazily for compatibility."""
+        if self._latest_detected is None:
+            center = np.asarray(self.latest_detection_center, dtype=np.int32)
+            self._latest_detected = self._detected_offsets(self.latest_detection_radius) + center
+        return self._latest_detected
+
+    @latest_detected.setter
+    def latest_detected(self, points) -> None:
+        self._latest_detected = np.asarray(points, dtype=np.int32).reshape(-1, 2)
+        if self._latest_detected.size == 0:
+            self.latest_detection_center = None
+            self.latest_detection_radius = 0
 
     def _position_to_grid(self, x: float, y: float, world) -> tuple[int, int]:
         """Convert world coordinates to a coverage-grid sector."""

@@ -52,6 +52,9 @@ class PointOfInterest:
             "boundary_margin": poi_config.get("boundary_margin")
             if poi_config and poi_config.get("boundary_margin") is not None
             else 140,
+            "spawn_quadrant": poi_config.get("spawn_quadrant")
+            if poi_config and poi_config.get("spawn_quadrant")
+            else None,
         }
         self.randomizer = randomizer
         self.rect = None
@@ -77,6 +80,43 @@ class PointOfInterest:
 
         self.pause_interval = 5
         self.step_counter = 0
+
+    def _select_spawn_range(self) -> dict:
+        """Choose one configured spawn quadrant relative to the full spawn range."""
+        configured_quadrants = self.config.get("spawn_quadrant")
+        if not configured_quadrants:
+            return self.spawn_range
+        if isinstance(configured_quadrants, str):
+            configured_quadrants = [configured_quadrants]
+
+        quadrant_ranges = {
+            "bottom_left": (False, False),
+            "bottom_right": (True, False),
+            "top_left": (False, True),
+            "top_right": (True, True),
+        }
+        valid_quadrants = [
+            quadrant
+            for quadrant in configured_quadrants
+            if quadrant in quadrant_ranges
+        ]
+        if not valid_quadrants:
+            return self.spawn_range
+
+        selected_quadrant = valid_quadrants[
+            int(self.randomizer.integers(0, len(valid_quadrants)))
+        ]
+        use_right_half, use_top_half = quadrant_ranges[selected_quadrant]
+        min_x, max_x = self.spawn_range["x_range"]
+        min_y, max_y = self.spawn_range["y_range"]
+        mid_x = (min_x + max_x) / 2.0
+        mid_y = (min_y + max_y) / 2.0
+
+        return {
+            "x_range": (mid_x, max_x) if use_right_half else (min_x, mid_x),
+            # World Y increases upward, opposite to rendered screen coordinates.
+            "y_range": (mid_y, max_y) if use_top_half else (min_y, mid_y),
+        }
 
     def get_waypoints(self) -> list | None:
         """Get waypoints."""
@@ -117,6 +157,7 @@ class PointOfInterest:
         respects_boundary_margin = False
         outside_warning_zone = False
         boundary_margin = max(float(self.config.get("boundary_margin", 0)), 0.0)
+        selected_spawn_range = self._select_spawn_range()
 
         # min_x, max_x = self.spawn_range["x_range"]
         # min_y, max_y = self.spawn_range["y_range"]
@@ -125,8 +166,8 @@ class PointOfInterest:
             attempts += 1
 
             if self.config.get("spawn_mode") == "random":
-                min_x, max_x = self.spawn_range["x_range"]
-                min_y, max_y = self.spawn_range["y_range"]
+                min_x, max_x = selected_spawn_range["x_range"]
+                min_y, max_y = selected_spawn_range["y_range"]
                 pos = (
                     float(self.randomizer.uniform(min_x, max_x)),
                     float(self.randomizer.uniform(min_y, max_y)),

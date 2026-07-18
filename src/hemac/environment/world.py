@@ -82,6 +82,9 @@ class World(pygame.sprite.Sprite):
         self.detected_mask = np.zeros((self.area.height, self.area.width), dtype=bool)
         self.detected_mask_flat = self.detected_mask.reshape(-1)
         self.search_pixel_mask = self._build_search_pixel_mask()
+        self.search_pixel_mask_flat = self.search_pixel_mask.reshape(-1)
+        self.detected_search_mask = np.zeros_like(self.detected_mask)
+        self.detected_search_mask_flat = self.detected_search_mask.reshape(-1)
         self.search_pixel_mask_float = self.search_pixel_mask.astype(np.float32, copy=False)
         self.search_integral = self._build_integral_image(self.search_pixel_mask_float)
         self.obstacle_pixel_mask = np.zeros((self.area.height, self.area.width), dtype=np.float32)
@@ -177,6 +180,8 @@ class World(pygame.sprite.Sprite):
         self.observed_obstacle_rects = []
         self.obstacle_bounds = np.empty((0, 4), dtype=np.int32)
         self.obstacle_centers = np.empty((0, 2), dtype=np.float32)
+        self.obstacle_warning_centers_game = np.empty((0, 2), dtype=np.float32)
+        self.obstacle_warning_centers_world = np.empty((0, 2), dtype=np.float32)
         self.obstacle_keys = set()
         self.revealed_warning_obstacles = np.zeros((0,), dtype=bool)
         minx, miny, maxx, maxy = self.search_bounds
@@ -255,6 +260,17 @@ class World(pygame.sprite.Sprite):
         offsets = np.column_stack((grid_x[mask], grid_y[mask])).astype(np.int32, copy=False)
         offsets.setflags(write=False)
         return offsets
+
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def _disk_mask(radius: int) -> np.ndarray:
+        """Cache a compact boolean disk for direct sensing-mask updates."""
+        radius = max(0, int(radius))
+        coords = np.arange(-radius, radius + 1, dtype=np.int32)
+        grid_x, grid_y = np.meshgrid(coords, coords, indexing="xy")
+        mask = (grid_x * grid_x) + (grid_y * grid_y) <= radius * radius
+        mask.setflags(write=False)
+        return mask
 
     def _rect_arrays(self, rects) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Return left/top/width/height arrays for a rect collection."""
@@ -388,19 +404,6 @@ class World(pygame.sprite.Sprite):
         cell_area = max(cell_width * cell_width, 1e-6)
 
         search_integral = self.search_integral
-        obstacle_integral = self._get_observed_obstacle_integral()
-        warning_integral = self._get_observed_warning_integral()
-        crop_x0 = max(int(np.floor(min_x)), 0)
-        crop_x1 = min(int(np.ceil(max_x)), self.area.width)
-        crop_y0 = max(int(np.floor(min_y)), 0)
-        crop_y1 = min(int(np.ceil(max_y)), self.area.height)
-
-        detected_search_crop = (
-            self.detected_mask[crop_y0:crop_y1, crop_x0:crop_x1].astype(np.float32, copy=False)
-            * self.search_pixel_mask_float[crop_y0:crop_y1, crop_x0:crop_x1]
-        )
-        detected_integral = self._build_integral_image(detected_search_crop)
-
         rounded_x_edges = np.rint(x_edges_world).astype(np.int32)
         rounded_y_edges = np.rint(y_edges_world).astype(np.int32)
         x_edges = np.clip(rounded_x_edges, 0, self.area.width)
@@ -409,17 +412,24 @@ class World(pygame.sprite.Sprite):
         y_edges = np.maximum.accumulate(y_edges)
         x_edges[-1] = min(max(int(np.rint(max_x)), 0), self.area.width)
         y_edges[-1] = min(max(int(np.rint(max_y)), 0), self.area.height)
-        x_edges_crop = np.clip(rounded_x_edges, crop_x0, crop_x1) - crop_x0
-        y_edges_crop = np.clip(rounded_y_edges, crop_y0, crop_y1) - crop_y0
-        x_edges_crop = np.maximum.accumulate(x_edges_crop)
-        y_edges_crop = np.maximum.accumulate(y_edges_crop)
-        x_edges_crop[-1] = max(min(int(np.rint(max_x)), crop_x1) - crop_x0, 0)
-        y_edges_crop[-1] = max(min(int(np.rint(max_y)), crop_y1) - crop_y0, 0)
 
         search_sum = self._integral_box_sums(search_integral, x_edges, y_edges)
-        obstacle_sum = self._integral_box_sums(obstacle_integral, x_edges, y_edges)
-        warning_sum = self._integral_box_sums(warning_integral, x_edges, y_edges)
-        detected_sum = self._integral_box_sums(detected_integral, x_edges_crop, y_edges_crop)
+        if self.observed_obstacle_confidences:
+            obstacle_sum = self._aggregate_local_world_mask(
+                self.observed_obstacle_pixel_mask,
+                x_edges,
+                y_edges,
+            )
+            warning_sum = self._aggregate_local_world_mask(
+                self.observed_warning_pixel_mask,
+                x_edges,
+                y_edges,
+                intersect_search=True,
+            )
+        else:
+            obstacle_sum = np.zeros((grid_size, grid_size), dtype=np.float32)
+            warning_sum = np.zeros_like(obstacle_sum)
+        detected_sum = self._aggregate_local_detected_mask(x_edges, y_edges)
 
         boundary_channel = np.clip(search_sum / cell_area, 0.0, 1.0).astype(np.float32, copy=False)
         coverage_channel = np.zeros_like(boundary_channel)
@@ -451,6 +461,98 @@ class World(pygame.sprite.Sprite):
         warning_channel[~visible_mask] = 0.0
 
         return coverage_channel, boundary_channel, obstacle_channel, warning_channel
+
+    def _aggregate_local_detected_mask(
+        self,
+        x_edges: np.ndarray,
+        y_edges: np.ndarray,
+    ) -> np.ndarray:
+        """Aggregate detected search pixels, using a reshape fast path away from boundaries."""
+        x_widths = np.diff(x_edges)
+        y_heights = np.diff(y_edges)
+        if (
+            x_widths.size > 0
+            and y_heights.size > 0
+            and x_widths[0] > 0
+            and y_heights[0] > 0
+            and np.all(x_widths == x_widths[0])
+            and np.all(y_heights == y_heights[0])
+        ):
+            grid_height = int(y_heights.size)
+            grid_width = int(x_widths.size)
+            cell_height = int(y_heights[0])
+            cell_width = int(x_widths[0])
+            crop = self.detected_search_mask[
+                int(y_edges[0]) : int(y_edges[-1]),
+                int(x_edges[0]) : int(x_edges[-1]),
+            ]
+            expected_shape = (grid_height * cell_height, grid_width * cell_width)
+            if crop.shape == expected_shape:
+                return crop.reshape(
+                    grid_height,
+                    cell_height,
+                    grid_width,
+                    cell_width,
+                ).sum(axis=(1, 3), dtype=np.float32)
+
+        crop_x0 = int(x_edges[0])
+        crop_x1 = int(x_edges[-1])
+        crop_y0 = int(y_edges[0])
+        crop_y1 = int(y_edges[-1])
+        detected_integral = self._build_integral_image(
+            self.detected_search_mask[crop_y0:crop_y1, crop_x0:crop_x1]
+        )
+        return self._integral_box_sums(
+            detected_integral,
+            x_edges - crop_x0,
+            y_edges - crop_y0,
+        )
+
+    def _aggregate_local_world_mask(
+        self,
+        mask: np.ndarray,
+        x_edges: np.ndarray,
+        y_edges: np.ndarray,
+        *,
+        intersect_search: bool = False,
+    ) -> np.ndarray:
+        """Aggregate a world mask into local cells without building a full-world integral image."""
+        crop_x0 = int(x_edges[0])
+        crop_x1 = int(x_edges[-1])
+        crop_y0 = int(y_edges[0])
+        crop_y1 = int(y_edges[-1])
+        crop = mask[crop_y0:crop_y1, crop_x0:crop_x1]
+        if intersect_search:
+            crop = crop * self.search_pixel_mask_float[crop_y0:crop_y1, crop_x0:crop_x1]
+
+        x_widths = np.diff(x_edges)
+        y_heights = np.diff(y_edges)
+        if (
+            x_widths.size > 0
+            and y_heights.size > 0
+            and x_widths[0] > 0
+            and y_heights[0] > 0
+            and np.all(x_widths == x_widths[0])
+            and np.all(y_heights == y_heights[0])
+        ):
+            grid_height = int(y_heights.size)
+            grid_width = int(x_widths.size)
+            cell_height = int(y_heights[0])
+            cell_width = int(x_widths[0])
+            if crop.shape == (grid_height * cell_height, grid_width * cell_width):
+                return crop.reshape(
+                    grid_height,
+                    cell_height,
+                    grid_width,
+                    cell_width,
+                ).sum(axis=(1, 3), dtype=np.float32)
+
+        integral = self._build_integral_image(crop)
+        return self._integral_box_sums(
+            integral,
+            x_edges - crop_x0,
+            y_edges - crop_y0,
+        )
 
     def _paint_disk_on_world_mask(
         self,
@@ -558,21 +660,31 @@ class World(pygame.sprite.Sprite):
         grid_y = min(max(int(np.floor(y)), 0), self.area.height - 1)
         if require_detected and not self.detected_mask[grid_y, grid_x]:
             return False
-        return bool(self.warning_pixel_mask[grid_y, grid_x] > 0.0)
+        if self.obstacle_warning_centers_world.size == 0:
+            return False
+
+        offsets = self.obstacle_warning_centers_world - np.array((x, y), dtype=np.float32)
+        distance_sq = np.einsum("ij,ij->i", offsets, offsets)
+        return bool(np.any(distance_sq <= float(self.OBSTACLE_WARNING_RADIUS) ** 2))
 
     def game_rect_intersects_warning_zone(self, rect: pygame.Rect | None) -> bool:
         """Return True when any part of a game-space rect overlaps a warning zone."""
-        if rect is None:
+        if rect is None or self.obstacle_warning_centers_game.size == 0:
             return False
 
-        world_left = max(int(rect.left), 0)
-        world_right = min(int(rect.right), self.area.width)
-        world_min_y = max(int(self.area.height - rect.bottom), 0)
-        world_max_y = min(int(self.area.height - rect.top), self.area.height)
-        if world_right <= world_left or world_max_y <= world_min_y:
+        left = max(float(rect.left), 0.0)
+        right = min(float(rect.right), float(self.area.width))
+        top = max(float(rect.top), 0.0)
+        bottom = min(float(rect.bottom), float(self.area.height))
+        if right <= left or bottom <= top:
             return False
 
-        return bool(np.any(self.warning_pixel_mask[world_min_y:world_max_y, world_left:world_right] > 0.0))
+        centers = self.obstacle_warning_centers_game
+        closest_x = np.clip(centers[:, 0], left, right)
+        closest_y = np.clip(centers[:, 1], top, bottom)
+        dx = centers[:, 0] - closest_x
+        dy = centers[:, 1] - closest_y
+        return bool(np.any((dx * dx) + (dy * dy) <= float(self.OBSTACLE_WARNING_RADIUS) ** 2))
 
     @staticmethod
     def _is_axis_aligned_rect(polygon: Polygon) -> bool:
@@ -613,6 +725,8 @@ class World(pygame.sprite.Sprite):
         if not self.obstacles:
             self.obstacle_bounds = np.empty((0, 4), dtype=np.int32)
             self.obstacle_centers = np.empty((0, 2), dtype=np.float32)
+            self.obstacle_warning_centers_game = np.empty((0, 2), dtype=np.float32)
+            self.obstacle_warning_centers_world = np.empty((0, 2), dtype=np.float32)
             self.obstacle_keys = set()
             self.actual_obstacle_confidences = np.zeros((0,), dtype=np.float32)
             self.last_observed_rect_keys_by_obstacle = []
@@ -623,12 +737,7 @@ class World(pygame.sprite.Sprite):
             self.revealed_warning_obstacles = np.zeros((0,), dtype=bool)
             return
 
-        self.obstacle_bounds = np.array(
-            [[rect.left, rect.right, rect.top, rect.bottom] for rect in self.obstacles],
-            dtype=np.int32,
-        )
-        self.obstacle_centers = np.array([rect.center for rect in self.obstacles], dtype=np.float32)
-        self.obstacle_keys = {self._rect_key(rect) for rect in self.obstacles}
+        self._refresh_moved_obstacle_geometry_cache()
         obstacle_count = len(self.obstacles)
         if self.actual_obstacle_confidences.shape[0] != obstacle_count:
             previous = self.actual_obstacle_confidences
@@ -644,6 +753,37 @@ class World(pygame.sprite.Sprite):
                 self.last_observed_rect_keys_by_obstacle[:copy_len] = previous_keys[:copy_len]
         self._sync_obstacle_motion_state(obstacle_count)
         self.revealed_warning_obstacles = np.zeros((len(self.obstacles),), dtype=bool)
+
+    def _refresh_moved_obstacle_geometry_cache(self) -> None:
+        """Refresh only geometry that changes as obstacles move."""
+        if not self.obstacles:
+            self.obstacle_bounds = np.empty((0, 4), dtype=np.int32)
+            self.obstacle_centers = np.empty((0, 2), dtype=np.float32)
+            self.obstacle_warning_centers_game = np.empty((0, 2), dtype=np.float32)
+            self.obstacle_warning_centers_world = np.empty((0, 2), dtype=np.float32)
+            self.obstacle_keys = set()
+            return
+
+        left, top, width, height = self._rect_arrays(self.obstacles)
+        right = left + width
+        bottom = top + height
+        self.obstacle_bounds = np.column_stack((left, right, top, bottom)).astype(np.int32, copy=False)
+        self.obstacle_centers = np.asarray([rect.center for rect in self.obstacles], dtype=np.float32)
+
+        unit_rects = (width == 1) & (height == 1)
+        warning_x = self.obstacle_centers[:, 0].copy()
+        warning_y = self.obstacle_centers[:, 1].copy()
+        warning_x[unit_rects] = left[unit_rects]
+        warning_y[unit_rects] = bottom[unit_rects]
+        self.obstacle_warning_centers_game = np.column_stack((warning_x, warning_y)).astype(
+            np.float32,
+            copy=False,
+        )
+        self.obstacle_warning_centers_world = self.obstacle_warning_centers_game.copy()
+        self.obstacle_warning_centers_world[:, 1] = (
+            float(self.area.height) - self.obstacle_warning_centers_world[:, 1]
+        )
+        self.obstacle_keys = {self._rect_key(rect) for rect in self.obstacles}
 
     def _sync_obstacle_motion_state(self, obstacle_count: int | None = None) -> None:
         """Resize per-obstacle motion state arrays while preserving existing values."""
@@ -994,6 +1134,7 @@ class World(pygame.sprite.Sprite):
         self.detected = set()
         self.detected_count = 0
         self.detected_mask.fill(False)
+        self.detected_search_mask.fill(False)
         self.coverage_counts.fill(0)
         self.coverage_map.fill(0.0)
         self.observation_coverage_map.fill(0.0)
@@ -1055,6 +1196,11 @@ class World(pygame.sprite.Sprite):
 
             new_flat = valid_flat[unseen]
             self.detected_mask_flat[new_flat] = True
+            search_detected = self.search_pixel_mask_flat[new_flat] > 0.0
+            self.detected_search_mask_flat[new_flat[search_detected]] = True
+            new_x = new_flat % self.area.width
+            new_y = new_flat // self.area.width
+            self.detected.update(zip(new_x.tolist(), new_y.tolist()))
             self.detected_count += int(new_flat.size)
             flat_cells = self._flat_pixel_to_coverage_cell[new_flat]
             cell_counts = np.bincount(flat_cells, minlength=self.coverage_grid_size * self.coverage_grid_size)
@@ -1069,8 +1215,6 @@ class World(pygame.sprite.Sprite):
             if not return_new_points:
                 return self.detected_count
 
-            new_x = new_flat % self.area.width
-            new_y = new_flat // self.area.width
             return np.column_stack((new_x, new_y)).astype(np.int32, copy=False)
 
         cell_updates = {}
@@ -1083,6 +1227,8 @@ class World(pygame.sprite.Sprite):
 
             self.detected.add(point)
             self.detected_mask[point[1], point[0]] = True
+            if self.search_pixel_mask[point[1], point[0]]:
+                self.detected_search_mask[point[1], point[0]] = True
             self.detected_count += 1
             grid_x = min(int(point[0] / self.coverage_cell_width), self.coverage_grid_size - 1)
             grid_y = min(int(point[1] / self.coverage_cell_height), self.coverage_grid_size - 1)
@@ -1101,6 +1247,78 @@ class World(pygame.sprite.Sprite):
             self._refresh_padded_observation_maps(touched_flat)
 
         return self.detected_count
+
+    def register_detected_disk(
+        self,
+        center_x: int,
+        center_y: int,
+        radius: int,
+        *,
+        return_new_points: bool = False,
+        counted_sector_mask: np.ndarray | None = None,
+    ):
+        """Merge a circular sensing area directly into coverage masks without a point-list allocation."""
+        center_x = int(center_x)
+        center_y = int(center_y)
+        radius = max(int(radius), 0)
+        disk_mask = self._disk_mask(radius)
+
+        world_x0 = max(center_x - radius, 0)
+        world_x1 = min(center_x + radius + 1, self.area.width)
+        world_y0 = max(center_y - radius, 0)
+        world_y1 = min(center_y + radius + 1, self.area.height)
+        if world_x1 <= world_x0 or world_y1 <= world_y0:
+            if return_new_points:
+                return np.empty((0, 2), dtype=np.int32)
+            return 0
+
+        disk_x0 = world_x0 - (center_x - radius)
+        disk_y0 = world_y0 - (center_y - radius)
+        disk_x1 = disk_x0 + (world_x1 - world_x0)
+        disk_y1 = disk_y0 + (world_y1 - world_y0)
+        visible_disk = disk_mask[disk_y0:disk_y1, disk_x0:disk_x1]
+
+        detected_view = self.detected_mask[world_y0:world_y1, world_x0:world_x1]
+        new_local = visible_disk & ~detected_view
+        new_count = int(np.count_nonzero(new_local))
+        if new_count == 0:
+            if return_new_points:
+                return np.empty((0, 2), dtype=np.int32)
+            return 0
+
+        detected_view[new_local] = True
+        detected_search_view = self.detected_search_mask[world_y0:world_y1, world_x0:world_x1]
+        search_view = self.search_pixel_mask[world_y0:world_y1, world_x0:world_x1] > 0.0
+        detected_search_view[new_local & search_view] = True
+        self.detected_count += new_count
+
+        local_y, local_x = np.nonzero(new_local)
+        world_x = local_x + world_x0
+        world_y = local_y + world_y0
+        flat_cells = (
+            self.pixel_to_grid_y[world_y] * self.coverage_grid_size
+            + self.pixel_to_grid_x[world_x]
+        )
+        cell_counts = np.bincount(
+            flat_cells,
+            minlength=self.coverage_grid_size * self.coverage_grid_size,
+        )
+        touched_flat = np.flatnonzero(cell_counts)
+        self.coverage_counts_flat[touched_flat] += cell_counts[touched_flat]
+        self.coverage_map_flat[touched_flat] = np.minimum(
+            self.coverage_counts_flat[touched_flat] / self.coverage_cell_area,
+            1.0,
+        )
+        self._refresh_padded_observation_maps(touched_flat)
+
+        if not return_new_points:
+            if counted_sector_mask is None:
+                return new_count
+            counted_sector_mask_flat = np.asarray(counted_sector_mask, dtype=bool).reshape(-1)
+            if counted_sector_mask_flat.size != self.coverage_grid_size * self.coverage_grid_size:
+                raise ValueError("counted_sector_mask must match the coverage grid shape")
+            return int(np.count_nonzero(counted_sector_mask_flat[flat_cells]))
+        return np.column_stack((world_x, world_y)).astype(np.int32, copy=False)
 
     def clear_obstacles(self):
         """Remove all obstacles from the world."""
@@ -1423,7 +1641,7 @@ class World(pygame.sprite.Sprite):
         self.obstacle_move_speeds = next_speeds
         self.obstacle_speed_steps_remaining = next_speed_steps_remaining
         if moved:
-            self._rebuild_obstacle_map()
+            self._refresh_moved_obstacle_geometry_cache()
         return moved
 
     def _move_unit_obstacles_one_step(self) -> bool:
@@ -1528,7 +1746,7 @@ class World(pygame.sprite.Sprite):
         self.obstacle_move_speeds = next_speeds
         self.obstacle_speed_steps_remaining = next_speed_steps_remaining
         if moved:
-            self._rebuild_obstacle_map()
+            self._refresh_moved_obstacle_geometry_cache()
         return moved
 
     def update(self, area):

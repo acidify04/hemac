@@ -43,16 +43,13 @@ GOAL_CONFIG = {
     "speed": 0,
     "spawn_mode": "random",
     "boundary_margin": 140,
-    "spawn_quadrant": "bottom_right",
+    "spawn_quadrant": ["bottom_right", "bottom_left", "top_right"],
 }
 
-OBSERVER_CHECKPOINT_CANDIDATES = [
-    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_15300",
-]
-DRONE_CHECKPOINT_CANDIDATES = [
-    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_15300",
-    PROJECT_ROOT / "src/train/hemac_checkpoints/checkpoint_15300",
-]
+CHECKPOINT_ROOTS = (
+    PROJECT_ROOT / "hemac_checkpoints",
+    PROJECT_ROOT / "src/train/hemac_checkpoints",
+)
 
 NUM_EVAL_SEEDS = 10
 VISUALIZATION_DIR = Path("./visualization")
@@ -68,32 +65,61 @@ OBS_WINDOW_PADDING = 12
 OBS_WINDOW_HEADER_HEIGHT = 42
 
 
-def find_latest_checkpoint():
-    """Return the newest available checkpoint directory."""
-    candidate_roots = [
-        Path("./hemac_checkpoints"),
-        Path("./src/train/hemac_checkpoints"),
-    ]
+def find_complete_checkpoints(required_policy_ids=("observer_policy", "drone_policy")):
+    """Return complete checkpoints and their creation timestamps."""
     checkpoints = []
-    for root in candidate_roots:
+    for root in CHECKPOINT_ROOTS:
         if not root.exists():
             continue
-        checkpoints.extend(path for path in root.iterdir() if path.is_dir() and path.name.startswith("checkpoint_"))
+        for state_path in root.rglob("algorithm_state.pkl"):
+            checkpoint_dir = state_path.parent
+            if not checkpoint_dir.name.startswith("checkpoint_"):
+                continue
+            if all(
+                (checkpoint_dir / "policies" / policy_id / "policy_state.pkl").is_file()
+                for policy_id in required_policy_ids
+            ):
+                checkpoints.append((state_path.stat().st_mtime_ns, checkpoint_dir))
 
     if not checkpoints:
-        raise FileNotFoundError("No checkpoint_* directory found in ./hemac_checkpoints or ./src/train/hemac_checkpoints")
+        roots = ", ".join(str(root) for root in CHECKPOINT_ROOTS)
+        raise FileNotFoundError(
+            f"No complete checkpoint containing {required_policy_ids} found under: {roots}"
+        )
 
-    return max(checkpoints, key=lambda path: path.stat().st_mtime)
+    return checkpoints
 
 
-def resolve_checkpoint_path(candidates, label):
-    """Return the first existing checkpoint directory from the candidate list."""
-    for candidate in candidates:
-        if candidate.is_dir():
-            return candidate.resolve()
+def find_latest_checkpoint(required_policy_ids=("observer_policy", "drone_policy")):
+    """Return the newest complete checkpoint found below the checkpoint roots."""
+    checkpoints = find_complete_checkpoints(required_policy_ids)
 
-    candidate_text = ", ".join(str(path) for path in candidates)
-    raise FileNotFoundError(f"No {label} checkpoint found. Checked: {candidate_text}")
+    return max(checkpoints, key=lambda item: (item[0], str(item[1])))[1].resolve()
+
+
+def find_checkpoint_by_iteration(
+    iteration,
+    required_policy_ids=("observer_policy", "drone_policy"),
+):
+    """Return the newest complete checkpoint matching one training iteration."""
+    target_iteration = int(iteration)
+    matches = []
+    for created_at, checkpoint_dir in find_complete_checkpoints(required_policy_ids):
+        suffix = checkpoint_dir.name.removeprefix("checkpoint_")
+        try:
+            checkpoint_iteration = int(suffix)
+        except ValueError:
+            continue
+        if checkpoint_iteration == target_iteration:
+            matches.append((created_at, checkpoint_dir))
+
+    if not matches:
+        roots = ", ".join(str(root) for root in CHECKPOINT_ROOTS)
+        raise FileNotFoundError(
+            f"No complete checkpoint found for iteration {target_iteration} under: {roots}"
+        )
+
+    return max(matches, key=lambda item: (item[0], str(item[1])))[1].resolve()
 
 
 def load_policy_weights_from_checkpoint(checkpoint_dir, policy_id):
@@ -159,29 +185,34 @@ def save_gif(frames, eval_seed):
     return gif_path
 
 
-def wait_for_playback(playback_mode, delay_seconds=AUTO_PLAY_DELAY_SECONDS):
-    """Wait according to playback mode and stop on window close/escape."""
+def wait_for_playback(
+    playback_state,
+    delay_seconds=AUTO_PLAY_DELAY_SECONDS,
+    on_mode_change=None,
+):
+    """Wait for the current playback mode while allowing live F1 toggling."""
     window_close_event = getattr(pygame, "WINDOWCLOSE", None)
-    if playback_mode == "auto":
-        end_time = time.time() + delay_seconds
-        while time.time() < end_time:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT or (window_close_event is not None and event.type == window_close_event):
-                    return False
-                if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_q):
-                    return False
-            time.sleep(0.001)
-        return True
-
+    auto_deadline = time.monotonic() + delay_seconds
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (window_close_event is not None and event.type == window_close_event):
                 return False
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE:
-                    return True
                 if event.key in (pygame.K_ESCAPE, pygame.K_q):
                     return False
+                if event.key == pygame.K_F1:
+                    playback_state["mode"] = (
+                        "step" if playback_state["mode"] == "auto" else "auto"
+                    )
+                    print(f"Playback mode: {playback_state['mode']}")
+                    auto_deadline = time.monotonic() + delay_seconds
+                    if on_mode_change is not None:
+                        on_mode_change()
+                elif event.key == pygame.K_SPACE and playback_state["mode"] == "step":
+                    return True
+
+        if playback_state["mode"] == "auto" and time.monotonic() >= auto_deadline:
+            return True
         time.sleep(0.001)
 
 
@@ -554,9 +585,9 @@ def draw_observation_overlays(agent_debug_state, active_agent, playback_mode, ob
     help_bg.fill((8, 12, 16, 190))
     canvas.blit(help_bg, (OBS_WINDOW_PADDING, 8))
     if playback_mode == "auto":
-        help_label = "Auto playback | Esc/Q: quit"
+        help_label = "Auto playback | F1: step mode | Esc/Q: quit"
     else:
-        help_label = "Space: next step (all agents) | Esc/Q: quit"
+        help_label = "Step playback | Space: next step | F1: auto mode | Esc/Q: quit"
     help_text = help_font.render(help_label, True, (240, 248, 255))
     canvas.blit(help_text, (OBS_WINDOW_PADDING + 8, 14))
 
@@ -570,7 +601,7 @@ def draw_observation_overlays(agent_debug_state, active_agent, playback_mode, ob
     pygame.display.flip()
 
 
-def run_single_episode(env, algo, eval_seed, playback_mode="step", observation_window=None):
+def run_single_episode(env, algo, eval_seed, playback_state, observation_window=None):
     """Run one evaluation episode and return the final info."""
     env.reset(seed=eval_seed)
 
@@ -614,21 +645,25 @@ def run_single_episode(env, algo, eval_seed, playback_mode="step", observation_w
             if isinstance(truncations, dict):
                 state["truncation"] = truncations.get(agent_id, state["truncation"])
 
-    def render_step_state():
+    def render_step_state(capture_frame=True):
         env.render()
         draw_observation_overlays(
             agent_debug_state,
             getattr(env, "agent_selection", None),
-            playback_mode,
+            playback_state["mode"],
             observation_window=observation_window,
         )
-        frame = capture_pygame_frame()
-        if frame is not None:
-            frames.append(frame)
+        if capture_frame:
+            frame = capture_pygame_frame()
+            if frame is not None:
+                frames.append(frame)
 
     refresh_agent_debug_state()
     render_step_state()
-    if not wait_for_playback(playback_mode):
+    if not wait_for_playback(
+        playback_state,
+        on_mode_change=lambda: render_step_state(capture_frame=False),
+    ):
         gif_path = save_gif(frames, eval_seed)
         if gif_path is not None:
             print(f"Saved GIF: {gif_path}")
@@ -669,7 +704,10 @@ def run_single_episode(env, algo, eval_seed, playback_mode="step", observation_w
                 agent_debug_state[agent_id]["termination"] or agent_debug_state[agent_id]["truncation"]
                 for agent_id in possible_agents
             )
-            if not episode_done and not wait_for_playback(playback_mode):
+            if not episode_done and not wait_for_playback(
+                playback_state,
+                on_mode_change=lambda: render_step_state(capture_frame=False),
+            ):
                 break
 
     print(f"Episode finished after {total_agent_turns} agent turns.")
@@ -695,7 +733,7 @@ def run_single_episode(env, algo, eval_seed, playback_mode="step", observation_w
     return last_info
 
 
-def run_trained_model_simulation(playback_mode="step"):
+def run_trained_model_simulation(playback_mode="step", checkpoint_iteration=None):
     # 1. Ray 및 가상환경 내 초기화
     ray.init(ignore_reinit_error=True)
     register_hemac_rllib_models()
@@ -708,7 +746,7 @@ def run_trained_model_simulation(playback_mode="step"):
             "n_drones": 3,
             "n_provisioners": 0,
             "known_goals": False,
-            "max_cycles": 400,
+            "max_cycles": 300,
             "drone_config": {
                 "drone_max_speed": 25,
                 "drone_max_thrust": 8,
@@ -717,6 +755,7 @@ def run_trained_model_simulation(playback_mode="step"):
             "min_obstacles": 3,
             "max_obstacles": 4,
             "poi_config": [GOAL_CONFIG],
+            "log_step_rewards": True
         }
         env = HeMAC_v0.env(**train_env_config)
         return PettingZooEnv(env)
@@ -724,22 +763,18 @@ def run_trained_model_simulation(playback_mode="step"):
     # 학습 때 사용했던 정확히 그 이름으로 등록합니다.
     register_env("hemac_asymmetric_env", env_creator)
 
-    # 2. 정책별 체크포인트를 따로 로드합니다.
-    observer_checkpoint_path = resolve_checkpoint_path(
-        OBSERVER_CHECKPOINT_CANDIDATES,
-        "observer",
-    )
-    drone_checkpoint_path = resolve_checkpoint_path(
-        DRONE_CHECKPOINT_CANDIDATES,
-        "drone",
-    )
-
-    print(f"[{drone_checkpoint_path}] 경로에서 base 알고리즘을 불러오는 중...")
-    algo = Algorithm.from_checkpoint(str(drone_checkpoint_path))
-    restore_policy_from_checkpoint(algo, "observer_policy", observer_checkpoint_path)
-    restore_policy_from_checkpoint(algo, "drone_policy", drone_checkpoint_path)
-    print(f"[observer_policy] <- {observer_checkpoint_path}")
-    print(f"[drone_policy] <- {drone_checkpoint_path}")
+    # 2. 두 정책이 모두 저장된 가장 최근 체크포인트를 로드합니다.
+    if checkpoint_iteration is None:
+        checkpoint_path = find_latest_checkpoint()
+        print(f"가장 최근 체크포인트를 불러오는 중: {checkpoint_path}")
+    else:
+        checkpoint_path = find_checkpoint_by_iteration(checkpoint_iteration)
+        print(f"Iteration {checkpoint_iteration} 체크포인트를 불러오는 중: {checkpoint_path}")
+    algo = Algorithm.from_checkpoint(str(checkpoint_path))
+    restore_policy_from_checkpoint(algo, "observer_policy", checkpoint_path)
+    restore_policy_from_checkpoint(algo, "drone_policy", checkpoint_path)
+    print(f"[observer_policy] <- {checkpoint_path}")
+    print(f"[drone_policy] <- {checkpoint_path}")
 
     # 3. 평가용 비대칭 환경 구성 (학습 때 사용한 스펙과 완벽히 동일해야 합니다)
     env_config = {
@@ -751,7 +786,7 @@ def run_trained_model_simulation(playback_mode="step"):
         "n_drones": 3,
         "n_provisioners": 0,
         "known_goals": False,
-        "max_cycles": 400,
+        "max_cycles": 300,
         "drone_config": {
             "drone_max_speed": 25,
             "drone_max_thrust": 8,
@@ -762,7 +797,8 @@ def run_trained_model_simulation(playback_mode="step"):
         "min_obstacles": 5,
         "max_obstacles": 6,
         "poi_config": [GOAL_CONFIG],
-        
+        "log_step_rewards": True,
+
         # [핵심] 화면 시각화 활성화
         "render_mode": "human" 
     }
@@ -770,7 +806,8 @@ def run_trained_model_simulation(playback_mode="step"):
     # 환경 생성
     env = HeMAC_v0.env(**env_config)
     observation_window = ObservationDebugWindow()
-    print(f"시뮬레이션을 시작합니다. 재생 모드: {playback_mode}")
+    playback_state = {"mode": playback_mode}
+    print(f"시뮬레이션을 시작합니다. 재생 모드: {playback_state['mode']} (F1로 전환)")
 
     seed_base = random.randint(0, 9999)
     eval_seeds = [seed_base + offset for offset in range(NUM_EVAL_SEEDS)]
@@ -783,7 +820,7 @@ def run_trained_model_simulation(playback_mode="step"):
             env,
             algo,
             eval_seed,
-            playback_mode=playback_mode,
+            playback_state=playback_state,
             observation_window=observation_window,
         )
         results.append(last_info)
@@ -814,9 +851,19 @@ def parse_args():
         default="step",
         help="Visualization playback mode.",
     )
+    parser.add_argument(
+        "--checkpoint",
+        type=int,
+        default=None,
+        metavar="ITERATION",
+        help="Load checkpoint_ITERATION. If omitted, load the newest checkpoint.",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    run_trained_model_simulation(playback_mode=args.playback)
+    run_trained_model_simulation(
+        playback_mode=args.playback,
+        checkpoint_iteration=args.checkpoint,
+    )
