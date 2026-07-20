@@ -18,6 +18,7 @@ from ray.tune.registry import register_env
 from ray.rllib.env.wrappers.pettingzoo_env import PettingZooEnv
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
+from ray.rllib.utils.checkpoints import get_checkpoint_info
 from ray.rllib.utils.schedules import PiecewiseSchedule
 import wandb
 from PIL import Image
@@ -95,8 +96,14 @@ OBSTACLE_CURRICULUM_LEVELS = [
     },
     {
         "min_obstacles": 3,
-        "max_obstacles": 5,
+        "max_obstacles": 4,
         "obstacle_min_speed": 1,
+        "obstacle_max_speed": 3,
+    },
+    {
+        "min_obstacles": 4,
+        "max_obstacles": 5,
+        "obstacle_min_speed": 2,
         "obstacle_max_speed": 3,
     },
     {
@@ -106,7 +113,19 @@ OBSTACLE_CURRICULUM_LEVELS = [
         "obstacle_max_speed": 5,
     },
     {
+        "min_obstacles": 6,
+        "max_obstacles": 8,
+        "obstacle_min_speed": 2,
+        "obstacle_max_speed": 6,
+    },
+    {
         "min_obstacles": 7,
+        "max_obstacles": 9,
+        "obstacle_min_speed": 3,
+        "obstacle_max_speed": 7,
+    },
+    {
+        "min_obstacles": 8,
         "max_obstacles": 10,
         "obstacle_min_speed": 3,
         "obstacle_max_speed": 7,
@@ -865,22 +884,20 @@ def restore_algorithm_with_sampling_config(checkpoint_dir, args):
     if not state_path.is_file():
         raise FileNotFoundError(f"Algorithm state not found: {state_path}")
 
-    with state_path.open("rb") as file_obj:
-        state = pickle.load(file_obj)
-
+    checkpoint_info = get_checkpoint_info(str(Path(checkpoint_dir).resolve()))
+    state = Algorithm._checkpoint_info_to_algorithm_state(
+        checkpoint_info=checkpoint_info,
+    )
     checkpoint_config = state.get("config")
-    if not isinstance(checkpoint_config, dict):
+    if checkpoint_config is None or not hasattr(checkpoint_config, "env_runners"):
         raise TypeError(f"Checkpoint does not contain a valid config: {state_path}")
 
-    restored_config = dict(checkpoint_config)
-    restored_config.update(
-        {
-            "num_env_runners": int(args.num_env_runners),
-            "rollout_fragment_length": int(args.rollout_fragment_length),
-            "sample_timeout_s": float(args.sample_timeout_s),
-        }
+    checkpoint_config.env_runners(
+        num_env_runners=int(args.num_env_runners),
+        rollout_fragment_length=int(args.rollout_fragment_length),
+        sample_timeout_s=float(args.sample_timeout_s),
     )
-    state["config"] = restored_config
+    state["config"] = checkpoint_config
     return Algorithm.from_state(state)
 
 

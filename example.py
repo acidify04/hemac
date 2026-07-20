@@ -795,7 +795,9 @@ def run_trained_model_simulation(playback_mode="step", checkpoint_iteration=None
         
         # 맵 및 목적지 설정
         "min_obstacles": 5,
-        "max_obstacles": 6,
+        "max_obstacles": 7,
+        "obstacle_min_speed": 2,
+        "obstacle_max_speed": 5,
         "poi_config": [GOAL_CONFIG],
         "log_step_rewards": True,
 
