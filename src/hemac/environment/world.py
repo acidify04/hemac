@@ -21,13 +21,26 @@ class World(pygame.sprite.Sprite):
 
     BASE_OBSTACLE_CLEARANCE = 150
     OBSTACLE_WARNING_RADIUS = 60
-    OBSTACLE_MOVE_DELTAS = ((1, 0), (-1, 0), (0, 1), (0, -1))
+    OBSTACLE_SENSING_RANGE = 150
+    OBSTACLE_GOAL_AVOID_TRIGGER_RADIUS = 120
+    OBSTACLE_GOAL_AVOID_RELEASE_RADIUS = 200
+    OBSTACLE_MOVE_DELTAS = (
+        (1, 0),
+        (-1, 0),
+        (0, 1),
+        (0, -1),
+        (1, 1),
+        (1, -1),
+        (-1, 1),
+        (-1, -1),
+    )
     OBSTACLE_DIRECTION_HOLD_STEPS = 50
     OBSTACLE_SPEED_HOLD_STEPS = 50
     OBSTACLE_MIN_SPEED = 3
     OBSTACLE_MAX_SPEED = 7
     OBSTACLE_WARNING_FILL = (255, 80, 80, 55)
     OBSTACLE_WARNING_OUTLINE = (255, 120, 120, 150)
+    OBSTACLE_SENSING_OUTLINE = (255, 205, 80, 130)
     OBSERVED_OBSTACLE_DECAY = 0.9
 
     def __init__(
@@ -48,6 +61,8 @@ class World(pygame.sprite.Sprite):
         )
         self.spawn_max_tries = 10000
         self.obstacles = []
+        self.obstacle_is_static = np.zeros((0,), dtype=bool)
+        self.goals = []
         self.base = pygame.Rect(0, 0, 100, 100)
         self.search_area = search_area
         self.search_bounds = tuple(float(v) for v in self.search_area.bounds)
@@ -174,6 +189,8 @@ class World(pygame.sprite.Sprite):
         self.obstacle_move_steps_remaining = np.zeros((0,), dtype=np.int32)
         self.obstacle_move_speeds = np.zeros((0,), dtype=np.int16)
         self.obstacle_speed_steps_remaining = np.zeros((0,), dtype=np.int32)
+        self.obstacle_avoiding_goal = np.zeros((0,), dtype=bool)
+        self.obstacle_chase_origins_game = np.empty((0, 2), dtype=np.float32)
         self._last_obstacle_confidence_decay_timestep = -1
         self.observed_obstacle_confidences = {}
         self.last_observed_rect_keys_by_obstacle = []
@@ -734,6 +751,9 @@ class World(pygame.sprite.Sprite):
             self.obstacle_move_steps_remaining = np.zeros((0,), dtype=np.int32)
             self.obstacle_move_speeds = np.zeros((0,), dtype=np.int16)
             self.obstacle_speed_steps_remaining = np.zeros((0,), dtype=np.int32)
+            self.obstacle_avoiding_goal = np.zeros((0,), dtype=bool)
+            self.obstacle_chase_origins_game = np.empty((0, 2), dtype=np.float32)
+            self.obstacle_is_static = np.zeros((0,), dtype=bool)
             self.revealed_warning_obstacles = np.zeros((0,), dtype=bool)
             return
 
@@ -751,6 +771,12 @@ class World(pygame.sprite.Sprite):
             copy_len = min(len(previous_keys), obstacle_count)
             if copy_len > 0:
                 self.last_observed_rect_keys_by_obstacle[:copy_len] = previous_keys[:copy_len]
+        if self.obstacle_is_static.shape[0] != obstacle_count:
+            previous_static = self.obstacle_is_static
+            self.obstacle_is_static = np.zeros((obstacle_count,), dtype=bool)
+            static_copy_len = min(previous_static.shape[0], obstacle_count)
+            if static_copy_len > 0:
+                self.obstacle_is_static[:static_copy_len] = previous_static[:static_copy_len]
         self._sync_obstacle_motion_state(obstacle_count)
         self.revealed_warning_obstacles = np.zeros((len(self.obstacles),), dtype=bool)
 
@@ -796,11 +822,15 @@ class World(pygame.sprite.Sprite):
             self.obstacle_move_steps_remaining = np.zeros((0,), dtype=np.int32)
             self.obstacle_move_speeds = np.zeros((0,), dtype=np.int16)
             self.obstacle_speed_steps_remaining = np.zeros((0,), dtype=np.int32)
+            self.obstacle_avoiding_goal = np.zeros((0,), dtype=bool)
+            self.obstacle_chase_origins_game = np.empty((0, 2), dtype=np.float32)
             return
 
         if (
             self.obstacle_move_direction_indices.shape[0] == obstacle_count
             and self.obstacle_move_speeds.shape[0] == obstacle_count
+            and self.obstacle_avoiding_goal.shape[0] == obstacle_count
+            and self.obstacle_chase_origins_game.shape == (obstacle_count, 2)
         ):
             return
 
@@ -808,10 +838,18 @@ class World(pygame.sprite.Sprite):
         previous_steps = self.obstacle_move_steps_remaining
         previous_speeds = self.obstacle_move_speeds
         previous_speed_steps = self.obstacle_speed_steps_remaining
+        previous_goal_avoidance = self.obstacle_avoiding_goal
+        previous_chase_origins = self.obstacle_chase_origins_game
         self.obstacle_move_direction_indices = np.full((obstacle_count,), -1, dtype=np.int8)
         self.obstacle_move_steps_remaining = np.zeros((obstacle_count,), dtype=np.int32)
         self.obstacle_move_speeds = np.zeros((obstacle_count,), dtype=np.int16)
         self.obstacle_speed_steps_remaining = np.zeros((obstacle_count,), dtype=np.int32)
+        self.obstacle_avoiding_goal = np.zeros((obstacle_count,), dtype=bool)
+        self.obstacle_chase_origins_game = np.full(
+            (obstacle_count, 2),
+            np.nan,
+            dtype=np.float32,
+        )
         copy_len = min(previous_directions.shape[0], obstacle_count)
         if copy_len > 0:
             self.obstacle_move_direction_indices[:copy_len] = previous_directions[:copy_len]
@@ -820,12 +858,154 @@ class World(pygame.sprite.Sprite):
         if speed_copy_len > 0:
             self.obstacle_move_speeds[:speed_copy_len] = previous_speeds[:speed_copy_len]
             self.obstacle_speed_steps_remaining[:speed_copy_len] = previous_speed_steps[:speed_copy_len]
+        avoidance_copy_len = min(previous_goal_avoidance.shape[0], obstacle_count)
+        if avoidance_copy_len > 0:
+            self.obstacle_avoiding_goal[:avoidance_copy_len] = previous_goal_avoidance[:avoidance_copy_len]
+        origin_copy_len = min(previous_chase_origins.shape[0], obstacle_count)
+        if origin_copy_len > 0:
+            self.obstacle_chase_origins_game[:origin_copy_len] = previous_chase_origins[:origin_copy_len]
 
     def _sample_obstacle_speed(self) -> int:
         """Sample a random obstacle speed in cells per world step."""
         min_speed = max(int(self.obstacle_min_speed), 1)
         max_speed = max(int(self.obstacle_max_speed), min_speed)
         return int(self.randomizer.integers(min_speed, max_speed + 1))
+
+    def _obstacle_behavior_targets(self, agents=None):
+        """Return vectorized behavior modes, targets, and chase speed caps."""
+        obstacle_count = len(self.obstacles)
+        modes = np.zeros((obstacle_count,), dtype=np.int8)
+        targets = np.zeros((obstacle_count, 2), dtype=np.float32)
+        speed_caps = np.full((obstacle_count,), self.obstacle_max_speed, dtype=np.int16)
+        if obstacle_count == 0:
+            return modes, targets, speed_caps
+
+        centers = self.obstacle_warning_centers_game
+        goal_rects = self._goal_rects()
+        if goal_rects:
+            goal_centers = np.asarray([goal.center for goal in goal_rects], dtype=np.float32)
+            goal_offsets = centers[:, None, :] - goal_centers[None, :, :]
+            goal_distance_sq = np.einsum("ijk,ijk->ij", goal_offsets, goal_offsets)
+            nearest_goal_indices = np.argmin(goal_distance_sq, axis=1)
+            nearest_goal_distance = np.sqrt(
+                goal_distance_sq[np.arange(obstacle_count), nearest_goal_indices]
+            )
+            was_avoiding_goal = self.obstacle_avoiding_goal.copy()
+            avoiding_goal = (
+                nearest_goal_distance < float(self.OBSTACLE_GOAL_AVOID_TRIGGER_RADIUS)
+            ) | (
+                was_avoiding_goal
+                & (nearest_goal_distance < float(self.OBSTACLE_GOAL_AVOID_RELEASE_RADIUS))
+            )
+            avoiding_goal &= ~self.obstacle_is_static
+            just_released = (
+                was_avoiding_goal
+                & ~avoiding_goal
+                & ~self.obstacle_is_static
+            )
+            self.obstacle_avoiding_goal[:] = avoiding_goal
+            modes[avoiding_goal] = 2
+            targets[avoiding_goal] = goal_centers[nearest_goal_indices[avoiding_goal]]
+            modes[just_released] = 3
+        else:
+            self.obstacle_avoiding_goal.fill(False)
+
+        trackable_agents = [
+            agent
+            for agent in (agents or [])
+            if agent.__class__.__name__ in {"Drone", "Observer"}
+        ]
+        chase_candidates = (modes == 0) & ~self.obstacle_is_static
+        chasing = np.zeros((obstacle_count,), dtype=bool)
+        if trackable_agents and np.any(chase_candidates):
+            agent_positions = np.asarray(
+                [world_ref_to_game_ref((agent.x, agent.y), self.area) for agent in trackable_agents],
+                dtype=np.float32,
+            )
+            agent_offsets = centers[:, None, :] - agent_positions[None, :, :]
+            agent_distance_sq = np.einsum("ijk,ijk->ij", agent_offsets, agent_offsets)
+            nearest_agent_indices = np.argmin(agent_distance_sq, axis=1)
+            nearest_agent_distance_sq = agent_distance_sq[
+                np.arange(obstacle_count), nearest_agent_indices
+            ]
+            chasing = chase_candidates & (
+                nearest_agent_distance_sq <= float(self.OBSTACLE_SENSING_RANGE) ** 2
+            )
+            modes[chasing] = 1
+            targets[chasing] = agent_positions[nearest_agent_indices[chasing]]
+            has_chase_origin = np.all(np.isfinite(self.obstacle_chase_origins_game), axis=1)
+            starting_chase = chasing & ~has_chase_origin
+            self.obstacle_chase_origins_game[starting_chase] = centers[starting_chase]
+            for obstacle_idx in np.flatnonzero(chasing):
+                target_agent = trackable_agents[int(nearest_agent_indices[obstacle_idx])]
+                target_max_speed = max(float(getattr(target_agent, "max_speed", 0.0)), 0.0)
+                speed_caps[obstacle_idx] = max(
+                    int(np.floor((target_max_speed - 1e-6) / np.sqrt(2.0))),
+                    0,
+                )
+
+        has_chase_origin = np.all(np.isfinite(self.obstacle_chase_origins_game), axis=1)
+        if np.any(has_chase_origin):
+            origin_offsets = centers - self.obstacle_chase_origins_game
+            at_origin = has_chase_origin & (modes == 0) & (
+                np.einsum("ij,ij->i", origin_offsets, origin_offsets) <= 0.25
+            )
+            self.obstacle_chase_origins_game[at_origin] = np.nan
+            has_chase_origin[at_origin] = False
+            returning = (modes == 0) & has_chase_origin & ~self.obstacle_is_static
+            modes[returning] = 4
+            targets[returning] = self.obstacle_chase_origins_game[returning]
+
+        return modes, targets, speed_caps
+
+    def _behavior_direction_indices(
+        self,
+        current_x: float,
+        current_y: float,
+        mode: int,
+        target: np.ndarray,
+    ) -> list[int]:
+        """Rank eight-way directions for chase, avoidance, or return behavior."""
+        deltas = np.asarray(self.OBSTACLE_MOVE_DELTAS, dtype=np.float32)
+        candidate_positions = deltas + np.array((current_x, current_y), dtype=np.float32)
+        offsets = candidate_positions - np.asarray(target, dtype=np.float32)
+        distance_sq = np.einsum("ij,ij->i", offsets, offsets)
+        if mode in (1, 4):
+            return np.argsort(distance_sq).astype(np.int32).tolist()
+        if mode == 2:
+            return np.argsort(-distance_sq).astype(np.int32).tolist()
+        return []
+
+    @staticmethod
+    def _return_step_limit(
+        current_x: float,
+        current_y: float,
+        target: np.ndarray,
+        dx: int,
+        dy: int,
+        chosen_speed: int,
+    ) -> int:
+        """Limit a return move so it cannot pass its saved origin."""
+        limits = []
+        target_x, target_y = float(target[0]), float(target[1])
+        if dx != 0 and np.sign(target_x - current_x) == dx:
+            limits.append(int(abs(target_x - current_x)))
+        if dy != 0 and np.sign(target_y - current_y) == dy:
+            limits.append(int(abs(target_y - current_y)))
+        if not limits:
+            return min(max(int(chosen_speed), 1), 1)
+        return max(min(int(chosen_speed), min(limits)), 1)
+
+    def _clear_completed_chase_returns(self) -> None:
+        """Clear saved origins after obstacles return to their pre-chase positions."""
+        if not self.obstacles or self.obstacle_chase_origins_game.shape[0] != len(self.obstacles):
+            return
+        has_origin = np.all(np.isfinite(self.obstacle_chase_origins_game), axis=1)
+        if not np.any(has_origin):
+            return
+        offsets = self.obstacle_warning_centers_game - self.obstacle_chase_origins_game
+        arrived = has_origin & (np.einsum("ij,ij->i", offsets, offsets) <= 0.25)
+        self.obstacle_chase_origins_game[arrived] = np.nan
 
     def set_obstacle_speed_range(self, min_speed: int, max_speed: int) -> None:
         """Update the obstacle speed sampling range."""
@@ -838,6 +1018,9 @@ class World(pygame.sprite.Sprite):
                 self.obstacle_max_speed,
                 out=self.obstacle_move_speeds,
             )
+            if self.obstacle_is_static.shape == self.obstacle_move_speeds.shape:
+                self.obstacle_move_speeds[self.obstacle_is_static] = 0
+                self.obstacle_speed_steps_remaining[self.obstacle_is_static] = 0
 
     @staticmethod
     def _rect_key(rect: pygame.Rect) -> tuple[int, int, int, int]:
@@ -1128,6 +1311,7 @@ class World(pygame.sprite.Sprite):
     def reset(self, poi_list, seed=None, options=None):
         """Reset world."""
         self.timestep = 0
+        self.goals = list(poi_list or [])
         self.observer_communication = [0.0, 0.0]
         self.goal_known = False
         self.goal_position = (poi_list[0].x, poi_list[0].y) if poi_list else None
@@ -1323,6 +1507,7 @@ class World(pygame.sprite.Sprite):
     def clear_obstacles(self):
         """Remove all obstacles from the world."""
         self.obstacles.clear()  # Clear the list of obstacles
+        self.obstacle_is_static = np.zeros((0,), dtype=bool)
         self.obstacle_map.fill(0.0)
         self.explored_obstacle_map.fill(0.0)
         self.warning_range_map.fill(0.0)
@@ -1379,6 +1564,63 @@ class World(pygame.sprite.Sprite):
             world_max_y = max(world_top, world_bottom)
             return minx <= world_min_x and world_max_x <= maxx and miny <= world_min_y and world_max_y <= maxy
         return bool(self.prepared_search_area.covers(self._rect_to_world_polygon(rect)))
+
+    def _second_quadrant_game_rect(self) -> pygame.Rect:
+        """Return the base-side second quadrant in game coordinates."""
+        min_x, min_y, max_x, max_y = self.search_bounds
+        mid_x = (min_x + max_x) / 2.0
+        mid_y = (min_y + max_y) / 2.0
+        top_left = world_ref_to_game_ref((min_x, max_y), self.area)
+        bottom_right = world_ref_to_game_ref((mid_x, mid_y), self.area)
+        left = int(np.floor(min(top_left[0], bottom_right[0])))
+        top = int(np.floor(min(top_left[1], bottom_right[1])))
+        right = int(np.ceil(max(top_left[0], bottom_right[0])))
+        bottom = int(np.ceil(max(top_left[1], bottom_right[1])))
+        return pygame.Rect(left, top, max(right - left, 1), max(bottom - top, 1))
+
+    @staticmethod
+    def _warning_center_for_rect(rect: pygame.Rect) -> tuple[float, float]:
+        """Return the game-space warning center used by the obstacle cache."""
+        if rect.width == 1 and rect.height == 1:
+            return float(rect.left), float(rect.bottom)
+        return float(rect.centerx), float(rect.centery)
+
+    @staticmethod
+    def _point_to_rect_distance(x: float, y: float, rect: pygame.Rect) -> float:
+        """Return the minimum distance between a point and a rectangle."""
+        dx = max(float(rect.left) - x, x - float(rect.right), 0.0)
+        dy = max(float(rect.top) - y, y - float(rect.bottom), 0.0)
+        return float(np.hypot(dx, dy))
+
+    def _warning_zone_overlaps_rect(self, obstacle: pygame.Rect, target: pygame.Rect) -> bool:
+        """Return True when an obstacle warning circle overlaps a target rect."""
+        center_x, center_y = self._warning_center_for_rect(obstacle)
+        return self._point_to_rect_distance(center_x, center_y, target) <= float(
+            self.OBSTACLE_WARNING_RADIUS
+        )
+
+    def _goal_rects(self) -> list[pygame.Rect]:
+        """Return current goal rectangles tracked by this world."""
+        return [goal.rect for goal in self.goals if getattr(goal, "rect", None) is not None]
+
+    def _obstacle_position_is_allowed(
+        self,
+        obstacle: pygame.Rect,
+        extra_avoid_rects=None,
+    ) -> bool:
+        """Validate search bounds, the base quadrant, and goal warning clearance."""
+        if not self._rect_within_search_area(obstacle):
+            return False
+        if self._warning_zone_overlaps_rect(obstacle, self._second_quadrant_game_rect()):
+            return False
+
+        avoid_rects = self._goal_rects()
+        if extra_avoid_rects:
+            avoid_rects.extend(rect for rect in extra_avoid_rects if rect is not None)
+        return not any(
+            self._warning_zone_overlaps_rect(obstacle, target)
+            for target in avoid_rects
+        )
 
     def _rebuild_obstacle_map(self) -> None:
         """Refresh the obstacle occupancy grid used by agent observations."""
@@ -1461,10 +1703,14 @@ class World(pygame.sprite.Sprite):
         self._refresh_obstacle_cache()
         self._refresh_padded_observation_maps()
 
-    def generate_obstacles(self, n_obstacles, avoid_rects=None):
-        """Generate random obstacles."""
+    def generate_obstacles(self, n_obstacles, avoid_rects=None, n_static_obstacles=0):
+        """Generate moving obstacles followed by static obstacles."""
+        n_obstacles = max(int(n_obstacles), 0)
+        n_static_obstacles = max(int(n_static_obstacles), 0)
+        total_obstacles = n_obstacles + n_static_obstacles
         blocked_rects = [rect for rect in (avoid_rects or []) if rect is not None]
-        for i in range(n_obstacles):
+        static_flags = []
+        for obstacle_idx in range(total_obstacles):
             # w, h = self.randomizer.integers(10, 150), self.randomizer.integers(10, 150)
             w, h = 1, 1
             obstacle = pygame.Rect(0, 0, w, h)
@@ -1483,12 +1729,14 @@ class World(pygame.sprite.Sprite):
                     if road_collision:
                         break
                 base_clearance_ok = self._rect_distance(obstacle, self.base) > self.BASE_OBSTACLE_CLEARANCE
-                inside_search_area = self._rect_within_search_area(obstacle)
-                overlaps_blocked_rect = any(obstacle.colliderect(blocked_rect) for blocked_rect in blocked_rects)
-                if base_clearance_ok and not road_collision and inside_search_area and not overlaps_blocked_rect:
+                overlaps_obstacle = any(obstacle.colliderect(existing) for existing in self.obstacles)
+                position_allowed = self._obstacle_position_is_allowed(obstacle, blocked_rects)
+                if base_clearance_ok and not road_collision and not overlaps_obstacle and position_allowed:
                     valid_coord = True
             if valid_coord:
                 self.obstacles.append(obstacle)
+                static_flags.append(obstacle_idx >= n_obstacles)
+        self.obstacle_is_static = np.asarray(static_flags, dtype=bool)
         self._rebuild_obstacle_map()
 
     def draw(self, screen):
@@ -1518,7 +1766,15 @@ class World(pygame.sprite.Sprite):
         # Obstacles
         confidence_font = pygame.font.SysFont("Trebuchet MS", 14)
         obstacle_warning_overlay = pygame.Surface(self.area.size, pygame.SRCALPHA)
-        for obstacle in self.obstacles:
+        for obstacle_idx, obstacle in enumerate(self.obstacles):
+            if obstacle_idx >= len(self.obstacle_is_static) or not self.obstacle_is_static[obstacle_idx]:
+                pygame.draw.circle(
+                    obstacle_warning_overlay,
+                    self.OBSTACLE_SENSING_OUTLINE,
+                    obstacle.center,
+                    self.OBSTACLE_SENSING_RANGE,
+                    width=1,
+                )
             pygame.draw.circle(
                 obstacle_warning_overlay,
                 self.OBSTACLE_WARNING_FILL,
@@ -1545,14 +1801,15 @@ class World(pygame.sprite.Sprite):
             pygame.draw.rect(screen, (35, 10, 10), background_rect, border_radius=4)
             screen.blit(confidence_text, label_rect)
 
-    def _move_obstacles_one_step(self) -> bool:
+    def _move_obstacles_one_step(self, agents=None) -> bool:
         """Move each obstacle while keeping piecewise-constant direction and speed."""
         if not self.obstacles:
             return False
         if self._all_unit_rects(self.obstacles):
-            return self._move_unit_obstacles_one_step()
+            return self._move_unit_obstacles_one_step(agents)
 
         self._sync_obstacle_motion_state()
+        behavior_modes, behavior_targets, chase_speed_caps = self._obstacle_behavior_targets(agents)
         obstacle_indices = self.randomizer.permutation(len(self.obstacles))
         original_rects = [obstacle.copy() for obstacle in self.obstacles]
         stationary_keys = {self._rect_key(rect) for rect in original_rects}
@@ -1568,6 +1825,21 @@ class World(pygame.sprite.Sprite):
             idx = int(obstacle_idx)
             current_rect = original_rects[idx]
             current_key = self._rect_key(current_rect)
+            if self.obstacle_is_static[idx]:
+                next_direction_indices[idx] = -1
+                next_steps_remaining[idx] = 0
+                next_speeds[idx] = 0
+                next_speed_steps_remaining[idx] = 0
+                continue
+            behavior_mode = int(behavior_modes[idx])
+            if behavior_mode == 3 or (
+                behavior_mode == 1 and int(chase_speed_caps[idx]) <= 0
+            ):
+                next_direction_indices[idx] = -1
+                next_steps_remaining[idx] = 0
+                next_speeds[idx] = 0
+                next_speed_steps_remaining[idx] = 0
+                continue
             stationary_keys.discard(current_key)
 
             chosen_rect = current_rect.copy()
@@ -1583,31 +1855,49 @@ class World(pygame.sprite.Sprite):
             else:
                 chosen_speed = self._sample_obstacle_speed()
                 chosen_speed_steps_remaining = self.OBSTACLE_SPEED_HOLD_STEPS - 1
+            if behavior_mode == 1:
+                chosen_speed = min(chosen_speed, int(chase_speed_caps[idx]))
 
-            candidate_direction_indices = []
-            if 0 <= current_direction_idx < len(self.OBSTACLE_MOVE_DELTAS) and current_steps_remaining > 0:
-                candidate_direction_indices.append(current_direction_idx)
+            candidate_direction_indices = self._behavior_direction_indices(
+                current_rect.centerx,
+                current_rect.centery,
+                behavior_mode,
+                behavior_targets[idx],
+            )
+            if behavior_mode == 0:
+                if 0 <= current_direction_idx < len(self.OBSTACLE_MOVE_DELTAS) and current_steps_remaining > 0:
+                    candidate_direction_indices.append(current_direction_idx)
 
-            for random_direction_idx in self.randomizer.permutation(len(self.OBSTACLE_MOVE_DELTAS)):
-                direction_idx = int(random_direction_idx)
-                if direction_idx in candidate_direction_indices:
-                    continue
-                if current_steps_remaining <= 0 and direction_idx == current_direction_idx:
-                    continue
-                candidate_direction_indices.append(direction_idx)
+                for random_direction_idx in self.randomizer.permutation(len(self.OBSTACLE_MOVE_DELTAS)):
+                    direction_idx = int(random_direction_idx)
+                    if direction_idx in candidate_direction_indices:
+                        continue
+                    if current_steps_remaining <= 0 and direction_idx == current_direction_idx:
+                        continue
+                    candidate_direction_indices.append(direction_idx)
 
             for direction_idx in candidate_direction_indices:
                 dx, dy = self.OBSTACLE_MOVE_DELTAS[direction_idx]
                 candidate = current_rect.copy()
                 candidate_path_keys = []
                 path_is_valid = True
-                for _ in range(chosen_speed):
+                movement_steps = chosen_speed
+                if behavior_mode == 4:
+                    movement_steps = self._return_step_limit(
+                        current_rect.centerx,
+                        current_rect.centery,
+                        behavior_targets[idx],
+                        dx,
+                        dy,
+                        chosen_speed,
+                    )
+                for _ in range(movement_steps):
                     candidate = candidate.move(dx, dy)
                     candidate_key = self._rect_key(candidate)
                     if candidate_key in stationary_keys or candidate_key in planned_path_keys:
                         path_is_valid = False
                         break
-                    if not self._rect_within_search_area(candidate):
+                    if not self._obstacle_position_is_allowed(candidate):
                         path_is_valid = False
                         break
                     candidate_path_keys.append(candidate_key)
@@ -1616,7 +1906,9 @@ class World(pygame.sprite.Sprite):
 
                 chosen_rect = candidate
                 chosen_direction_idx = direction_idx
-                if direction_idx == current_direction_idx and current_steps_remaining > 0:
+                if behavior_mode != 0:
+                    chosen_steps_remaining = 0
+                elif direction_idx == current_direction_idx and current_steps_remaining > 0:
                     chosen_steps_remaining = current_steps_remaining - 1
                 else:
                     chosen_steps_remaining = self.OBSTACLE_DIRECTION_HOLD_STEPS - 1
@@ -1642,11 +1934,13 @@ class World(pygame.sprite.Sprite):
         self.obstacle_speed_steps_remaining = next_speed_steps_remaining
         if moved:
             self._refresh_moved_obstacle_geometry_cache()
+        self._clear_completed_chase_returns()
         return moved
 
-    def _move_unit_obstacles_one_step(self) -> bool:
+    def _move_unit_obstacles_one_step(self, agents=None) -> bool:
         """Fast path for 1x1 obstacles using integer positions and search-mask lookups."""
         self._sync_obstacle_motion_state()
+        behavior_modes, behavior_targets, chase_speed_caps = self._obstacle_behavior_targets(agents)
         obstacle_indices = self.randomizer.permutation(len(self.obstacles))
         original_x = np.fromiter((obstacle.x for obstacle in self.obstacles), dtype=np.int32, count=len(self.obstacles))
         original_y = np.fromiter((obstacle.y for obstacle in self.obstacles), dtype=np.int32, count=len(self.obstacles))
@@ -1666,6 +1960,21 @@ class World(pygame.sprite.Sprite):
             current_x = int(original_x[idx])
             current_y = int(original_y[idx])
             current_flat = int(original_flat[idx])
+            if self.obstacle_is_static[idx]:
+                next_direction_indices[idx] = -1
+                next_steps_remaining[idx] = 0
+                next_speeds[idx] = 0
+                next_speed_steps_remaining[idx] = 0
+                continue
+            behavior_mode = int(behavior_modes[idx])
+            if behavior_mode == 3 or (
+                behavior_mode == 1 and int(chase_speed_caps[idx]) <= 0
+            ):
+                next_direction_indices[idx] = -1
+                next_steps_remaining[idx] = 0
+                next_speeds[idx] = 0
+                next_speed_steps_remaining[idx] = 0
+                continue
             stationary_keys.discard(current_flat)
 
             chosen_x = current_x
@@ -1682,18 +1991,26 @@ class World(pygame.sprite.Sprite):
             else:
                 chosen_speed = self._sample_obstacle_speed()
                 chosen_speed_steps_remaining = self.OBSTACLE_SPEED_HOLD_STEPS - 1
+            if behavior_mode == 1:
+                chosen_speed = min(chosen_speed, int(chase_speed_caps[idx]))
 
-            candidate_direction_indices = []
-            if 0 <= current_direction_idx < len(self.OBSTACLE_MOVE_DELTAS) and current_steps_remaining > 0:
-                candidate_direction_indices.append(current_direction_idx)
+            candidate_direction_indices = self._behavior_direction_indices(
+                current_x,
+                current_y + 1,
+                behavior_mode,
+                behavior_targets[idx],
+            )
+            if behavior_mode == 0:
+                if 0 <= current_direction_idx < len(self.OBSTACLE_MOVE_DELTAS) and current_steps_remaining > 0:
+                    candidate_direction_indices.append(current_direction_idx)
 
-            for random_direction_idx in self.randomizer.permutation(len(self.OBSTACLE_MOVE_DELTAS)):
-                direction_idx = int(random_direction_idx)
-                if direction_idx in candidate_direction_indices:
-                    continue
-                if current_steps_remaining <= 0 and direction_idx == current_direction_idx:
-                    continue
-                candidate_direction_indices.append(direction_idx)
+                for random_direction_idx in self.randomizer.permutation(len(self.OBSTACLE_MOVE_DELTAS)):
+                    direction_idx = int(random_direction_idx)
+                    if direction_idx in candidate_direction_indices:
+                        continue
+                    if current_steps_remaining <= 0 and direction_idx == current_direction_idx:
+                        continue
+                    candidate_direction_indices.append(direction_idx)
 
             for direction_idx in candidate_direction_indices:
                 dx, dy = self.OBSTACLE_MOVE_DELTAS[direction_idx]
@@ -1701,7 +2018,17 @@ class World(pygame.sprite.Sprite):
                 candidate_y = current_y
                 candidate_path_keys = []
                 path_is_valid = True
-                for _ in range(chosen_speed):
+                movement_steps = chosen_speed
+                if behavior_mode == 4:
+                    movement_steps = self._return_step_limit(
+                        current_x,
+                        current_y + 1,
+                        behavior_targets[idx],
+                        dx,
+                        dy,
+                        chosen_speed,
+                    )
+                for _ in range(movement_steps):
                     candidate_x += dx
                     candidate_y += dy
                     if not (0 <= candidate_x < self.area.width and 0 <= candidate_y < self.area.height):
@@ -1711,8 +2038,8 @@ class World(pygame.sprite.Sprite):
                     if candidate_flat in stationary_keys or candidate_flat in planned_path_keys:
                         path_is_valid = False
                         break
-                    world_y = self.area.height - candidate_y - 1
-                    if not self.search_pixel_mask[world_y, candidate_x]:
+                    candidate_rect = pygame.Rect(candidate_x, candidate_y, 1, 1)
+                    if not self._obstacle_position_is_allowed(candidate_rect):
                         path_is_valid = False
                         break
                     candidate_path_keys.append(candidate_flat)
@@ -1722,7 +2049,9 @@ class World(pygame.sprite.Sprite):
                 chosen_x = candidate_x
                 chosen_y = candidate_y
                 chosen_direction_idx = direction_idx
-                if direction_idx == current_direction_idx and current_steps_remaining > 0:
+                if behavior_mode != 0:
+                    chosen_steps_remaining = 0
+                elif direction_idx == current_direction_idx and current_steps_remaining > 0:
                     chosen_steps_remaining = current_steps_remaining - 1
                 else:
                     chosen_steps_remaining = self.OBSTACLE_DIRECTION_HOLD_STEPS - 1
@@ -1747,13 +2076,14 @@ class World(pygame.sprite.Sprite):
         self.obstacle_speed_steps_remaining = next_speed_steps_remaining
         if moved:
             self._refresh_moved_obstacle_geometry_cache()
+        self._clear_completed_chase_returns()
         return moved
 
-    def update(self, area):
+    def update(self, area, agents=None):
         """Update world."""
         # increase timestep counter to know how many step were run
         self.timestep += 1
-        self._move_obstacles_one_step()
+        self._move_obstacles_one_step(agents)
 
     def process_collision(self, o_rect, o_speed):
         """Process a collision.

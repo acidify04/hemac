@@ -217,7 +217,7 @@ class PointOfInterest:
 
         return pos
 
-    def move(self, obstacles, patrol_area):
+    def move(self, obstacles, patrol_area, warning_zone_checker=None):
         """Move POI."""
         # Small random modification for orientation, but restricted
         proposed_orientation = self.orientation + self.randomizer.normal(scale=0.02)
@@ -236,6 +236,8 @@ class PointOfInterest:
         collision_detected = any(
             proposed_rect.colliderect(obstacle) for obstacle in obstacles
         ) or not patrol_area.contains(Point((proposed_x, proposed_y)))
+        if warning_zone_checker is not None:
+            collision_detected = collision_detected or bool(warning_zone_checker(proposed_rect))
 
         if not collision_detected:
             self.x = proposed_x

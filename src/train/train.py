@@ -87,48 +87,56 @@ OBSTACLE_CURRICULUM_LEVELS = [
         "max_obstacles": 2,
         "obstacle_min_speed": 1,
         "obstacle_max_speed": 1,
+        "n_static_obstacles": 1
     },
     {
         "min_obstacles": 2,
         "max_obstacles": 3,
         "obstacle_min_speed": 1,
         "obstacle_max_speed": 2,
+        "n_static_obstacles": 1
     },
     {
         "min_obstacles": 3,
         "max_obstacles": 4,
         "obstacle_min_speed": 1,
         "obstacle_max_speed": 3,
+        "n_static_obstacles": 2
     },
     {
         "min_obstacles": 4,
         "max_obstacles": 5,
         "obstacle_min_speed": 2,
         "obstacle_max_speed": 3,
+        "n_static_obstacles": 2
+    },
+    {
+        "min_obstacles": 4,
+        "max_obstacles": 6,
+        "obstacle_min_speed": 2,
+        "obstacle_max_speed": 5,
+        "n_static_obstacles": 3
     },
     {
         "min_obstacles": 5,
         "max_obstacles": 7,
         "obstacle_min_speed": 2,
-        "obstacle_max_speed": 5,
+        "obstacle_max_speed": 6,
+        "n_static_obstacles": 3
     },
     {
         "min_obstacles": 6,
         "max_obstacles": 8,
-        "obstacle_min_speed": 2,
-        "obstacle_max_speed": 6,
+        "obstacle_min_speed": 3,
+        "obstacle_max_speed": 7,
+        "n_static_obstacles": 3
     },
     {
         "min_obstacles": 7,
         "max_obstacles": 9,
         "obstacle_min_speed": 3,
         "obstacle_max_speed": 7,
-    },
-    {
-        "min_obstacles": 8,
-        "max_obstacles": 10,
-        "obstacle_min_speed": 3,
-        "obstacle_max_speed": 7,
+        "n_static_obstacles": 3
     },
 ]
 CURRENT_OBSTACLE_DIFFICULTY = dict(OBSTACLE_CURRICULUM_LEVELS[0])

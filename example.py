@@ -752,8 +752,11 @@ def run_trained_model_simulation(playback_mode="step", checkpoint_iteration=None
                 "drone_max_thrust": 8,
                 "drones_starting_pos": DRONE_START_POSITIONS,
             },
-            "min_obstacles": 3,
-            "max_obstacles": 4,
+            "min_obstacles": 9,
+            "max_obstacles": 9,
+            "obstacle_min_speed": 3,
+            "obstacle_max_speed": 7,
+            "n_static_obstacles": 3,
             "poi_config": [GOAL_CONFIG],
             "log_step_rewards": True
         }
@@ -794,10 +797,11 @@ def run_trained_model_simulation(playback_mode="step", checkpoint_iteration=None
         },
         
         # 맵 및 목적지 설정
-        "min_obstacles": 5,
-        "max_obstacles": 7,
-        "obstacle_min_speed": 2,
-        "obstacle_max_speed": 5,
+        "min_obstacles": 7,
+        "max_obstacles": 9,
+        "obstacle_min_speed": 3,
+        "obstacle_max_speed": 7,
+        "n_static_obstacles": 3,
         "poi_config": [GOAL_CONFIG],
         "log_step_rewards": True,
 

@@ -86,6 +86,7 @@ class HeMAC:
         provisioner_sensor: dict = None,  # TODO: move sensors in agent configs
         min_obstacles=2,
         max_obstacles=3,
+        n_static_obstacles=1,
         rescuing_targets=False,
         known_goals=False,
         geofence_config: dict = None,
@@ -121,6 +122,7 @@ class HeMAC:
             Numover of Provisioners: {n_provisioners}
             Min Obstacles: {min_obstacles}
             Max Obstacles: {max_obstacles}
+            Static Obstacles: {n_static_obstacles}
             Known Goals: {known_goals}
             Geofence config: {geofence_config}
             Patrol config: {patrol_config}
@@ -340,6 +342,7 @@ class HeMAC:
         self.state_space = gymnasium.spaces.MultiBinary(2)
         self.min_obstacles = min_obstacles
         self.max_obstacles = max_obstacles
+        self.n_static_obstacles = max(int(n_static_obstacles), 0)
 
         self.render_mode = render_mode
         self.screen = None
@@ -438,10 +441,18 @@ class HeMAC:
         # spawn obstacles
         min_obstacles = max(int(self.min_obstacles), 0)
         max_obstacles = max(int(self.max_obstacles), min_obstacles)
-        if max_obstacles > 0:  # TODO: reset all world components inside world reset() (obstacles, etc.)
-            num_obstacles = int(self.randomizer.integers(min_obstacles, max_obstacles + 1))
+        if max_obstacles > 0 or self.n_static_obstacles > 0:
+            num_obstacles = (
+                int(self.randomizer.integers(min_obstacles, max_obstacles + 1))
+                if max_obstacles > 0
+                else 0
+            )
             goal_rects = [goal.rect for goal in self.goals if goal.rect is not None]
-            self.world.generate_obstacles(num_obstacles, avoid_rects=goal_rects)
+            self.world.generate_obstacles(
+                num_obstacles,
+                avoid_rects=goal_rects,
+                n_static_obstacles=self.n_static_obstacles,
+            )
             for goal in self.goals:
                 goal.spawn_poi(
                     self.search_area,
@@ -954,7 +965,11 @@ class HeMAC:
 
         # Update position and uncertainty of objectives
         for goal in self.goals:
-            goal.move(self.world.obstacles, self.search_area)
+            goal.move(
+                self.world.obstacles,
+                self.search_area,
+                warning_zone_checker=self.world.game_rect_intersects_warning_zone,
+            )
         self._sync_goal_position()
 
         # Specific actions for UAVs
@@ -1081,7 +1096,7 @@ class HeMAC:
         if agent == self.agents_list[-1]:
             if not self.terminate:
                 previous_obstacle_centers = self.world.obstacle_warning_centers_world.copy()
-                self.world.update(self.area)
+                self.world.update(self.area, self.agents_list)
                 self._apply_obstacle_motion_collisions(
                     previous_obstacle_centers,
                     reward_dict,
