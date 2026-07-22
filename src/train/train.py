@@ -47,7 +47,7 @@ DRONE_START_POSITIONS = [
 GOAL_CONFIG = {
     "speed": 0,
     "spawn_mode": "random",
-    "boundary_margin": 140,
+    "boundary_margin": 50,
     "spawn_quadrant": ["bottom_right", "bottom_left", "top_right"],
 }
 
