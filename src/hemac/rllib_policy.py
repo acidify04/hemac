@@ -18,7 +18,7 @@ OBSERVER_CUSTOM_MODEL_NAME = "hemac_discrete_spatial_torch"
 DRONE_LOG_STD_INIT = -1.8
 DRONE_LOG_STD_MIN = -2.5
 DRONE_LOG_STD_MAX = -0.35
-DRONE_MODEL_HIDDEN_SIZES = [128, 128]
+DRONE_MODEL_HIDDEN_SIZES = [96, 96]
 GLOBAL_MAP_ENCODER_CHANNELS = (8, 16, 16, 32)
 LOCAL_MAP_ENCODER_CHANNELS = (16, 32, 32, 64)
 
@@ -111,6 +111,7 @@ class _SpatialObsEncoder(nn.Module):
                 self.local_map_channels,
                 activation_name,
                 LOCAL_MAP_ENCODER_CHANNELS,
+                final_stride=1,
             )
             with torch.no_grad():
                 dummy_global_map = torch.zeros(
@@ -177,7 +178,12 @@ class _SpatialObsEncoder(nn.Module):
         self.output_dim = last_size
 
     @staticmethod
-    def _build_map_encoder(map_channels, activation_name, encoder_channels):
+    def _build_map_encoder(
+        map_channels,
+        activation_name,
+        encoder_channels,
+        final_stride=2,
+    ):
         """Build a compact CNN encoder for one spatial map."""
         conv1_channels, conv2_channels, conv3_channels, conv4_channels = encoder_channels
         return nn.Sequential(
@@ -187,8 +193,16 @@ class _SpatialObsEncoder(nn.Module):
             _activation_module(activation_name),
             nn.Conv2d(conv2_channels, conv3_channels, kernel_size=3, stride=1, padding=1),
             _activation_module(activation_name),
+            nn.Conv2d(conv3_channels, conv3_channels, kernel_size=3, stride=1, padding=1),
+            _activation_module(activation_name),
             nn.MaxPool2d(2),
-            nn.Conv2d(conv3_channels, conv4_channels, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(
+                conv3_channels,
+                conv4_channels,
+                kernel_size=3,
+                stride=final_stride,
+                padding=1,
+            ),
             _activation_module(activation_name),
             nn.Flatten(),
         )
