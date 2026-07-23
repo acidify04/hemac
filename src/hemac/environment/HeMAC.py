@@ -102,6 +102,8 @@ class HeMAC:
         drone_only_success_reward: float = 300.0,
         obstacle_min_speed: int | None = None,
         obstacle_max_speed: int | None = None,
+        goal_min_base_distance: float = 0.0,
+        goal_max_base_distance: float | None = None,
         log_step_rewards: bool = False,
     ):
         self.number_of_POIs = len(poi_config) if poi_config and len(poi_config) else 0
@@ -130,6 +132,7 @@ class HeMAC:
             Drone-only success min coverage ratio: {drone_only_success_min_coverage_ratio}
             Drone-only success reward: {drone_only_success_reward}
             Obstacle speed range: ({obstacle_min_speed}, {obstacle_max_speed})
+            Goal distance from base: ({goal_min_base_distance}, {goal_max_base_distance})
             """)
 
         pygame.init()
@@ -148,6 +151,12 @@ class HeMAC:
             max(0.0, min(drone_only_success_min_coverage_ratio, 1.0))
         )
         self.drone_only_success_reward = float(drone_only_success_reward)
+        self.goal_min_base_distance = max(float(goal_min_base_distance), 0.0)
+        self.goal_max_base_distance = (
+            None
+            if goal_max_base_distance is None
+            else max(float(goal_max_base_distance), self.goal_min_base_distance)
+        )
         self.log_step_rewards = bool(log_step_rewards)
 
         # players
@@ -402,8 +411,10 @@ class HeMAC:
         max_obstacles: int | None = None,
         obstacle_min_speed: int | None = None,
         obstacle_max_speed: int | None = None,
+        goal_min_base_distance: float | None = None,
+        goal_max_base_distance: float | None = None,
     ) -> None:
-        """Update obstacle count and speed difficulty for subsequent steps/resets."""
+        """Update obstacle and goal-spawn difficulty for subsequent resets."""
         if min_obstacles is not None or max_obstacles is not None:
             next_min_obstacles = self.min_obstacles if min_obstacles is None else int(min_obstacles)
             next_max_obstacles = self.max_obstacles if max_obstacles is None else int(max_obstacles)
@@ -418,13 +429,37 @@ class HeMAC:
                 current_max_speed if obstacle_max_speed is None else obstacle_max_speed,
             )
 
+        if goal_min_base_distance is not None:
+            self.goal_min_base_distance = max(float(goal_min_base_distance), 0.0)
+        if goal_max_base_distance is not None:
+            self.goal_max_base_distance = max(
+                float(goal_max_base_distance),
+                self.goal_min_base_distance,
+            )
+        elif (
+            self.goal_max_base_distance is not None
+            and self.goal_max_base_distance < self.goal_min_base_distance
+        ):
+            self.goal_max_base_distance = self.goal_min_base_distance
+
+    def _spawn_goal(self, goal, *, obstacles=None, warning_zone_checker=None):
+        """Spawn one goal within the current curriculum distance from the base."""
+        base_position = game_ref_to_world_ref(self.world.base.center, self.area)
+        return goal.spawn_poi(
+            self.search_area,
+            obstacles=obstacles,
+            warning_zone_checker=warning_zone_checker,
+            base_position=base_position,
+            min_base_distance=self.goal_min_base_distance,
+            max_base_distance=self.goal_max_base_distance,
+        )
+
     def reset(self, seed=None, options=None):
         """Reset the environment."""
         # reset goals
         self.success_step = None
         self.mission_success = False
         for goal in self.goals:
-            goal.spawn_poi(self.search_area)
             goal.reset()
         self.explored_grids = set()
         self.observer_explored_grids = set()
@@ -434,8 +469,10 @@ class HeMAC:
         if self.render_mode == "human":
             print("resetting world.")
         self.world.reset(self.goals)
-        self._sync_goal_position()
         self.world.clear_obstacles()  # Clear obstacles at the start of each episode
+        for goal in self.goals:
+            self._spawn_goal(goal)
+        self._sync_goal_position()
         self.detection_reward = 0
 
         # spawn obstacles
@@ -454,8 +491,8 @@ class HeMAC:
                 n_static_obstacles=self.n_static_obstacles,
             )
             for goal in self.goals:
-                goal.spawn_poi(
-                    self.search_area,
+                self._spawn_goal(
+                    goal,
                     obstacles=self.world.obstacles,
                     warning_zone_checker=self.world.game_rect_intersects_warning_zone,
                 )

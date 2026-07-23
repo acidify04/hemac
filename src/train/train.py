@@ -87,56 +87,72 @@ OBSTACLE_CURRICULUM_LEVELS = [
         "max_obstacles": 2,
         "obstacle_min_speed": 1,
         "obstacle_max_speed": 1,
-        "n_static_obstacles": 1
+        "n_static_obstacles": 1,
+        "goal_min_base_distance": 350.0,
+        "goal_max_base_distance": 450.0,
     },
     {
         "min_obstacles": 2,
         "max_obstacles": 3,
         "obstacle_min_speed": 1,
         "obstacle_max_speed": 2,
-        "n_static_obstacles": 1
+        "n_static_obstacles": 1,
+        "goal_min_base_distance": 400.0,
+        "goal_max_base_distance": 520.0,
     },
     {
         "min_obstacles": 3,
         "max_obstacles": 4,
         "obstacle_min_speed": 1,
         "obstacle_max_speed": 3,
-        "n_static_obstacles": 2
+        "n_static_obstacles": 2,
+        "goal_min_base_distance": 475.0,
+        "goal_max_base_distance": 600.0,
     },
     {
         "min_obstacles": 4,
         "max_obstacles": 5,
         "obstacle_min_speed": 2,
         "obstacle_max_speed": 3,
-        "n_static_obstacles": 2
+        "n_static_obstacles": 2,
+        "goal_min_base_distance": 550.0,
+        "goal_max_base_distance": 675.0,
     },
     {
         "min_obstacles": 4,
         "max_obstacles": 6,
         "obstacle_min_speed": 2,
         "obstacle_max_speed": 5,
-        "n_static_obstacles": 3
+        "n_static_obstacles": 3,
+        "goal_min_base_distance": 625.0,
+        "goal_max_base_distance": 750.0,
     },
     {
         "min_obstacles": 5,
         "max_obstacles": 7,
         "obstacle_min_speed": 2,
         "obstacle_max_speed": 6,
-        "n_static_obstacles": 3
+        "n_static_obstacles": 3,
+        "goal_min_base_distance": 700.0,
+        "goal_max_base_distance": 825.0,
     },
     {
         "min_obstacles": 6,
         "max_obstacles": 8,
         "obstacle_min_speed": 3,
         "obstacle_max_speed": 7,
-        "n_static_obstacles": 3
+        "n_static_obstacles": 3,
+        "goal_min_base_distance": 775.0,
+        "goal_max_base_distance": 925.0,
     },
     {
         "min_obstacles": 7,
         "max_obstacles": 9,
         "obstacle_min_speed": 3,
         "obstacle_max_speed": 7,
-        "n_static_obstacles": 3
+        "n_static_obstacles": 3,
+        "goal_min_base_distance": 850.0,
+        "goal_max_base_distance": 1000.0,
     },
 ]
 CURRENT_OBSTACLE_DIFFICULTY = dict(OBSTACLE_CURRICULUM_LEVELS[0])
@@ -195,7 +211,7 @@ class CoverageCurriculum:
 
 
 class ObstacleDifficultyCurriculum:
-    """Promote obstacle count/speed once evaluation success is high enough."""
+    """Promote obstacle and goal-distance difficulty after successful evaluation."""
 
     def __init__(self, levels, promotion_success_rate=0.8, stability_window=5):
         if not levels:
@@ -261,11 +277,18 @@ def _normalize_obstacle_difficulty(level):
     max_obstacles = max(int(level.get("max_obstacles", min_obstacles)), min_obstacles)
     obstacle_min_speed = max(int(level.get("obstacle_min_speed", 1)), 1)
     obstacle_max_speed = max(int(level.get("obstacle_max_speed", obstacle_min_speed)), obstacle_min_speed)
+    goal_min_base_distance = max(float(level.get("goal_min_base_distance", 0.0)), 0.0)
+    goal_max_base_distance = max(
+        float(level.get("goal_max_base_distance", float("inf"))),
+        goal_min_base_distance,
+    )
     return {
         "min_obstacles": min_obstacles,
         "max_obstacles": max_obstacles,
         "obstacle_min_speed": obstacle_min_speed,
         "obstacle_max_speed": obstacle_max_speed,
+        "goal_min_base_distance": goal_min_base_distance,
+        "goal_max_base_distance": goal_max_base_distance,
     }
 
 
@@ -332,6 +355,12 @@ def _set_obstacle_difficulty_on_env(env, level):
                     difficulty["obstacle_min_speed"],
                     difficulty["obstacle_max_speed"],
                 )
+                applied = True
+            if hasattr(current, "goal_min_base_distance"):
+                current.goal_min_base_distance = difficulty["goal_min_base_distance"]
+                applied = True
+            if hasattr(current, "goal_max_base_distance"):
+                current.goal_max_base_distance = difficulty["goal_max_base_distance"]
                 applied = True
 
         kwargs = getattr(current, "_kwargs", None)
@@ -571,7 +600,7 @@ def apply_curriculum_to_algo(algo, coverage_ratio):
 
 
 def apply_obstacle_curriculum_to_algo(algo, level):
-    """Update both current workers and future rollouts to the new obstacle difficulty."""
+    """Update current workers and future rollouts to the new environment difficulty."""
     difficulty = _normalize_obstacle_difficulty(level)
     set_current_obstacle_difficulty(difficulty)
 
@@ -614,6 +643,8 @@ def build_env_config(render_mode=None):
         "max_obstacles": obstacle_difficulty["max_obstacles"],
         "obstacle_min_speed": obstacle_difficulty["obstacle_min_speed"],
         "obstacle_max_speed": obstacle_difficulty["obstacle_max_speed"],
+        "goal_min_base_distance": obstacle_difficulty["goal_min_base_distance"],
+        "goal_max_base_distance": obstacle_difficulty["goal_max_base_distance"],
         "poi_config": [GOAL_CONFIG],
         "drone_only_success_min_coverage_ratio": CURRENT_DRONE_SUCCESS_MIN_COVERAGE_RATIO,
         "drone_only_success_reward": 300.0,
@@ -1094,6 +1125,14 @@ def initialize_curricula_from_env_config(env_config):
             "obstacle_max_speed",
             OBSTACLE_CURRICULUM_LEVELS[0]["obstacle_max_speed"],
         ),
+        "goal_min_base_distance": env_config.get(
+            "goal_min_base_distance",
+            OBSTACLE_CURRICULUM_LEVELS[0]["goal_min_base_distance"],
+        ),
+        "goal_max_base_distance": env_config.get(
+            "goal_max_base_distance",
+            OBSTACLE_CURRICULUM_LEVELS[0]["goal_max_base_distance"],
+        ),
     }
     obstacle_curriculum.stage_index = _find_obstacle_stage_index(
         OBSTACLE_CURRICULUM_LEVELS,
@@ -1254,6 +1293,8 @@ def main():
         f"{obstacle_curriculum.stage_number}/{obstacle_curriculum.num_stages} "
         f"(obstacles={current_obstacle_level['min_obstacles']}-{current_obstacle_level['max_obstacles']}, "
         f"speed={current_obstacle_level['obstacle_min_speed']}-{current_obstacle_level['obstacle_max_speed']}, "
+        f"goal_distance={current_obstacle_level['goal_min_base_distance']:.0f}-"
+        f"{current_obstacle_level['goal_max_base_distance']:.0f}, "
         f"updated_envs={obstacle_updated_envs})"
     )
 
@@ -1396,6 +1437,12 @@ def main():
             "obstacle_curriculum/max_obstacles": obstacle_curriculum.current_level["max_obstacles"],
             "obstacle_curriculum/min_speed": obstacle_curriculum.current_level["obstacle_min_speed"],
             "obstacle_curriculum/max_speed": obstacle_curriculum.current_level["obstacle_max_speed"],
+            "obstacle_curriculum/goal_min_base_distance": (
+                obstacle_curriculum.current_level["goal_min_base_distance"]
+            ),
+            "obstacle_curriculum/goal_max_base_distance": (
+                obstacle_curriculum.current_level["goal_max_base_distance"]
+            ),
         }
 
 
@@ -1454,6 +1501,8 @@ def main():
                     f"(eval_success_rate={eval_success_rate:.2f}, "
                     f"obstacles={current_obstacle_level['min_obstacles']}-{current_obstacle_level['max_obstacles']}, "
                     f"speed={current_obstacle_level['obstacle_min_speed']}-{current_obstacle_level['obstacle_max_speed']}, "
+                    f"goal_distance={current_obstacle_level['goal_min_base_distance']:.0f}-"
+                    f"{current_obstacle_level['goal_max_base_distance']:.0f}, "
                     f"updated_envs={obstacle_curriculum_updated_envs})"
                 )
 
