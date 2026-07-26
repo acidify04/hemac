@@ -196,13 +196,7 @@ class _SpatialObsEncoder(nn.Module):
             nn.Conv2d(conv3_channels, conv3_channels, kernel_size=3, stride=1, padding=1),
             _activation_module(activation_name),
             nn.MaxPool2d(2),
-            nn.Conv2d(
-                conv3_channels,
-                conv4_channels,
-                kernel_size=3,
-                stride=final_stride,
-                padding=1,
-            ),
+            nn.Conv2d(conv3_channels, conv4_channels, kernel_size=3, stride=final_stride, padding=1),
             _activation_module(activation_name),
             nn.Flatten(),
         )

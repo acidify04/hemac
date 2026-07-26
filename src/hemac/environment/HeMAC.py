@@ -1114,7 +1114,11 @@ class HeMAC:
                     if goal_dist < agent.sensing_range:
                         agent.found_goal = True
                         self.found_goal = True
-                        self.global_reward += 300
+                        reward += 300
+                        for agent in self.agents:
+                            if agent.startswith("drone"):
+                                self.rewards[agent] += 50
+                        # self.global_reward += 300
                         reward_dict[active_agent].append(300)
                         success_marked = self._mark_mission_success(
                             active_agent=active_agent,
