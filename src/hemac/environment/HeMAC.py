@@ -164,7 +164,7 @@ class HeMAC:
         self.n_drones = n_drones
         self.n_provisioners = n_provisioners
         self.num_agents = n_observers + n_drones + n_provisioners
-        self.observer_size = 24 // render_ratio
+        self.observer_size = 50 // render_ratio
 
         # self.agents are the keys of the agents, and self.agents_list contains the actual agents instances
         self.agents = ["observer_" + str(i) for i in range(self.n_observers)]
@@ -1115,10 +1115,10 @@ class HeMAC:
                         agent.found_goal = True
                         self.found_goal = True
                         reward += 300
-                        for agent in self.agents:
-                            if agent.startswith("drone"):
-                                self.rewards[agent] += 50
-                        # self.global_reward += 300
+                        # for agent in self.agents:
+                        #     if agent.startswith("drone"):
+                        #         self.rewards[agent] += 100
+                        self.global_reward += 300
                         reward_dict[active_agent].append(300)
                         success_marked = self._mark_mission_success(
                             active_agent=active_agent,

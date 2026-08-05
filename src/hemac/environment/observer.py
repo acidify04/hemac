@@ -27,7 +27,7 @@ class Observer(BaseAgent):
     ):
         """Overwrite constructor."""
         super().__init__()
-        self.img = pygame.image.load(f"{os.path.dirname(__file__)}/img/observer.png")
+        self.img = pygame.image.load(f"{os.path.dirname(__file__)}/img/vehicle.png")
         self.img = pygame.transform.scale(self.img, dims)
         self.base_img = self.img.copy()
         self.rect = self.img.get_rect()
