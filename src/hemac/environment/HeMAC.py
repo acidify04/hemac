@@ -317,6 +317,8 @@ class HeMAC:
                 Drone(
                     drone_config=drone_config,
                     number_of_drones=self.n_drones,
+                    number_of_observers=self.n_observers,
+                    number_of_goals=self.number_of_POIs,
                     randomizer=randomizer,
                     drone_id=i,
                     sensor=in_drone_sensor,

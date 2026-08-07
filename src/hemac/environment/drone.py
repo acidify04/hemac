@@ -62,10 +62,15 @@ class IMU:
 class Drone(BaseAgent):
     """Drone class."""
 
+    CENTRAL_MAP_SIZE = 40
+    CENTRAL_MAP_CHANNELS = 8
+
     def __init__(
         self,
         drone_config,
         number_of_drones,
+        number_of_observers,
+        number_of_goals,
         randomizer,
         world,
         drone_id=-1,
@@ -153,7 +158,14 @@ class Drone(BaseAgent):
         self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
 
         self.drone_config = drone_config
-        self.number_of_drones = number_of_drones
+        self.number_of_drones = max(int(number_of_drones), 0)
+        self.number_of_observers = max(int(number_of_observers), 0)
+        self.number_of_goals = max(int(number_of_goals), 0)
+        central_vector_dim = 2 * (
+            max(self.number_of_drones - 1, 0)
+            + self.number_of_observers
+            + self.number_of_goals
+        )
 
         if drone_config.get("discrete_action_space", False):
             self.action_space = gymnasium.spaces.Discrete(5)
@@ -180,6 +192,22 @@ class Drone(BaseAgent):
                     low=-self.max_speed,
                     high=self.max_speed,
                     shape=(self.ACTION_HISTORY_LENGTH * self.ACTION_DIM,),
+                    dtype=np.float32,
+                ),
+                "central_map": gymnasium.spaces.Box(
+                    low=0.0,
+                    high=1.0,
+                    shape=(
+                        self.CENTRAL_MAP_SIZE,
+                        self.CENTRAL_MAP_SIZE,
+                        self.CENTRAL_MAP_CHANNELS,
+                    ),
+                    dtype=np.float32,
+                ),
+                "central_vector": gymnasium.spaces.Box(
+                    low=-1.0,
+                    high=1.0,
+                    shape=(central_vector_dim,),
                     dtype=np.float32,
                 ),
             }
@@ -376,6 +404,99 @@ class Drone(BaseAgent):
             return False
         return True
 
+    @staticmethod
+    def _entities_by_distance(origin, entities):
+        """Return entities ordered by distance from one focal position."""
+        origin_x, origin_y = origin
+        return sorted(
+            entities,
+            key=lambda entity: (
+                (float(entity.x) - origin_x) ** 2
+                + (float(entity.y) - origin_y) ** 2
+            ),
+        )
+
+    @staticmethod
+    def _resize_world_map_nearest(world_map, output_size):
+        """Resize a fixed world-grid map without changing its coordinate frame."""
+        source_height, source_width = world_map.shape[:2]
+        y_indices = np.minimum(
+            (np.arange(output_size, dtype=np.int32) * source_height) // output_size,
+            source_height - 1,
+        )
+        x_indices = np.minimum(
+            (np.arange(output_size, dtype=np.int32) * source_width) // output_size,
+            source_width - 1,
+        )
+        return world_map[y_indices[:, None], x_indices[None, :], :]
+
+    def build_central_map(self, world, agents, goals):
+        """Build the fixed world-centered map used only by the drone critic."""
+        drone_positions = [
+            (agent.x, agent.y)
+            for agent in agents
+            if isinstance(agent, Drone)
+        ]
+        observer_positions = [
+            (agent.x, agent.y)
+            for agent in agents
+            if agent.__class__.__name__ == "Observer"
+        ]
+        goal_positions = [(goal.x, goal.y) for goal in goals]
+        central_channels = np.stack(
+            [
+                world.observation_coverage_map,
+                world.search_mask,
+                world.explored_obstacle_map,
+                world.explored_warning_range_map,
+                self.build_entity_channel(world, drone_positions),
+                self.build_entity_channel(world, [(self.x, self.y)]),
+                self.build_entity_channel(world, observer_positions),
+                self.build_entity_channel(world, goal_positions),
+            ],
+            axis=-1,
+        ).astype(np.float32, copy=False)
+        return self._resize_world_map_nearest(
+            central_channels,
+            self.CENTRAL_MAP_SIZE,
+        ).astype(np.float32, copy=False)
+
+    def build_central_relative_vector(self, world, agents, goals):
+        """Return critic-only entity coordinates relative to this drone."""
+        other_drones = self._entities_by_distance(
+            (self.x, self.y),
+            [agent for agent in agents if isinstance(agent, Drone) and agent is not self],
+        )
+        observers = self._entities_by_distance(
+            (self.x, self.y),
+            [agent for agent in agents if agent.__class__.__name__ == "Observer"],
+        )
+        ordered_goals = self._entities_by_distance((self.x, self.y), list(goals))
+        entity_groups = (
+            (other_drones, max(self.number_of_drones - 1, 0)),
+            (observers, self.number_of_observers),
+            (ordered_goals, self.number_of_goals),
+        )
+
+        width = max(float(world.area.width), 1.0)
+        height = max(float(world.area.height), 1.0)
+        relative_positions = []
+        for entities, expected_count in entity_groups:
+            for entity in entities[:expected_count]:
+                relative_positions.extend(
+                    [
+                        (float(entity.x) - float(self.x)) / width,
+                        (float(entity.y) - float(self.y)) / height,
+                    ]
+                )
+            relative_positions.extend([0.0, 0.0] * max(expected_count - len(entities), 0))
+
+        return np.clip(
+            np.asarray(relative_positions, dtype=np.float32),
+            -1.0,
+            1.0,
+        )
+
     def observe(self, world, agents, poi) -> dict[str, np.ndarray]:
         """Observe the world."""
         other_drone_positions = [
@@ -414,6 +535,8 @@ class Drone(BaseAgent):
             "global_map": global_map,
             "local_map": local_map,
             "vector": self.build_action_history_vector(),
+            "central_map": self.build_central_map(world, agents, poi),
+            "central_vector": self.build_central_relative_vector(world, agents, poi),
         }
 
     def obstacles_in_quadrants(self, world):

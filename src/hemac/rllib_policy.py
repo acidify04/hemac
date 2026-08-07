@@ -14,6 +14,7 @@ from ray.rllib.utils.framework import try_import_torch
 torch, nn = try_import_torch()
 
 DRONE_CUSTOM_MODEL_NAME = "hemac_clamped_gaussian_torch"
+DRONE_MAPPO_CUSTOM_MODEL_NAME = "hemac_mappo_centralized_critic_torch"
 OBSERVER_CUSTOM_MODEL_NAME = "hemac_discrete_spatial_torch"
 DRONE_LOG_STD_INIT = -1.8
 DRONE_LOG_STD_MIN = -2.5
@@ -21,6 +22,8 @@ DRONE_LOG_STD_MAX = -0.35
 DRONE_MODEL_HIDDEN_SIZES = [96, 96]
 GLOBAL_MAP_ENCODER_CHANNELS = (8, 16, 16, 32)
 LOCAL_MAP_ENCODER_CHANNELS = (16, 32, 32, 64)
+CENTRAL_MAP_ENCODER_CHANNELS = (8, 16, 16, 32)
+CENTRAL_CRITIC_HIDDEN_SIZES = [96, 96]
 
 _MODEL_REGISTERED = False
 
@@ -45,6 +48,14 @@ def _space_has_spatial_obs(space) -> bool:
 def _space_has_legacy_spatial_obs(space) -> bool:
     """Return whether an observation space exposes the legacy vector+relative_map schema."""
     return hasattr(space, "spaces") and {"vector", "relative_map"}.issubset(space.spaces.keys())
+
+
+def _space_has_mappo_obs(space) -> bool:
+    """Return whether a space includes drone centralized-critic inputs."""
+    return (
+        _space_has_spatial_obs(space)
+        and {"central_map", "central_vector"}.issubset(space.spaces.keys())
+    )
 
 
 def _flatten_obs_tensor(obs, device=None):
@@ -306,6 +317,119 @@ class ClampedGaussianTorchModel(TorchModelV2, _SpatialObsEncoder):
         return self.get_log_std_stats()
 
 
+class MAPPOCentralizedCriticTorchModel(ClampedGaussianTorchModel):
+    """Shared drone actor with a separate world-centered centralized critic."""
+
+    def __init__(self, obs_space, action_space, num_outputs, model_config, name):
+        super().__init__(obs_space, action_space, num_outputs, model_config, name)
+
+        original_space = getattr(obs_space, "original_space", obs_space)
+        source_space = original_space if _space_has_mappo_obs(original_space) else obs_space
+        if not _space_has_mappo_obs(source_space):
+            raise ValueError(
+                "MAPPO drone observations must include central_map and central_vector."
+            )
+
+        custom_config = model_config.get("custom_model_config", {})
+        activation_name = custom_config.get(
+            "activation",
+            model_config.get("fcnet_activation", "relu"),
+        )
+        central_hidden_sizes = custom_config.get(
+            "central_critic_hidden_sizes",
+            CENTRAL_CRITIC_HIDDEN_SIZES,
+        )
+        central_map_space = source_space.spaces["central_map"]
+        central_vector_space = source_space.spaces["central_vector"]
+        self.central_map_channels = int(central_map_space.shape[-1])
+        self.central_map_encoder = self._build_map_encoder(
+            self.central_map_channels,
+            activation_name,
+            CENTRAL_MAP_ENCODER_CHANNELS,
+        )
+
+        with torch.no_grad():
+            dummy_central_map = torch.zeros(
+                1,
+                self.central_map_channels,
+                central_map_space.shape[0],
+                central_map_space.shape[1],
+                dtype=torch.float32,
+            )
+            central_map_feature_dim = int(
+                self.central_map_encoder(dummy_central_map).shape[1]
+            )
+
+        central_vector_dim = int(np.prod(central_vector_space.shape))
+        critic_layers = []
+        critic_input_dim = central_map_feature_dim + central_vector_dim
+        for hidden_size in central_hidden_sizes:
+            linear = nn.Linear(critic_input_dim, int(hidden_size))
+            nn.init.orthogonal_(linear.weight, gain=np.sqrt(2.0))
+            nn.init.zeros_(linear.bias)
+            critic_layers.extend([linear, _activation_module(activation_name)])
+            critic_input_dim = int(hidden_size)
+
+        self.central_critic_encoder = (
+            nn.Sequential(*critic_layers) if critic_layers else nn.Identity()
+        )
+        self.central_value_head = nn.Linear(critic_input_dim, 1)
+        nn.init.orthogonal_(self.central_value_head.weight, gain=1.0)
+        nn.init.zeros_(self.central_value_head.bias)
+
+        # The inherited local value head is intentionally unused in MAPPO.
+        del self.value_head
+        self._last_central_features = None
+        self.central_critic_input_dim = central_map_feature_dim + central_vector_dim
+
+    def forward(self, input_dict, state, seq_lens):
+        actor_features = self.encode(input_dict)
+        mean = torch.tanh(self.policy_head(actor_features))
+        log_std = torch.clamp(
+            self.log_std,
+            min=self.log_std_min,
+            max=self.log_std_max,
+        )
+        logits = torch.cat(
+            [mean, log_std.unsqueeze(0).expand_as(mean)],
+            dim=1,
+        )
+
+        obs_dict = input_dict["obs"]
+        if not isinstance(obs_dict, dict) and isinstance(input_dict.get("obs_flat"), dict):
+            obs_dict = input_dict["obs_flat"]
+        if not isinstance(obs_dict, dict):
+            raise TypeError("MAPPO model expected a dictionary observation.")
+
+        central_map = _to_float_tensor(
+            obs_dict["central_map"],
+            device=actor_features.device,
+        )
+        central_vector = _to_float_tensor(
+            obs_dict["central_vector"],
+            device=actor_features.device,
+        )
+        if central_map.dim() == 3:
+            central_map = central_map.unsqueeze(0)
+        if central_vector.dim() == 1:
+            central_vector = central_vector.unsqueeze(0)
+        if central_map.shape[-1] == self.central_map_channels:
+            central_map = central_map.permute(0, 3, 1, 2)
+
+        central_map_features = self.central_map_encoder(central_map)
+        central_input = torch.cat(
+            [central_map_features, central_vector.reshape(central_vector.shape[0], -1)],
+            dim=1,
+        )
+        self._last_central_features = self.central_critic_encoder(central_input)
+        return logits, state
+
+    def value_function(self):
+        if self._last_central_features is None:
+            raise ValueError("value_function() called before forward().")
+        return self.central_value_head(self._last_central_features).squeeze(1)
+
+
 class SpatialCategoricalTorchModel(TorchModelV2, _SpatialObsEncoder):
     """Discrete-action policy/value model for spatial observations."""
 
@@ -348,14 +472,18 @@ def register_hemac_rllib_models() -> None:
         return
 
     ModelCatalog.register_custom_model(DRONE_CUSTOM_MODEL_NAME, ClampedGaussianTorchModel)
+    ModelCatalog.register_custom_model(
+        DRONE_MAPPO_CUSTOM_MODEL_NAME,
+        MAPPOCentralizedCriticTorchModel,
+    )
     ModelCatalog.register_custom_model(OBSERVER_CUSTOM_MODEL_NAME, SpatialCategoricalTorchModel)
     _MODEL_REGISTERED = True
 
 
 def drone_policy_model_config() -> dict[str, Any]:
-    """Return the RLlib model config used by the continuous drone policy."""
+    """Return the MAPPO actor/central-critic config used by the drone policy."""
     return {
-        "custom_model": DRONE_CUSTOM_MODEL_NAME,
+        "custom_model": DRONE_MAPPO_CUSTOM_MODEL_NAME,
         "vf_share_layers": False,
         "fcnet_hiddens": DRONE_MODEL_HIDDEN_SIZES,
         "fcnet_activation": "relu",
@@ -365,6 +493,7 @@ def drone_policy_model_config() -> dict[str, Any]:
             "log_std_init": DRONE_LOG_STD_INIT,
             "log_std_min": DRONE_LOG_STD_MIN,
             "log_std_max": DRONE_LOG_STD_MAX,
+            "central_critic_hidden_sizes": CENTRAL_CRITIC_HIDDEN_SIZES,
         },
     }
 

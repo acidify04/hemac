@@ -31,6 +31,7 @@ from hemac import HeMAC_v0
 from hemac.helpers.logger import LOGGER
 from hemac.rllib_policy import (
     DRONE_LOG_STD_INIT,
+    DRONE_MAPPO_CUSTOM_MODEL_NAME,
     drone_policy_model_config,
     observer_policy_model_config,
     get_policy_log_std_stats,
@@ -73,11 +74,11 @@ ROLLOUT_FRAGMENT_LENGTH = 100
 SAMPLE_TIMEOUT_S = 300.0
 CURRICULUM_COVERAGE_LEVELS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 CURRICULUM_PROMOTION_SUCCESS_RATE = 0.8
-CURRICULUM_STABILITY_WINDOW = 1
+CURRICULUM_STABILITY_WINDOW = 5
 CURRENT_DRONE_SUCCESS_MIN_COVERAGE_RATIO = CURRICULUM_COVERAGE_LEVELS[0]
 DEFAULT_CHECKPOINT_DIR = TRAIN_DIR / "hemac_checkpoints"
 DEFAULT_WANDB_PROJECT = "HeMAC-RL"
-DEFAULT_WANDB_RUN_NAME = "PPO-Agent-Training-With-Moving-Obstacles"
+DEFAULT_WANDB_RUN_NAME = "MAPPO-Agent-Training"
 DEFAULT_NUM_ITERATIONS = 10_000_000_000
 DEFAULT_CHECKPOINT_INTERVAL = 100
 DEFAULT_NUM_GPUS = 1
@@ -166,7 +167,8 @@ class CoverageCurriculum:
             raise ValueError("Coverage curriculum requires at least one level.")
         self.levels = [float(level) for level in levels]
         self.promotion_success_rate = float(promotion_success_rate)
-        self.recent_success_rates = deque(maxlen=max(int(stability_window), 1))
+        self.stability_window = max(int(stability_window), 1)
+        self.recent_success_rates = deque(maxlen=self.stability_window)
         self.stage_index = 0
 
     @property
@@ -198,11 +200,13 @@ class CoverageCurriculum:
         return float(np.min(self.recent_success_rates))
 
     def record_success(self, success_rate):
-        """Promote immediately when the supplied evaluation success crosses the threshold."""
+        """Promote after the required number of consecutive successful evaluations."""
         self.recent_success_rates.append(float(success_rate))
         if self.is_finished:
             return False
-        if float(success_rate) < self.promotion_success_rate:
+        if len(self.recent_success_rates) < self.stability_window:
+            return False
+        if self.recent_success_min < self.promotion_success_rate:
             return False
 
         self.stage_index += 1
@@ -218,7 +222,8 @@ class ObstacleDifficultyCurriculum:
             raise ValueError("Obstacle curriculum requires at least one level.")
         self.levels = [_normalize_obstacle_difficulty(level) for level in levels]
         self.promotion_success_rate = float(promotion_success_rate)
-        self.recent_success_rates = deque(maxlen=max(int(stability_window), 1))
+        self.stability_window = max(int(stability_window), 1)
+        self.recent_success_rates = deque(maxlen=self.stability_window)
         self.stage_index = 0
 
     @property
@@ -250,11 +255,13 @@ class ObstacleDifficultyCurriculum:
         return float(np.min(self.recent_success_rates))
 
     def record_success(self, success_rate):
-        """Promote immediately when the supplied evaluation success crosses the threshold."""
+        """Promote after the required number of consecutive successful evaluations."""
         self.recent_success_rates.append(float(success_rate))
         if self.is_finished:
             return False
-        if float(success_rate) < self.promotion_success_rate:
+        if len(self.recent_success_rates) < self.stability_window:
+            return False
+        if self.recent_success_min < self.promotion_success_rate:
             return False
 
         self.stage_index += 1
@@ -930,6 +937,24 @@ def restore_algorithm_with_sampling_config(checkpoint_dir, args):
     checkpoint_config = state.get("config")
     if checkpoint_config is None or not hasattr(checkpoint_config, "env_runners"):
         raise TypeError(f"Checkpoint does not contain a valid config: {state_path}")
+
+    policies = getattr(checkpoint_config, "policies", {}) or {}
+    drone_policy_spec = policies.get("drone_policy")
+    if isinstance(drone_policy_spec, (tuple, list)) and len(drone_policy_spec) >= 4:
+        drone_policy_config = drone_policy_spec[3] or {}
+    else:
+        drone_policy_config = getattr(drone_policy_spec, "config", {}) or {}
+    checkpoint_drone_model = (
+        drone_policy_config.get("model", {}).get("custom_model")
+        if isinstance(drone_policy_config, dict)
+        else None
+    )
+    if checkpoint_drone_model != DRONE_MAPPO_CUSTOM_MODEL_NAME:
+        raise ValueError(
+            "This checkpoint predates the MAPPO centralized critic and cannot be "
+            "resumed with the new drone observation space. Start a new run, or use "
+            "--restore-observer-from to reuse only a compatible observer policy."
+        )
 
     checkpoint_config.env_runners(
         num_env_runners=int(args.num_env_runners),
