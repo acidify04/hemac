@@ -58,8 +58,8 @@ LOCAL_MAP_SIZE = 20
 ACTION_HISTORY_LENGTH = 5
 ACTION_DIM = 3
 AUTO_PLAY_DELAY_SECONDS = 0.02
-OBS_PANEL_WIDTH = 460
-OBS_PANEL_HEIGHT = 360
+OBS_PANEL_WIDTH = 640
+OBS_PANEL_HEIGHT = 430
 OBS_PANEL_MARGIN = 12
 OBS_WINDOW_PADDING = 12
 OBS_WINDOW_HEADER_HEIGHT = 42
@@ -265,6 +265,11 @@ def _extract_observation_debug(agent_id, observation):
     if isinstance(observation, dict):
         global_map = np.asarray(observation.get("global_map", []), dtype=np.float32)
         local_map = np.asarray(observation.get("local_map", []), dtype=np.float32)
+        central_map = np.asarray(observation.get("central_map", []), dtype=np.float32)
+        central_vector = np.asarray(
+            observation.get("central_vector", []),
+            dtype=np.float32,
+        ).reshape(-1)
         vector_obs = np.asarray(observation.get("vector", []), dtype=np.float32).reshape(-1)
 
         if global_map.ndim == 3 or local_map.ndim == 3:
@@ -273,6 +278,8 @@ def _extract_observation_debug(agent_id, observation):
                 "vector_obs": vector_obs,
                 "global_map": global_map if global_map.ndim == 3 else None,
                 "local_map": local_map if local_map.ndim == 3 else None,
+                "central_map": central_map if central_map.ndim == 3 else None,
+                "central_vector": central_vector,
             }
 
         relative_map = np.asarray(observation.get("relative_map", []), dtype=np.float32)
@@ -288,6 +295,8 @@ def _extract_observation_debug(agent_id, observation):
         "vector_obs": obs,
         "global_map": None,
         "local_map": None,
+        "central_map": None,
+        "central_vector": np.empty((0,), dtype=np.float32),
     }
 
 
@@ -300,7 +309,18 @@ def _observation_size(observation):
 
 def _map_channel_labels(agent_id, map_kind, channel_count):
     """Return human-readable channel labels for the current observation schema."""
-    if "observer" in agent_id:
+    if map_kind == "central_map":
+        labels = [
+            "coverage",
+            "boundary",
+            "obstacle",
+            "warning",
+            "drones",
+            "focal_drone",
+            "observer",
+            "goal",
+        ]
+    elif "observer" in agent_id:
         labels = ["coverage", "boundary", "obstacle", "warning", "drones", "goal"]
     else:
         labels = ["coverage", "boundary", "obstacle", "warning", "other_drones", "observer", "goal"]
@@ -346,6 +366,11 @@ def _draw_map_thumbnail(panel, map_array, agent_id, map_kind, top_left, max_size
     if drone_layer is None and "other_drones" in channel_index:
         drone_layer = map_array[:, :, channel_index["other_drones"]]
     observer_layer = map_array[:, :, channel_index["observer"]] if "observer" in channel_index else None
+    focal_drone_layer = (
+        map_array[:, :, channel_index["focal_drone"]]
+        if "focal_drone" in channel_index
+        else None
+    )
     goal_layer = map_array[:, :, channel_index["goal"]] if "goal" in channel_index else None
 
     for display_row in range(map_height):
@@ -392,6 +417,8 @@ def _draw_map_thumbnail(panel, map_array, agent_id, map_kind, top_left, max_size
                 pygame.draw.circle(panel, (90, 230, 255), center, marker_radius)
             if observer_layer is not None and float(observer_layer[grid_y, grid_x]) > 0.0:
                 pygame.draw.circle(panel, (255, 226, 120), center, marker_radius + 1, width=1)
+            if focal_drone_layer is not None and float(focal_drone_layer[grid_y, grid_x]) > 0.0:
+                pygame.draw.circle(panel, (120, 255, 145), center, marker_radius + 2, width=1)
             if goal_layer is not None and float(goal_layer[grid_y, grid_x]) > 0.0:
                 pygame.draw.line(panel, (255, 110, 110), (center[0] - 3, center[1] - 3), (center[0] + 3, center[1] + 3), width=1)
                 pygame.draw.line(panel, (255, 110, 110), (center[0] + 3, center[1] - 3), (center[0] - 3, center[1] + 3), width=1)
@@ -436,6 +463,28 @@ def _action_history_lines(vector_obs):
     return lines
 
 
+def _central_vector_lines(central_vector):
+    """Format the MAPPO critic's normalized relative entity coordinates."""
+    if central_vector.size == 0:
+        return ["central_vector: unavailable"]
+    if central_vector.size % 2 != 0:
+        preview = ", ".join(
+            f"{float(value):+.3f}" for value in central_vector[: min(central_vector.size, 8)]
+        )
+        return [f"central_vector: [{preview}]"]
+
+    relative_positions = central_vector.reshape(-1, 2)
+    if len(relative_positions) == 4:
+        labels = ["d1", "d2", "obs", "goal"]
+    else:
+        labels = [f"entity_{idx}" for idx in range(len(relative_positions))]
+
+    return [
+        f"{label}: ({float(position[0]):+.3f}, {float(position[1]):+.3f})"
+        for label, position in zip(labels, relative_positions)
+    ]
+
+
 def _format_action(action):
     """Format an action for the debug overlay."""
     if action is None:
@@ -465,6 +514,11 @@ def draw_observation_panel(
     vector_obs = obs_debug.get("vector_obs", np.empty((0,), dtype=np.float32))
     global_map = obs_debug.get("global_map")
     local_map = obs_debug.get("local_map")
+    central_map = obs_debug.get("central_map")
+    central_vector = obs_debug.get(
+        "central_vector",
+        np.empty((0,), dtype=np.float32),
+    )
     panel_width = panel_rect.width
     panel_height = panel_rect.height
 
@@ -509,12 +563,28 @@ def draw_observation_panel(
             tiny_font,
         )
 
+        central_rect = None
+        if central_map is not None:
+            central_rect = _draw_map_thumbnail(
+                panel,
+                central_map,
+                agent_id,
+                "central_map",
+                (290, 88),
+                128,
+                body_font,
+                tiny_font,
+            )
+
         stat_lines = _map_stat_lines("g", global_map, agent_id, "global")
         stat_lines.extend(_map_stat_lines("l", local_map, agent_id, "local"))
-        panel.blit(tiny_font.render("channel stats", True, (240, 245, 250)), (290, 88))
+        if central_map is not None:
+            stat_lines.extend(_map_stat_lines("c", central_map, agent_id, "central_map"))
+        stats_x = 430 if central_map is not None else 290
+        panel.blit(tiny_font.render("channel stats", True, (240, 245, 250)), (stats_x, 88))
         for idx, line in enumerate(stat_lines):
             text = tiny_font.render(line, True, (220, 228, 236))
-            panel.blit(text, (290, 104 + idx * 12))
+            panel.blit(text, (stats_x, 104 + idx * 11))
 
         action_lines = _action_history_lines(vector_obs)
         action_title_y = max(global_rect.bottom, local_rect.bottom) + 16
@@ -522,10 +592,22 @@ def draw_observation_panel(
         for idx, line in enumerate(action_lines):
             panel.blit(tiny_font.render(line, True, (220, 228, 236)), (10, action_title_y + 14 + idx * 12))
 
+        if central_rect is not None:
+            central_vector_y = central_rect.bottom + 16
+            panel.blit(
+                tiny_font.render("central relative (dx, dy)", True, (240, 245, 250)),
+                (150, central_vector_y),
+            )
+            for idx, line in enumerate(_central_vector_lines(central_vector)):
+                panel.blit(
+                    tiny_font.render(line, True, (220, 228, 236)),
+                    (150, central_vector_y + 14 + idx * 12),
+                )
+
         legend_y = panel_height - 38
         legend_lines = [
             "bg: coverage/boundary, red: obstacle, rose: warning",
-            "cyan: drone, gold: observer, pink x: goal",
+            "cyan: drone, green ring: focal, gold: observer, pink x: goal",
         ]
         for idx, legend in enumerate(legend_lines):
             panel.blit(tiny_font.render(legend, True, (210, 220, 230)), (10, legend_y + idx * 12))
@@ -797,11 +879,11 @@ def run_trained_model_simulation(playback_mode="step", checkpoint_iteration=None
         },
         
         # 맵 및 목적지 설정
-        "min_obstacles": 0,
-        "max_obstacles": 0,
+        "min_obstacles": 4,
+        "max_obstacles": 5,
         "obstacle_min_speed": 2,
-        "obstacle_max_speed": 4,
-        "n_static_obstacles": 10,
+        "obstacle_max_speed": 3,
+        "n_static_obstacles": 2,
         "poi_config": [GOAL_CONFIG],
         "log_step_rewards": True,
 

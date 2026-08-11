@@ -62,7 +62,7 @@ class IMU:
 class Drone(BaseAgent):
     """Drone class."""
 
-    CENTRAL_MAP_SIZE = 40
+    CENTRAL_MAP_SIZE = 20
     CENTRAL_MAP_CHANNELS = 8
 
     def __init__(
@@ -416,20 +416,6 @@ class Drone(BaseAgent):
             ),
         )
 
-    @staticmethod
-    def _resize_world_map_nearest(world_map, output_size):
-        """Resize a fixed world-grid map without changing its coordinate frame."""
-        source_height, source_width = world_map.shape[:2]
-        y_indices = np.minimum(
-            (np.arange(output_size, dtype=np.int32) * source_height) // output_size,
-            source_height - 1,
-        )
-        x_indices = np.minimum(
-            (np.arange(output_size, dtype=np.int32) * source_width) // output_size,
-            source_width - 1,
-        )
-        return world_map[y_indices[:, None], x_indices[None, :], :]
-
     def build_central_map(self, world, agents, goals):
         """Build the fixed world-centered map used only by the drone critic."""
         drone_positions = [
@@ -456,10 +442,7 @@ class Drone(BaseAgent):
             ],
             axis=-1,
         ).astype(np.float32, copy=False)
-        return self._resize_world_map_nearest(
-            central_channels,
-            self.CENTRAL_MAP_SIZE,
-        ).astype(np.float32, copy=False)
+        return central_channels
 
     def build_central_relative_vector(self, world, agents, goals):
         """Return critic-only entity coordinates relative to this drone."""

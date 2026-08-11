@@ -32,6 +32,7 @@ from hemac.helpers.logger import LOGGER
 from hemac.rllib_policy import (
     DRONE_LOG_STD_INIT,
     DRONE_MAPPO_CUSTOM_MODEL_NAME,
+    DRONE_MAPPO_MODEL_VERSION,
     drone_policy_model_config,
     observer_policy_model_config,
     get_policy_log_std_stats,
@@ -83,24 +84,24 @@ DEFAULT_NUM_ITERATIONS = 10_000_000_000
 DEFAULT_CHECKPOINT_INTERVAL = 100
 DEFAULT_NUM_GPUS = 1
 OBSTACLE_CURRICULUM_LEVELS = [
-    {
-        "min_obstacles": 1,
-        "max_obstacles": 2,
-        "obstacle_min_speed": 1,
-        "obstacle_max_speed": 1,
-        "n_static_obstacles": 1,
-        "goal_min_base_distance": 350.0,
-        "goal_max_base_distance": 450.0,
-    },
-    {
-        "min_obstacles": 2,
-        "max_obstacles": 3,
-        "obstacle_min_speed": 1,
-        "obstacle_max_speed": 2,
-        "n_static_obstacles": 1,
-        "goal_min_base_distance": 400.0,
-        "goal_max_base_distance": 520.0,
-    },
+    # {
+    #     "min_obstacles": 1,
+    #     "max_obstacles": 2,
+    #     "obstacle_min_speed": 1,
+    #     "obstacle_max_speed": 1,
+    #     "n_static_obstacles": 1,
+    #     "goal_min_base_distance": 350.0,
+    #     "goal_max_base_distance": 450.0,
+    # },
+    # {
+    #     "min_obstacles": 2,
+    #     "max_obstacles": 3,
+    #     "obstacle_min_speed": 1,
+    #     "obstacle_max_speed": 2,
+    #     "n_static_obstacles": 1,
+    #     "goal_min_base_distance": 400.0,
+    #     "goal_max_base_distance": 520.0,
+    # },
     {
         "min_obstacles": 3,
         "max_obstacles": 4,
@@ -949,11 +950,21 @@ def restore_algorithm_with_sampling_config(checkpoint_dir, args):
         if isinstance(drone_policy_config, dict)
         else None
     )
-    if checkpoint_drone_model != DRONE_MAPPO_CUSTOM_MODEL_NAME:
+    checkpoint_model_version = (
+        drone_policy_config.get("model", {})
+        .get("custom_model_config", {})
+        .get("mappo_model_version")
+        if isinstance(drone_policy_config, dict)
+        else None
+    )
+    if (
+        checkpoint_drone_model != DRONE_MAPPO_CUSTOM_MODEL_NAME
+        or checkpoint_model_version != DRONE_MAPPO_MODEL_VERSION
+    ):
         raise ValueError(
-            "This checkpoint predates the MAPPO centralized critic and cannot be "
-            "resumed with the new drone observation space. Start a new run, or use "
-            "--restore-observer-from to reuse only a compatible observer policy."
+            "This checkpoint uses an incompatible drone model or central-map shape. "
+            "Start a new run, or use --restore-observer-from to reuse only a "
+            "compatible observer policy."
         )
 
     checkpoint_config.env_runners(

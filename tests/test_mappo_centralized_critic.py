@@ -39,7 +39,7 @@ def test_drone_observation_contains_world_centered_critic_inputs():
 
         for drone_idx, observation in enumerate(observations):
             assert env.observation_space(f"drone_{drone_idx}").contains(observation)
-            assert observation["central_map"].shape == (40, 40, 8)
+            assert observation["central_map"].shape == (20, 20, 8)
             assert observation["central_vector"].shape == (8,)
             assert np.all(np.abs(observation["central_vector"]) <= 1.0)
             assert np.count_nonzero(observation["central_map"][:, :, 5]) > 0
@@ -112,6 +112,7 @@ def test_mappo_actor_ignores_central_input_while_critic_uses_it():
             },
             name="mappo_separation_test",
         )
+        assert model.central_critic_input_dim == 136
 
         logits_before, _ = model(
             {"obs": _batch_observation(observation)},

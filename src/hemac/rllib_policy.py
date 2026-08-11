@@ -15,6 +15,7 @@ torch, nn = try_import_torch()
 
 DRONE_CUSTOM_MODEL_NAME = "hemac_clamped_gaussian_torch"
 DRONE_MAPPO_CUSTOM_MODEL_NAME = "hemac_mappo_centralized_critic_torch"
+DRONE_MAPPO_MODEL_VERSION = 2
 OBSERVER_CUSTOM_MODEL_NAME = "hemac_discrete_spatial_torch"
 DRONE_LOG_STD_INIT = -1.8
 DRONE_LOG_STD_MIN = -2.5
@@ -346,6 +347,7 @@ class MAPPOCentralizedCriticTorchModel(ClampedGaussianTorchModel):
             self.central_map_channels,
             activation_name,
             CENTRAL_MAP_ENCODER_CHANNELS,
+            final_stride=1,
         )
 
         with torch.no_grad():
@@ -494,6 +496,7 @@ def drone_policy_model_config() -> dict[str, Any]:
             "log_std_min": DRONE_LOG_STD_MIN,
             "log_std_max": DRONE_LOG_STD_MAX,
             "central_critic_hidden_sizes": CENTRAL_CRITIC_HIDDEN_SIZES,
+            "mappo_model_version": DRONE_MAPPO_MODEL_VERSION,
         },
     }
 
