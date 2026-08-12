@@ -1054,8 +1054,8 @@ class HeMAC:
                     if goal_dist < agent.sensing_range and not self.found_goal:
                         agent.found_goal = True
                         self.found_goal = True
-                        reward += 20
-                        reward_dict[active_agent].append(20)
+                        reward += 70
+                        reward_dict[active_agent].append(70)
 
                 newly_detected_count = self._update_detected_cache(
                     agent,

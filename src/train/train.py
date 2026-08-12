@@ -59,6 +59,7 @@ FROZEN_OBSERVER_CHECKPOINT = TRAIN_DIR / "observer_checkpoints" / "checkpoint_10
 
 VISUALIZATION_LOG_INTERVAL = 500
 EVAL_LOG_INTERVAL = 100
+STOCHASTIC_EVAL_LOG_INTERVAL = 500
 VIDEO_FPS = 12
 VIDEO_SEED = 0
 VIDEO_OUTPUT_DIR = Path("./wandb_media")
@@ -67,10 +68,12 @@ PPO_INITIAL_LR = 3e-4
 PPO_MID_LR = 1e-4
 PPO_FINAL_LR = 1e-5
 PPO_TRAIN_BATCH_SIZE = 8000
+PPO_MINIBATCH_SIZE = 1024
 PPO_LR_MID_OFFSET = 500 * PPO_TRAIN_BATCH_SIZE
 PPO_LR_FINAL_OFFSET = 10000 * PPO_TRAIN_BATCH_SIZE
 # LOG_STD_MAX_INCREASE_PER_OPTIMIZER_STEP = 1e-5
 NUM_ENV_RUNNERS = 6
+NUM_ENVS_PER_ENV_RUNNER = 2
 ROLLOUT_FRAGMENT_LENGTH = 100
 SAMPLE_TIMEOUT_S = 300.0
 CURRICULUM_COVERAGE_LEVELS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
@@ -886,7 +889,9 @@ def env_creator(config):
     env_config = build_env_config()
     if config:
         env_config.update(config)
-    return PettingZooEnv(HeMAC_v0.env(**env_config))
+    # RLlib always supplies actions from the declared policy space, so the
+    # per-turn assertion and order wrappers only add sampling overhead here.
+    return PettingZooEnv(HeMAC_v0.RawEnv(**env_config))
 
 
 def load_policy_weights_from_checkpoint(checkpoint_dir, policy_id):
@@ -969,9 +974,11 @@ def restore_algorithm_with_sampling_config(checkpoint_dir, args):
 
     checkpoint_config.env_runners(
         num_env_runners=int(args.num_env_runners),
+        num_envs_per_env_runner=int(args.num_envs_per_env_runner),
         rollout_fragment_length=int(args.rollout_fragment_length),
         sample_timeout_s=float(args.sample_timeout_s),
     )
+    checkpoint_config.training(minibatch_size=PPO_MINIBATCH_SIZE)
     state["config"] = checkpoint_config
     return Algorithm.from_state(state)
 
@@ -1031,6 +1038,12 @@ def parse_args():
         type=int,
         default=NUM_ENV_RUNNERS,
         help="Number of RLlib environment runners.",
+    )
+    parser.add_argument(
+        "--num-envs-per-env-runner",
+        type=int,
+        default=NUM_ENVS_PER_ENV_RUNNER,
+        help="Number of vectorized environments sampled by each RLlib environment runner.",
     )
     parser.add_argument(
         "--rollout-fragment-length",
@@ -1273,6 +1286,7 @@ def main():
             .environment(env=env_name, env_config=env_config)
             .env_runners(
                 num_env_runners=args.num_env_runners,
+                num_envs_per_env_runner=args.num_envs_per_env_runner,
                 rollout_fragment_length=args.rollout_fragment_length,
                 sample_timeout_s=args.sample_timeout_s,
             )
@@ -1284,7 +1298,7 @@ def main():
             .resources(num_gpus=args.num_gpus)
             .training(
                 train_batch_size=PPO_TRAIN_BATCH_SIZE,
-                minibatch_size=512,
+                minibatch_size=PPO_MINIBATCH_SIZE,
                 num_epochs=5,
                 lr=PPO_INITIAL_LR,
                 lr_schedule=build_curriculum_lr_schedule(0),
@@ -1303,6 +1317,7 @@ def main():
     print(
         "[sampling] "
         f"env_runners={args.num_env_runners}, "
+        f"envs_per_runner={args.num_envs_per_env_runner}, "
         f"fragment_length={args.rollout_fragment_length}, "
         f"timeout={args.sample_timeout_s:.0f}s"
     )
@@ -1511,14 +1526,15 @@ def main():
                 log_payload["metrics/eval_success_rate"] = eval_success_rate
                 log_payload["metrics/eval_drone_crash_rate"] = deterministic_eval["drone_crash_rate"]
 
-                stochastic_eval = collect_eval_metrics(
-                    algo,
-                    num_episodes=20,
-                    seeds=current_eval_seeds,
-                    explore=True,
-                )
-                log_payload["metrics/eval_success_rate_stochastic"] = stochastic_eval["success_rate"]
-                log_payload["metrics/eval_drone_crash_rate_stochastic"] = stochastic_eval["drone_crash_rate"]
+                if iteration % STOCHASTIC_EVAL_LOG_INTERVAL == 0:
+                    stochastic_eval = collect_eval_metrics(
+                        algo,
+                        num_episodes=20,
+                        seeds=current_eval_seeds,
+                        explore=True,
+                    )
+                    log_payload["metrics/eval_success_rate_stochastic"] = stochastic_eval["success_rate"]
+                    log_payload["metrics/eval_drone_crash_rate_stochastic"] = stochastic_eval["drone_crash_rate"]
             except Exception as exc:
                 print(f"[warn] evaluation logging skipped at iteration {iteration}: {exc}")
 
