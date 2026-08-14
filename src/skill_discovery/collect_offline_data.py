@@ -27,6 +27,10 @@ if str(PROJECT_SRC) not in sys.path:
     sys.path.insert(0, str(PROJECT_SRC))
 
 from hemac import HeMAC_v0
+from hemac.curriculum_config import (
+    OBSTACLE_CURRICULUM_LEVELS,
+    get_obstacle_curriculum_level,
+)
 from hemac.rllib_policy import register_hemac_rllib_models
 
 
@@ -38,19 +42,6 @@ MAX_COLLECTION_ATTEMPTS = 10000
 BASE_SEED = 0
 EXPLORE = False
 ENV_NAME = "hemac_asymmetric_env"
-
-# These values override the env_config stored in the MAPPO checkpoint only for
-# offline-data collection. Remove a key to inherit that value from checkpoint.
-COLLECTION_ENV_OVERRIDES = {
-    "min_obstacles": 3,
-    "max_obstacles": 4,
-    "n_static_obstacles": 2,
-    "obstacle_min_speed": 1,
-    "obstacle_max_speed": 3,
-    "goal_min_base_distance": 475.0,
-    "goal_max_base_distance": 600.0,
-    "max_cycles": 300,
-}
 
 ACTION_HISTORY_LENGTH = 5
 ACTION_DIM = 3
@@ -132,6 +123,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--base-seed", type=int, default=BASE_SEED)
     parser.add_argument(
+        "--difficulty",
+        type=int,
+        choices=range(1, len(OBSTACLE_CURRICULUM_LEVELS) + 1),
+        required=True,
+        metavar=f"1-{len(OBSTACLE_CURRICULUM_LEVELS)}",
+        help="1-based obstacle curriculum difficulty to collect.",
+    )
+    parser.add_argument(
         "--explore",
         action=argparse.BooleanOptionalAction,
         default=EXPLORE,
@@ -186,10 +185,13 @@ def classify_outcome(final_info: dict[str, Any]) -> str:
     return "goal_not_found"
 
 
-def build_collection_env_config(checkpoint_env_config: dict[str, Any]) -> dict[str, Any]:
-    """Apply explicit collection overrides to checkpoint environment settings."""
+def build_collection_env_config(
+    checkpoint_env_config: dict[str, Any],
+    difficulty: int,
+) -> dict[str, Any]:
+    """Apply one shared curriculum level to checkpoint environment settings."""
     config = dict(checkpoint_env_config)
-    config.update(COLLECTION_ENV_OVERRIDES)
+    config.update(get_obstacle_curriculum_level(difficulty))
     config["render_mode"] = None
     config["log_step_rewards"] = False
 
@@ -629,6 +631,7 @@ def tensorize_trajectory(trajectory: dict[str, Any]) -> dict[str, Any]:
 
 def save_episode(
     output_path: Path,
+    difficulty: int,
     outcome_category: str,
     episode_index: int,
     attempt_index: int,
@@ -642,6 +645,7 @@ def save_episode(
     payload = {
         "metadata": {
             "format_version": 4,
+            "difficulty": difficulty,
             "outcome_category": outcome_category,
             "episode_index": episode_index,
             "collection_attempt": attempt_index,
@@ -716,7 +720,8 @@ def main() -> None:
     """Collect a balanced number of episodes for all outcome categories."""
     args = parse_args()
     checkpoint_path = args.checkpoint.expanduser().resolve()
-    output_dir = args.output_dir.expanduser().resolve()
+    output_root = args.output_dir.expanduser().resolve()
+    output_dir = output_root / f"difficulty_{args.difficulty:02d}"
     if not (checkpoint_path / "algorithm_state.pkl").is_file():
         raise FileNotFoundError(f"Invalid RLlib checkpoint: {checkpoint_path}")
     if args.num_episodes <= 0:
@@ -737,9 +742,13 @@ def main() -> None:
 
     algo = load_inference_algorithm(checkpoint_path)
     checkpoint_env_config = getattr(algo.config, "env_config", {}) or {}
-    collection_env_config = build_collection_env_config(checkpoint_env_config)
+    collection_env_config = build_collection_env_config(
+        checkpoint_env_config,
+        args.difficulty,
+    )
     print(
-        "Offline collection environment: "
+        f"Offline collection difficulty {args.difficulty}/"
+        f"{len(OBSTACLE_CURRICULUM_LEVELS)}: "
         f"obstacles={collection_env_config.get('min_obstacles')}-"
         f"{collection_env_config.get('max_obstacles')}, "
         f"static_obstacles={collection_env_config.get('n_static_obstacles')}, "
@@ -786,6 +795,7 @@ def main() -> None:
             )
             payload = save_episode(
                 output_path,
+                difficulty=args.difficulty,
                 outcome_category=category,
                 episode_index=episode_index,
                 attempt_index=attempt_index,

@@ -28,6 +28,7 @@ if str(PROJECT_SRC) not in sys.path:
     sys.path.insert(0, str(PROJECT_SRC))
 
 from hemac import HeMAC_v0
+from hemac.curriculum_config import OBSTACLE_CURRICULUM_LEVELS
 from hemac.helpers.logger import LOGGER
 from hemac.rllib_policy import (
     DRONE_LOG_STD_INIT,
@@ -86,80 +87,6 @@ DEFAULT_WANDB_RUN_NAME = "MAPPO-Agent-Training"
 DEFAULT_NUM_ITERATIONS = 10_000_000_000
 DEFAULT_CHECKPOINT_INTERVAL = 100
 DEFAULT_NUM_GPUS = 1
-OBSTACLE_CURRICULUM_LEVELS = [
-    # {
-    #     "min_obstacles": 1,
-    #     "max_obstacles": 2,
-    #     "obstacle_min_speed": 1,
-    #     "obstacle_max_speed": 1,
-    #     "n_static_obstacles": 1,
-    #     "goal_min_base_distance": 350.0,
-    #     "goal_max_base_distance": 450.0,
-    # },
-    # {
-    #     "min_obstacles": 2,
-    #     "max_obstacles": 3,
-    #     "obstacle_min_speed": 1,
-    #     "obstacle_max_speed": 2,
-    #     "n_static_obstacles": 1,
-    #     "goal_min_base_distance": 400.0,
-    #     "goal_max_base_distance": 520.0,
-    # },
-    {
-        "min_obstacles": 3,
-        "max_obstacles": 4,
-        "obstacle_min_speed": 1,
-        "obstacle_max_speed": 3,
-        "n_static_obstacles": 2,
-        "goal_min_base_distance": 475.0,
-        "goal_max_base_distance": 600.0,
-    },
-    {
-        "min_obstacles": 4,
-        "max_obstacles": 5,
-        "obstacle_min_speed": 2,
-        "obstacle_max_speed": 3,
-        "n_static_obstacles": 2,
-        "goal_min_base_distance": 550.0,
-        "goal_max_base_distance": 675.0,
-    },
-    {
-        "min_obstacles": 4,
-        "max_obstacles": 6,
-        "obstacle_min_speed": 2,
-        "obstacle_max_speed": 5,
-        "n_static_obstacles": 3,
-        "goal_min_base_distance": 625.0,
-        "goal_max_base_distance": 750.0,
-    },
-    {
-        "min_obstacles": 5,
-        "max_obstacles": 7,
-        "obstacle_min_speed": 2,
-        "obstacle_max_speed": 6,
-        "n_static_obstacles": 3,
-        "goal_min_base_distance": 700.0,
-        "goal_max_base_distance": 825.0,
-    },
-    {
-        "min_obstacles": 6,
-        "max_obstacles": 8,
-        "obstacle_min_speed": 3,
-        "obstacle_max_speed": 7,
-        "n_static_obstacles": 3,
-        "goal_min_base_distance": 775.0,
-        "goal_max_base_distance": 925.0,
-    },
-    {
-        "min_obstacles": 7,
-        "max_obstacles": 9,
-        "obstacle_min_speed": 3,
-        "obstacle_max_speed": 7,
-        "n_static_obstacles": 3,
-        "goal_min_base_distance": 850.0,
-        "goal_max_base_distance": 1000.0,
-    },
-]
 CURRENT_OBSTACLE_DIFFICULTY = dict(OBSTACLE_CURRICULUM_LEVELS[0])
 
 
