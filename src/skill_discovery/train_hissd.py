@@ -1,8 +1,8 @@
 """Train drone-only HiSSD on HeMAC source difficulties 1-3.
 
 The optimization order follows the official HiSSD learner: low-level
-controller plus MoCo task discrimination, expectile value learning, then an
-advantage-weighted high-level forward-prediction planner update.
+controller plus continuous task-context learning, expectile value learning,
+then an advantage-weighted high-level forward-prediction planner update.
 """
 
 from __future__ import annotations
@@ -28,12 +28,15 @@ if str(PROJECT_SRC) not in sys.path:
 
 from skill_discovery.dataset import DEFAULT_MANIFEST_PATH, create_dataloader
 from skill_discovery.hissd_models import HeMACHISSD
+from skill_discovery.task_descriptor import TASK_DESCRIPTOR_NAMES
 
 
 DEFAULT_BC_CHECKPOINT = (
     PROJECT_ROOT / "src/skill_discovery/bc_checkpoints/drone_bc_best.pt"
 )
-DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "src/skill_discovery/hissd_checkpoints"
+DEFAULT_OUTPUT_DIR = (
+    PROJECT_ROOT / "src/skill_discovery/hissd_checkpoints_drone_task"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,24 +46,72 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data-root", type=Path)
     parser.add_argument("--bc-checkpoint", type=Path, default=DEFAULT_BC_CHECKPOINT)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
-    parser.add_argument("--epochs", type=int, default=30)
-    parser.add_argument("--batch-size", type=int, default=8)
-    parser.add_argument("--sequence-length", type=int, default=16)
-    parser.add_argument("--stride", type=int)
+    parser.add_argument("--epochs", type=int, default=70)
+    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument(
+        "--sequence-length",
+        type=int,
+        default=128,
+        help="Causal task-context length; 128 covers nearly all HeMAC episodes.",
+    )
+    parser.add_argument(
+        "--stride",
+        type=int,
+        default=128,
+        help="Window stride; use the full context by default without overlap.",
+    )
     parser.add_argument("--num-workers", type=int, default=2)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
+    parser.add_argument(
+        "--task-learning-rate-multiplier",
+        type=float,
+        default=5.0,
+        help="Learning-rate multiplier for the task encoder and descriptor head.",
+    )
     parser.add_argument("--weight-decay", type=float, default=1e-4)
+    parser.add_argument("--task-weight-decay", type=float, default=1e-4)
     parser.add_argument("--grad-clip", type=float, default=10.0)
     parser.add_argument("--skill-dim", type=int, default=64)
     parser.add_argument("--hidden-dim", type=int, default=64)
     parser.add_argument("--transformer-heads", type=int, default=1)
-    parser.add_argument("--beta", type=float, default=0.05)
+    parser.add_argument(
+        "--descriptor-weight",
+        type=float,
+        default=5.0,
+        help="Weight for normalized continuous task descriptor regression.",
+    )
+    parser.add_argument(
+        "--descriptor-metric-weight",
+        type=float,
+        default=0.0,
+        help="Weight for matching latent distances to descriptor distances.",
+    )
+    parser.add_argument(
+        "--task-contrastive-weight",
+        type=float,
+        default=0.5,
+        help="Weight for source-task proxy contrastive discrimination.",
+    )
+    parser.add_argument(
+        "--task-contrastive-temperature",
+        type=float,
+        default=0.15,
+    )
+    parser.add_argument("--task-label-smoothing", type=float, default=0.05)
+    parser.add_argument("--task-dropout", type=float, default=0.0)
+    parser.add_argument(
+        "--task-contrastive-tail-steps",
+        type=int,
+        default=8,
+        help=(
+            "Supervise only the last N valid contexts, after enough of the "
+            "episode has been observed to infer its task dynamics."
+        ),
+    )
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--expectile", type=float, default=0.9)
     parser.add_argument("--alpha", type=float, default=10.0)
     parser.add_argument("--target-tau", type=float, default=0.005)
-    parser.add_argument("--contrastive-temperature", type=float, default=0.1)
-    parser.add_argument("--max-contrastive-samples", type=int, default=256)
     parser.add_argument(
         "--reward-scale",
         type=float,
@@ -75,6 +126,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--max-train-batches", type=int)
     parser.add_argument("--max-val-batches", type=int)
+    parser.add_argument(
+        "--early-stopping-patience",
+        type=int,
+        default=10,
+        help="Stop after this many epochs without task-validation improvement; 0 disables.",
+    )
     parser.add_argument("--no-tensorboard", action="store_true")
     return parser.parse_args()
 
@@ -133,10 +190,19 @@ def prepare_batch(batch: dict[str, Any], device: torch.device) -> dict[str, Any]
         "next_central_map": batch["next_global_state"]["central_map"].to(
             device, non_blocking=True
         ),
-        "team_reward": batch["team_reward"].squeeze(-1).to(
+        "team_reward": batch["drone_task_reward"].squeeze(-1).to(
             device, non_blocking=True
         ),
+        "task_descriptor": batch["task_distribution_descriptor"].to(
+            device, non_blocking=True
+        ),
+        "task_descriptor_available": batch[
+            "task_distribution_descriptor_available"
+        ].to(device, non_blocking=True).bool(),
         "task_id": batch["task_id"].to(device, non_blocking=True),
+        "task_supervision": (
+            batch["window_start"].to(device, non_blocking=True) == 0
+        ),
         "valid_agents": valid_agents,
         "valid_steps": filled,
         "done": (terminated.bool() | truncated.bool()),
@@ -154,44 +220,6 @@ def masked_action_mse(
     return ((prediction - target).square() * mask).sum() / denominator.clamp_min(1.0)
 
 
-def moco_contrastive_loss(
-    query: torch.Tensor,
-    momentum_key: torch.Tensor,
-    task_id: torch.Tensor,
-    valid_agents: torch.Tensor,
-    *,
-    temperature: float,
-    max_samples: int,
-) -> tuple[torch.Tensor, torch.Tensor, int]:
-    """Use another same-task drone as positive and other tasks as negatives."""
-    positive_key = torch.roll(momentum_key, shifts=1, dims=2)
-    expanded_tasks = task_id[:, None, None].expand(valid_agents.shape)
-    flat_valid = valid_agents.reshape(-1)
-    queries = query.reshape(-1, query.shape[-1])[flat_valid]
-    positives = positive_key.reshape(-1, positive_key.shape[-1])[flat_valid]
-    keys = momentum_key.reshape(-1, momentum_key.shape[-1])[flat_valid]
-    tasks = expanded_tasks.reshape(-1)[flat_valid]
-    if queries.shape[0] > max_samples:
-        indices = torch.randperm(queries.shape[0], device=queries.device)[:max_samples]
-        queries = queries[indices]
-        positives = positives[indices]
-        keys = keys[indices]
-        tasks = tasks[indices]
-    if queries.shape[0] == 0 or torch.unique(tasks).numel() < 2:
-        zero = query.sum() * 0.0
-        return zero, zero.detach(), 0
-
-    positive_logits = (queries * positives).sum(dim=-1, keepdim=True) / temperature
-    negative_logits = queries @ keys.transpose(0, 1) / temperature
-    different_task = tasks[:, None] != tasks[None, :]
-    negative_logits = negative_logits.masked_fill(~different_task, float("-inf"))
-    logits = torch.cat((positive_logits, negative_logits), dim=1)
-    loss = (-positive_logits.squeeze(1) + torch.logsumexp(logits, dim=1)).mean()
-    max_negative = negative_logits.max(dim=1).values
-    accuracy = (positive_logits.squeeze(1) > max_negative).float().mean()
-    return loss, accuracy, queries.shape[0]
-
-
 def skill_standard_deviation(
     skills: torch.Tensor,
     valid_agents: torch.Tensor,
@@ -203,6 +231,209 @@ def skill_standard_deviation(
     return valid_skills.std(dim=0, unbiased=False).mean()
 
 
+def task_tail_mask(
+    valid_agents: torch.Tensor,
+    task_supervision: torch.Tensor,
+    tail_steps: int,
+) -> torch.Tensor:
+    """Select late causal steps after sufficient task dynamics were observed."""
+    valid_steps = valid_agents.any(dim=2)
+    step_number = valid_steps.long().cumsum(dim=1)
+    valid_count = valid_steps.long().sum(dim=1, keepdim=True)
+    tail_start = (valid_count - tail_steps).clamp_min(0)
+    return (
+        valid_steps
+        & (step_number > tail_start)
+        & task_supervision.unsqueeze(1)
+    )
+
+
+def continuous_task_objective(
+    model: HeMACHISSD,
+    contrastive_skills: torch.Tensor,
+    batch: dict[str, Any],
+    args: argparse.Namespace,
+) -> tuple[torch.Tensor, torch.Tensor, dict[str, float]]:
+    """Regress task-distribution parameters and preserve latent geometry."""
+    prediction, valid_windows = model.predict_task_descriptor(
+        contrastive_skills, batch["valid_agents"]
+    )
+    available = (
+        batch["task_descriptor_available"]
+        & valid_windows
+        & batch["task_supervision"]
+    )
+    if not available.any():
+        zero = contrastive_skills.sum() * 0.0
+        metrics = {
+            "descriptor_loss": 0.0,
+            "descriptor_mae": 0.0,
+            "descriptor_metric_loss": 0.0,
+            "descriptor_distance_correlation": 0.0,
+            "descriptor_samples": 0.0,
+            "descriptor_training_samples": 0.0,
+            "descriptor_prediction_std": 0.0,
+            "descriptor_target_std": 0.0,
+            "descriptor_std_ratio": 0.0,
+            "descriptor_median_baseline_mae": 0.0,
+            "descriptor_mae_gain": 0.0,
+            "task_context_std": 0.0,
+        }
+        return zero, zero, metrics
+
+    sequence_prediction, sequence_valid = model.predict_task_descriptor_sequence(
+        contrastive_skills, batch["valid_agents"]
+    )
+    sequence_supervision = (
+        task_tail_mask(
+            batch["valid_agents"],
+            batch["task_supervision"],
+            args.task_contrastive_tail_steps,
+        )
+        & sequence_valid
+        & batch["task_descriptor_available"].unsqueeze(1)
+    )
+    sequence_target = batch["task_descriptor"].unsqueeze(1).expand_as(
+        sequence_prediction
+    )
+    descriptor_loss = nn.functional.smooth_l1_loss(
+        sequence_prediction[sequence_supervision],
+        sequence_target[sequence_supervision],
+    )
+    target = batch["task_descriptor"][available]
+    predicted = prediction[available]
+    descriptor_mae = (predicted - target).abs().mean()
+    median_baseline = target.median(dim=0).values
+    median_baseline_mae = (target - median_baseline).abs().mean()
+
+    context, _ = model.pool_task_context(
+        contrastive_skills, batch["valid_agents"]
+    )
+    context = nn.functional.normalize(context[available], dim=-1)
+    if context.shape[0] < 2:
+        metric_loss = descriptor_loss.new_zeros(())
+        distance_correlation = descriptor_loss.new_zeros(())
+    else:
+        descriptor_distance = torch.cdist(target, target) / math.sqrt(
+            target.shape[-1]
+        )
+        latent_distance = 1.0 - context @ context.transpose(0, 1)
+        pair_mask = torch.triu(
+            torch.ones(
+                context.shape[0],
+                context.shape[0],
+                dtype=torch.bool,
+                device=context.device,
+            ),
+            diagonal=1,
+        )
+        latent_distance = latent_distance[pair_mask]
+        target_distance = descriptor_distance[pair_mask]
+        centered_latent = latent_distance - latent_distance.mean()
+        centered_target = target_distance - target_distance.mean()
+        latent_variance = centered_latent.square().sum()
+        target_variance = centered_target.square().sum()
+        if float(target_variance.detach()) <= 1e-8:
+            # A single-task batch has no descriptor-distance ordering to learn.
+            # Skipping it also avoids sqrt(0) producing NaN gradients.
+            distance_correlation = descriptor_loss.new_zeros(())
+            metric_loss = contrastive_skills.sum() * 0.0
+        else:
+            denominator = (
+                latent_variance.clamp_min(1e-8).sqrt()
+                * target_variance.clamp_min(1e-8).sqrt()
+            )
+            distance_correlation = (
+                centered_latent * centered_target
+            ).sum() / denominator
+            # Directly optimize geometry. The previous raw-similarity MSE admitted
+            # a low-loss constant-distance solution with near-zero correlation.
+            metric_loss = 1.0 - distance_correlation
+
+    prediction_std = predicted.std(dim=0, unbiased=False).mean()
+    target_std = target.std(dim=0, unbiased=False).mean()
+    metrics = {
+        "descriptor_loss": float(descriptor_loss.detach()),
+        "descriptor_mae": float(descriptor_mae.detach()),
+        "descriptor_metric_loss": float(metric_loss.detach()),
+        "descriptor_distance_correlation": float(distance_correlation.detach()),
+        "descriptor_samples": float(available.sum()),
+        "descriptor_training_samples": float(sequence_supervision.sum()),
+        "descriptor_prediction_std": float(prediction_std.detach()),
+        "descriptor_target_std": float(target_std.detach()),
+        "descriptor_std_ratio": float(
+            (prediction_std / target_std.clamp_min(1e-8)).detach()
+        ),
+        "descriptor_median_baseline_mae": float(
+            median_baseline_mae.detach()
+        ),
+        "descriptor_mae_gain": float(
+            (median_baseline_mae - descriptor_mae).detach()
+        ),
+        "task_context_std": float(
+            context.std(dim=0, unbiased=False).mean().detach()
+        ),
+    }
+    for index, name in enumerate(TASK_DESCRIPTOR_NAMES):
+        metrics[f"descriptor_mae/{name}"] = float(
+            (predicted[:, index] - target[:, index]).abs().mean().detach()
+        )
+    return descriptor_loss, metric_loss, metrics
+
+
+def task_contrastive_objective(
+    model: HeMACHISSD,
+    contrastive_skills: torch.Tensor,
+    batch: dict[str, Any],
+    args: argparse.Namespace,
+) -> tuple[torch.Tensor, dict[str, float]]:
+    """Match every valid causal context to its fixed source-task prior."""
+    logits = model.task_prior_sequence_logits(
+        contrastive_skills,
+        args.task_contrastive_temperature,
+    )
+    in_task_tail = task_tail_mask(
+        batch["valid_agents"],
+        batch["task_supervision"],
+        args.task_contrastive_tail_steps,
+    )
+    supervised = (
+        batch["valid_agents"]
+        & in_task_tail.unsqueeze(-1)
+    )
+    task_ids = batch["task_id"][:, None, None].expand_as(supervised)[supervised]
+    logits = logits[supervised]
+    if logits.shape[0] == 0:
+        zero = contrastive_skills.sum() * 0.0
+        return zero, {
+            "task_contrastive_loss": 0.0,
+            "task_contrastive_accuracy": 0.0,
+            "task_contrastive_chance": 1.0 / model.task_prior_count,
+            "task_contrastive_samples": 0.0,
+            "task_contrastive_confidence": 0.0,
+            "task_contrastive_entropy": 0.0,
+        }
+    loss = nn.functional.cross_entropy(
+        logits,
+        task_ids,
+        label_smoothing=(args.task_label_smoothing if model.training else 0.0),
+    )
+    probabilities = logits.softmax(dim=-1)
+    accuracy = (logits.argmax(dim=-1) == task_ids).float().mean()
+    confidence = probabilities.max(dim=-1).values.mean()
+    entropy = -(probabilities * probabilities.clamp_min(1e-8).log()).sum(
+        dim=-1
+    ).mean()
+    return loss, {
+        "task_contrastive_loss": float(loss.detach()),
+        "task_contrastive_accuracy": float(accuracy.detach()),
+        "task_contrastive_chance": 1.0 / model.task_prior_count,
+        "task_contrastive_samples": float(supervised.sum()),
+        "task_contrastive_confidence": float(confidence.detach()),
+        "task_contrastive_entropy": float(entropy.detach()),
+    }
+
+
 def controller_objective(
     model: HeMACHISSD,
     batch: dict[str, Any],
@@ -210,41 +441,52 @@ def controller_objective(
 ) -> tuple[torch.Tensor, dict[str, float]]:
     """Optimize official Eq. 11 with continuous action reconstruction."""
     features = model.encode_observations(batch["observations"])
+    task_features = model.encode_task_observations(batch["observations"])
     common, task_skill, query = model.infer_skills(
-        features, batch["valid_agents"]
+        features, batch["valid_agents"], task_features
     )
     prediction = model.decode_actions(features, common, task_skill)
     action_loss = masked_action_mse(
         prediction, batch["actions"], batch["valid_agents"]
     )
-    with torch.no_grad():
-        target_features = model.encode_observations(
-            batch["observations"], target=True
-        )
-        _, momentum_key = model.target_task_skill_encoder(
-            target_features, batch["valid_agents"]
-        )
-    contrastive_loss, contrastive_accuracy, sample_count = moco_contrastive_loss(
+    descriptor_loss, metric_loss, descriptor_metrics = continuous_task_objective(
+        model,
         query,
-        momentum_key,
-        batch["task_id"],
-        batch["valid_agents"],
-        temperature=args.contrastive_temperature,
-        max_samples=args.max_contrastive_samples,
+        batch,
+        args,
     )
-    total = action_loss + args.beta * contrastive_loss
+    contrastive_loss, contrastive_metrics = task_contrastive_objective(
+        model,
+        query,
+        batch,
+        args,
+    )
+    total = (
+        action_loss
+        + args.descriptor_weight * descriptor_loss
+        + args.descriptor_metric_weight * metric_loss
+        + args.task_contrastive_weight * contrastive_loss
+    )
     metrics = {
         "controller_loss": float(total.detach()),
         "action_mse": float(action_loss.detach()),
-        "contrastive_loss": float(contrastive_loss.detach()),
-        "contrastive_accuracy": float(contrastive_accuracy.detach()),
-        "contrastive_samples": float(sample_count),
+        "weighted_descriptor_loss": float(
+            (args.descriptor_weight * descriptor_loss).detach()
+        ),
+        "weighted_descriptor_metric_loss": float(
+            (args.descriptor_metric_weight * metric_loss).detach()
+        ),
+        "weighted_task_contrastive_loss": float(
+            (args.task_contrastive_weight * contrastive_loss).detach()
+        ),
         "common_skill_std": float(
             skill_standard_deviation(common, batch["valid_agents"]).detach()
         ),
         "task_skill_std": float(
             skill_standard_deviation(task_skill, batch["valid_agents"]).detach()
         ),
+        **descriptor_metrics,
+        **contrastive_metrics,
     }
     return total, metrics
 
@@ -391,6 +633,7 @@ def optimize(
     grad_norm = nn.utils.clip_grad_norm_(
         (parameter for parameter in model.parameters() if parameter.requires_grad),
         grad_clip,
+        error_if_nonfinite=True,
     )
     optimizer.step()
     return float(grad_norm)
@@ -431,17 +674,17 @@ def run_train_epoch(
             break
         batch = prepare_batch(raw_batch, device)
 
-        controller_loss, controller_metrics = controller_objective(model, batch, args)
+        controller_loss, controller_metrics = controller_objective(model, batch, args) # controller 학습
         controller_metrics["controller_grad_norm"] = optimize(
             controller_loss, model, optimizer, args.grad_clip
         )
 
-        value_loss, value_metrics = value_objective(model, batch, args)
+        value_loss, value_metrics = value_objective(model, batch, args) # value 학습
         value_metrics["value_grad_norm"] = optimize(
             value_loss, model, optimizer, args.grad_clip
         )
 
-        planner_loss, planner_metrics = planner_objective(model, batch, args)
+        planner_loss, planner_metrics = planner_objective(model, batch, args) # planner 학습
         planner_metrics["planner_grad_norm"] = optimize(
             planner_loss, model, optimizer, args.grad_clip
         )
@@ -463,6 +706,15 @@ def run_validation(
 ) -> dict[str, float]:
     """Evaluate all three objectives without updating source models."""
     model.eval()
+    sampler_generator = getattr(getattr(loader, "sampler", None), "generator", None)
+    if sampler_generator is None:
+        sampler_generator = getattr(
+            getattr(loader, "batch_sampler", None), "generator", None
+        )
+    if sampler_generator is not None:
+        # Keep validation batches identical across epochs so metric changes
+        # reflect the model rather than a new replacement-sampled validation set.
+        sampler_generator.manual_seed(args.seed + 10_000)
     accumulator: dict[str, float] = defaultdict(float)
     batch_count = 0
     for batch_index, raw_batch in enumerate(loader):
@@ -500,6 +752,18 @@ def build_model(sample: dict[str, Any], args: argparse.Namespace) -> HeMACHISSD:
         hidden_dim=args.hidden_dim,
         skill_dim=args.skill_dim,
         transformer_heads=args.transformer_heads,
+        contrastive_from_action_skill=True,
+        task_context_pooling=True,
+        task_descriptor_dim=len(TASK_DESCRIPTOR_NAMES),
+        task_prior_count=3,
+        task_dropout=args.task_dropout,
+        task_feature_deltas=True,
+        separate_task_observation_encoder=True,
+        learned_task_classifier=True,
+        task_spatial_statistics=True,
+        normalize_task_context=False,
+        task_running_statistics=True,
+        direct_task_summary=True,
     )
 
 
@@ -512,7 +776,10 @@ def verify_bc_initialization(
     """Verify zero skill residual leaves the validated BC action unchanged."""
     batch = prepare_batch(sample, device)
     features = model.encode_observations(batch["observations"])
-    common, task_skill, _ = model.infer_skills(features, batch["valid_agents"])
+    task_features = model.encode_task_observations(batch["observations"])
+    common, task_skill, _ = model.infer_skills(
+        features, batch["valid_agents"], task_features
+    )
     hissd_action = model.decode_actions(features, common, task_skill)
     bc_action = torch.tanh(model.action_decoder.base_action_head(features))
     return float((hissd_action - bc_action).abs().max())
@@ -536,8 +803,11 @@ def save_checkpoint(
             "format_version": 1,
             "model_type": "hemac_drone_hissd",
             "official_structure": (
-                "controller+MoCo, expectile value, advantage-weighted planner"
+                "controller+continuous task context, expectile value, "
+                "advantage-weighted planner"
             ),
+            "task_context_objective": "direct_causal_task_summary_v15",
+            "task_descriptor_names": TASK_DESCRIPTOR_NAMES,
             "model_config": model.config(),
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
@@ -569,6 +839,7 @@ def validate_args(args: argparse.Namespace) -> None:
         "batch_size",
         "sequence_length",
         "learning_rate",
+        "task_learning_rate_multiplier",
         "grad_clip",
         "skill_dim",
         "hidden_dim",
@@ -576,8 +847,8 @@ def validate_args(args: argparse.Namespace) -> None:
         "gamma",
         "alpha",
         "target_tau",
-        "contrastive_temperature",
-        "max_contrastive_samples",
+        "task_contrastive_temperature",
+        "task_contrastive_tail_steps",
         "reward_scale",
     )
     for name in positive_names:
@@ -585,8 +856,20 @@ def validate_args(args: argparse.Namespace) -> None:
             raise ValueError(f"--{name.replace('_', '-')} must be positive.")
     if not 0 < args.expectile < 1:
         raise ValueError("--expectile must be between 0 and 1.")
-    if args.beta < 0:
-        raise ValueError("--beta cannot be negative.")
+    if (
+        args.descriptor_weight < 0
+        or args.descriptor_metric_weight < 0
+        or args.task_contrastive_weight < 0
+    ):
+        raise ValueError("Task loss weights cannot be negative.")
+    if args.task_weight_decay < 0:
+        raise ValueError("--task-weight-decay cannot be negative.")
+    if not 0 <= args.task_label_smoothing < 1:
+        raise ValueError("--task-label-smoothing must be in [0, 1).")
+    if not 0 <= args.task_dropout < 1:
+        raise ValueError("--task-dropout must be in [0, 1).")
+    if args.early_stopping_patience < 0:
+        raise ValueError("--early-stopping-patience cannot be negative.")
     if args.hidden_dim % args.transformer_heads != 0:
         raise ValueError("hidden-dim must be divisible by transformer-heads.")
 
@@ -610,6 +893,7 @@ def main() -> None:
         include_observer=False,
         include_labels=False,
         balanced_sampling=True,
+        task_balanced_batches=True,
         seed=args.seed,
         pin_memory=pin_memory,
     )
@@ -625,6 +909,7 @@ def main() -> None:
         include_observer=False,
         include_labels=False,
         balanced_sampling=True,
+        task_balanced_batches=True,
         seed=args.seed,
         pin_memory=pin_memory,
         drop_last_batch=False,
@@ -633,7 +918,18 @@ def main() -> None:
     if not source_tasks.issubset({1, 2, 3}):
         raise ValueError(f"source_train contains held-out task data: {source_tasks}")
 
-    model = build_model(train_dataset[0], args)
+    first_train_sample = train_dataset[0]
+    first_val_sample = val_dataset[0]
+    if not bool(
+        first_train_sample["task_distribution_descriptor_available"]
+    ):
+        raise ValueError(
+            "The source dataset does not contain a task descriptor."
+        )
+    if not bool(first_val_sample["task_distribution_descriptor_available"]):
+        raise ValueError("The validation dataset has no task descriptor.")
+
+    model = build_model(first_train_sample, args)
     bc_info = model.initialize_from_bc(args.bc_checkpoint)
     model.to(device)
     sample_loader = create_dataloader(
@@ -659,19 +955,60 @@ def main() -> None:
             f"HiSSD decoder does not preserve BC actions: {initialization_error}"
         )
 
-    trainable_parameters = [
-        parameter for parameter in model.parameters() if parameter.requires_grad
+    task_parameters = [
+        parameter
+        for parameter in model.task_skill_encoder.parameters()
+        if parameter.requires_grad
     ]
+    if model.task_descriptor_head is not None:
+        task_parameters.extend(
+            parameter
+            for parameter in model.task_descriptor_head.parameters()
+            if parameter.requires_grad
+        )
+    if model.task_observation_encoder is not None:
+        task_parameters.extend(
+            parameter
+            for parameter in model.task_observation_encoder.parameters()
+            if parameter.requires_grad
+        )
+    if model.task_classifier_head is not None:
+        task_parameters.extend(
+            parameter
+            for parameter in model.task_classifier_head.parameters()
+            if parameter.requires_grad
+        )
+    task_parameter_ids = {id(parameter) for parameter in task_parameters}
+    base_parameters = [
+        parameter
+        for parameter in model.parameters()
+        if parameter.requires_grad and id(parameter) not in task_parameter_ids
+    ]
+    trainable_parameters = base_parameters + task_parameters
     optimizer = torch.optim.AdamW(
-        trainable_parameters,
-        lr=args.learning_rate,
-        weight_decay=args.weight_decay,
+        [
+            {
+                "params": base_parameters,
+                "lr": args.learning_rate,
+                "weight_decay": args.weight_decay,
+            },
+            {
+                "params": task_parameters,
+                "lr": args.learning_rate * args.task_learning_rate_multiplier,
+                "weight_decay": args.task_weight_decay,
+            },
+        ],
     )
     args.output_dir.mkdir(parents=True, exist_ok=True)
     print(
         f"device={device}, train_windows={len(train_dataset)}, "
         f"val_windows={len(val_dataset)}, "
         f"trainable_parameters={sum(p.numel() for p in trainable_parameters):,}"
+    )
+    print(
+        f"learning_rate={args.learning_rate:.2e}, task_learning_rate="
+        f"{args.learning_rate * args.task_learning_rate_multiplier:.2e}, "
+        f"task_weight_decay={args.task_weight_decay:.2e}"
     )
     print(f"model_config={json.dumps(model.config())}")
     print(
@@ -681,6 +1018,10 @@ def main() -> None:
 
     writer = create_writer(args)
     best_validation_loss = math.inf
+    best_task_validation_loss = math.inf
+    best_validation_epoch = 0
+    best_task_validation_epoch = 0
+    epochs_without_task_improvement = 0
     try:
         for epoch in range(1, args.epochs + 1):
             train_metrics = run_train_epoch(
@@ -689,17 +1030,51 @@ def main() -> None:
             validation_metrics = run_validation(model, val_loader, device, args)
             validation_loss = (
                 validation_metrics["action_mse"]
-                + args.beta * validation_metrics["contrastive_loss"]
+                + args.descriptor_weight * validation_metrics["descriptor_loss"]
+                + args.descriptor_metric_weight
+                * validation_metrics["descriptor_metric_loss"]
+                + args.task_contrastive_weight
+                * validation_metrics["task_contrastive_loss"]
                 + validation_metrics["value_loss"]
                 + validation_metrics["planner_loss"]
+            )
+            task_validation_loss = (
+                args.descriptor_weight * validation_metrics["descriptor_loss"]
+                + args.descriptor_metric_weight
+                * validation_metrics["descriptor_metric_loss"]
+                + args.task_contrastive_weight
+                * validation_metrics["task_contrastive_loss"]
             )
             print(
                 f"epoch={epoch:03d} "
                 f"action={train_metrics['action_mse']:.5f}/"
                 f"{validation_metrics['action_mse']:.5f} "
-                f"contrast={train_metrics['contrastive_loss']:.5f}/"
-                f"{validation_metrics['contrastive_loss']:.5f} "
-                f"contrast_acc={validation_metrics['contrastive_accuracy']:.3f} "
+                f"descriptor={train_metrics['descriptor_loss']:.5f}/"
+                f"{validation_metrics['descriptor_loss']:.5f} "
+                f"descriptor_mae={validation_metrics['descriptor_mae']:.4f} "
+                f"baseline="
+                f"{validation_metrics['descriptor_median_baseline_mae']:.4f} "
+                f"gain={validation_metrics['descriptor_mae_gain']:+.4f} "
+                f"descriptor_std="
+                f"{validation_metrics['descriptor_prediction_std']:.4f}/"
+                f"{validation_metrics['descriptor_target_std']:.4f} "
+                f"std_ratio="
+                f"{validation_metrics['descriptor_std_ratio']:.3f} "
+                f"metric={train_metrics['descriptor_metric_loss']:.5f}/"
+                f"{validation_metrics['descriptor_metric_loss']:.5f} "
+                f"distance_corr="
+                f"{validation_metrics['descriptor_distance_correlation']:.3f} "
+                f"task_contrast="
+                f"{train_metrics['task_contrastive_loss']:.4f}/"
+                f"{validation_metrics['task_contrastive_loss']:.4f} "
+                f"task_acc="
+                f"{train_metrics['task_contrastive_accuracy']:.3f}/"
+                f"{validation_metrics['task_contrastive_accuracy']:.3f}/"
+                f"{validation_metrics['task_contrastive_chance']:.3f} "
+                f"task_conf="
+                f"{train_metrics['task_contrastive_confidence']:.3f}/"
+                f"{validation_metrics['task_contrastive_confidence']:.3f} "
+                f"task_val={task_validation_loss:.4f} "
                 f"value={train_metrics['value_loss']:.5f}/"
                 f"{validation_metrics['value_loss']:.5f} "
                 f"planner={train_metrics['planner_loss']:.5f}/"
@@ -713,6 +1088,7 @@ def main() -> None:
                 for name, value in validation_metrics.items():
                     writer.add_scalar(f"validation/{name}", value, epoch)
                 writer.add_scalar("validation/combined_loss", validation_loss, epoch)
+                writer.add_scalar("validation/task_loss", task_validation_loss, epoch)
 
             save_checkpoint(
                 args.output_dir / "hissd_last.pt",
@@ -726,6 +1102,7 @@ def main() -> None:
             )
             if validation_loss < best_validation_loss:
                 best_validation_loss = validation_loss
+                best_validation_epoch = epoch
                 save_checkpoint(
                     args.output_dir / "hissd_best.pt",
                     model,
@@ -736,12 +1113,44 @@ def main() -> None:
                     args=args,
                     bc_info=bc_info,
                 )
+            if task_validation_loss < best_task_validation_loss:
+                best_task_validation_loss = task_validation_loss
+                best_task_validation_epoch = epoch
+                epochs_without_task_improvement = 0
+                save_checkpoint(
+                    args.output_dir / "hissd_best_task.pt",
+                    model,
+                    optimizer,
+                    epoch=epoch,
+                    train_metrics=train_metrics,
+                    validation_metrics=validation_metrics,
+                    args=args,
+                    bc_info=bc_info,
+                )
+            else:
+                epochs_without_task_improvement += 1
+            if (
+                args.early_stopping_patience > 0
+                and epochs_without_task_improvement
+                >= args.early_stopping_patience
+            ):
+                print(
+                    "Early stopping: task validation did not improve for "
+                    f"{args.early_stopping_patience} epochs."
+                )
+                break
     finally:
         if writer is not None:
             writer.close()
     print(
         f"Best combined validation loss: {best_validation_loss:.6f} "
+        f"at epoch {best_validation_epoch} "
         f"({args.output_dir / 'hissd_best.pt'})"
+    )
+    print(
+        f"Best task validation loss: {best_task_validation_loss:.6f} "
+        f"at epoch {best_task_validation_epoch} "
+        f"({args.output_dir / 'hissd_best_task.pt'})"
     )
 
 

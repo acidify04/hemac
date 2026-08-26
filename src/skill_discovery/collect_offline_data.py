@@ -32,6 +32,14 @@ from hemac.curriculum_config import (
     get_obstacle_curriculum_level,
 )
 from hemac.rllib_policy import register_hemac_rllib_models
+from skill_discovery.drone_task import (
+    DRONE_SKILL_SUCCESS_MIN_COVERAGE_RATIO,
+    classify_drone_skill_outcome,
+)
+from skill_discovery.task_descriptor import (
+    TaskDescriptorRecorder,
+    build_task_descriptor,
+)
 
 
 # Collection settings. Edit these for repeated experiments or use CLI overrides.
@@ -42,6 +50,7 @@ MAX_COLLECTION_ATTEMPTS = 10000
 BASE_SEED = 0
 EXPLORE = False
 ENV_NAME = "hemac_asymmetric_env"
+TASK_DEFINITION = "mission"
 
 ACTION_HISTORY_LENGTH = 5
 ACTION_DIM = 3
@@ -123,6 +132,18 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--base-seed", type=int, default=BASE_SEED)
     parser.add_argument(
+        "--task-definition",
+        choices=("mission", "drone"),
+        default=TASK_DEFINITION,
+        help="Balance labels by observer goal arrival or by the drone task.",
+    )
+    parser.add_argument(
+        "--success-min-coverage-ratio",
+        type=float,
+        default=DRONE_SKILL_SUCCESS_MIN_COVERAGE_RATIO,
+        help="Drone-task success requires this full-map coverage and goal discovery.",
+    )
+    parser.add_argument(
         "--difficulty",
         type=int,
         choices=range(1, len(OBSTACLE_CURRICULUM_LEVELS) + 1),
@@ -176,13 +197,23 @@ def agent_found_goal(core_env, agent_id: str) -> bool:
     return bool(getattr(core_env.agents_list[agent_index], "found_goal", False))
 
 
-def classify_outcome(final_info: dict[str, Any]) -> str:
-    """Assign one episode to exactly one mutually exclusive outcome category."""
-    if bool(final_info.get("success", False)):
-        return "success"
-    if bool(final_info.get("goal_found", False)):
-        return "goal_found_failure"
-    return "goal_not_found"
+def classify_outcome(
+    final_info: dict[str, Any],
+    min_coverage_ratio: float = DRONE_SKILL_SUCCESS_MIN_COVERAGE_RATIO,
+    task_definition: str = "mission",
+) -> str:
+    """Assign one episode using the selected task success definition."""
+    if task_definition == "mission":
+        if bool(final_info.get("success", False)):
+            return "success"
+        if bool(final_info.get("goal_found", False)):
+            return "goal_found_failure"
+        return "goal_not_found"
+    return classify_drone_skill_outcome(
+        bool(final_info.get("drone_goal_found", False)),
+        float(final_info.get("coverage_ratio", 0.0)),
+        min_coverage_ratio,
+    )
 
 
 def build_collection_env_config(
@@ -358,6 +389,8 @@ def _empty_cycle(agent_count: int, global_state: np.ndarray) -> dict[str, Any]:
         "shared_success_reward": 0.0,
         "goal_found": False,
         "drone_goal_found": False,
+        "coverage_ratio": 0.0,
+        "drone_task_success": False,
         "agent_goal_found": np.zeros((agent_count,), dtype=np.bool_),
         "success": False,
         "terminated": False,
@@ -397,10 +430,13 @@ def collect_episode(
     env,
     seed: int,
     explore: bool,
+    success_min_coverage_ratio: float = DRONE_SKILL_SUCCESS_MIN_COVERAGE_RATIO,
+    stop_on_drone_task_success: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Collect one episode as a time-major joint trajectory."""
     env.reset(seed=seed)
     core_env = get_core_env(env)
+    task_descriptor_recorder = TaskDescriptorRecorder.from_environment(core_env)
     agent_order = list(env.possible_agents)
     agent_index = {agent_id: index for index, agent_id in enumerate(agent_order)}
     agent_ids_by_role = {
@@ -471,6 +507,11 @@ def collect_episode(
             )
         current_cycle["goal_found"] = bool(core_env.found_goal)
         current_cycle["drone_goal_found"] = bool(drone_goal_found)
+        current_cycle["coverage_ratio"] = float(core_env.current_coverage_ratio())
+        current_cycle["drone_task_success"] = bool(
+            drone_goal_found
+            and current_cycle["coverage_ratio"] >= success_min_coverage_ratio
+        )
         current_cycle["agent_goal_found"] = np.asarray(
             [
                 agent_found_goal(core_env, tracked_agent_id)
@@ -488,7 +529,13 @@ def collect_episode(
         if not cycle_finished:
             continue
 
-        current_cycle["terminated"] = bool(core_env.terminate)
+        current_cycle["terminated"] = bool(
+            core_env.terminate
+            or (
+                stop_on_drone_task_success
+                and current_cycle["drone_task_success"]
+            )
+        )
         current_cycle["truncated"] = bool(core_env.truncate)
         current_cycle["team_reward"] = _team_reward(
             current_cycle["individual_rewards"],
@@ -498,6 +545,7 @@ def collect_episode(
             current_cycle["shared_success_reward"],
         )
         cycles.append(current_cycle)
+        task_descriptor_recorder.record_step(core_env)
 
         next_observations, boundary_raw_by_agent = snapshot_joint_observations(
             env,
@@ -507,6 +555,8 @@ def collect_episode(
         global_state_sequence.append(build_global_central_map(core_env))
         current_cycle = None
         cached_actions = {}
+        if stop_on_drone_task_success and cycles[-1]["drone_task_success"]:
+            break
 
     if current_cycle is not None:
         raise RuntimeError("Episode ended with an incomplete, unfinalized cycle.")
@@ -527,6 +577,7 @@ def collect_episode(
         "observations": observation_sequence,
         "global_states": global_state_sequence,
         "cycles": cycles,
+        "realized_task_descriptor": task_descriptor_recorder.finalize(core_env),
     }
     return trajectory, final_info
 
@@ -606,6 +657,14 @@ def tensorize_trajectory(trajectory: dict[str, Any]) -> dict[str, Any]:
             [[cycle["drone_goal_found"]] for cycle in cycles],
             dtype=torch.bool,
         ),
+        "coverage_ratio": torch.tensor(
+            [[cycle["coverage_ratio"]] for cycle in cycles],
+            dtype=torch.float32,
+        ),
+        "drone_task_success": torch.tensor(
+            [[cycle["drone_task_success"]] for cycle in cycles],
+            dtype=torch.bool,
+        ),
         "agent_goal_found": torch.from_numpy(
             np.stack([cycle["agent_goal_found"] for cycle in cycles], axis=0)
         ),
@@ -640,11 +699,15 @@ def save_episode(
     collection_env_config: dict[str, Any],
     trajectory: dict[str, Any],
     final_info: dict[str, Any],
+    success_min_coverage_ratio: float,
+    task_definition: str,
 ) -> dict[str, Any]:
     """Atomically save one episode as a PyTorch dictionary."""
+    task_descriptor = build_task_descriptor(collection_env_config)
+    realized_descriptor = trajectory["realized_task_descriptor"]
     payload = {
         "metadata": {
-            "format_version": 4,
+            "format_version": 7,
             "difficulty": difficulty,
             "outcome_category": outcome_category,
             "episode_index": episode_index,
@@ -670,20 +733,56 @@ def save_episode(
                 "all policy actions are computed from the same AEC cycle-start "
                 "snapshot, then applied in environment agent order"
             ),
+            "success_definition": (
+                "observer reaches goal"
+                if task_definition == "mission"
+                else (
+                    "drone_goal_found and full-map coverage_ratio >= "
+                    f"{success_min_coverage_ratio}"
+                )
+            ),
+            "task_descriptor_names": task_descriptor["names"],
+            "task_descriptor_scales": task_descriptor["scales"].tolist(),
+            "task_descriptor_raw": task_descriptor["raw"].tolist(),
+            "realized_task_descriptor_names": realized_descriptor["names"],
+            "realized_task_descriptor_scales": realized_descriptor["scales"].tolist(),
+            "realized_task_descriptor_raw": realized_descriptor["raw"].tolist(),
+            "realized_task_descriptor_speed_sample_count": realized_descriptor[
+                "speed_sample_count"
+            ],
             "final_info": final_info,
         },
         "outcome": {
             "category": outcome_category,
             "success": torch.tensor(
-                bool(final_info.get("success", False)),
+                outcome_category == "success",
                 dtype=torch.bool,
             ),
             "goal_found": torch.tensor(
-                bool(final_info.get("goal_found", False)),
+                bool(
+                    final_info.get(
+                        "goal_found"
+                        if task_definition == "mission"
+                        else "drone_goal_found",
+                        False,
+                    )
+                ),
                 dtype=torch.bool,
             ),
             "drone_goal_found": torch.tensor(
                 bool(final_info.get("drone_goal_found", False)),
+                dtype=torch.bool,
+            ),
+            "coverage_ratio": torch.tensor(
+                float(final_info.get("coverage_ratio", 0.0)),
+                dtype=torch.float32,
+            ),
+            "mission_success": torch.tensor(
+                bool(final_info.get("success", False)),
+                dtype=torch.bool,
+            ),
+            "mission_goal_found": torch.tensor(
+                bool(final_info.get("goal_found", False)),
                 dtype=torch.bool,
             ),
             "agent_goal_found": torch.tensor(
@@ -691,6 +790,12 @@ def save_episode(
                 dtype=torch.bool,
             ),
         },
+        "task_descriptor": torch.from_numpy(
+            task_descriptor["normalized"]
+        ),
+        "realized_task_descriptor": torch.from_numpy(
+            realized_descriptor["normalized"]
+        ),
         **tensorize_trajectory(trajectory),
     }
     temporary_path = output_path.with_suffix(output_path.suffix + ".tmp")
@@ -706,19 +811,23 @@ def print_saved_shapes(output_path: Path, payload: dict[str, Any]) -> None:
     drone_shape = tuple(payload["drone"]["actions"].shape)
     reward_shape = tuple(payload["individual_rewards"].shape)
     outcome = payload["outcome"]
+    descriptor = payload["task_descriptor"].tolist()
     print(
         f"Saved {output_path}: central_map={central_shape}, "
         f"observer_actions={observer_shape}, drone_actions={drone_shape}, "
         f"individual_rewards={reward_shape}, "
         f"success={bool(outcome['success'])}, "
         f"goal_found={bool(outcome['goal_found'])}, "
-        f"drone_goal_found={bool(outcome['drone_goal_found'])}"
+        f"drone_goal_found={bool(outcome['drone_goal_found'])}, "
+        f"task_descriptor={[round(value, 3) for value in descriptor]}"
     )
 
 
 def main() -> None:
     """Collect a balanced number of episodes for all outcome categories."""
     args = parse_args()
+    if not 0.0 <= args.success_min_coverage_ratio <= 1.0:
+        raise ValueError("--success-min-coverage-ratio must be in [0, 1].")
     checkpoint_path = args.checkpoint.expanduser().resolve()
     output_root = args.output_dir.expanduser().resolve()
     output_dir = output_root / f"difficulty_{args.difficulty:02d}"
@@ -749,6 +858,7 @@ def main() -> None:
     print(
         f"Offline collection difficulty {args.difficulty}/"
         f"{len(OBSTACLE_CURRICULUM_LEVELS)}: "
+        f"task={args.task_definition}, "
         f"obstacles={collection_env_config.get('min_obstacles')}-"
         f"{collection_env_config.get('max_obstacles')}, "
         f"static_obstacles={collection_env_config.get('n_static_obstacles')}, "
@@ -775,9 +885,23 @@ def main() -> None:
                 env,
                 seed=seed,
                 explore=args.explore,
+                success_min_coverage_ratio=args.success_min_coverage_ratio,
+                stop_on_drone_task_success=args.task_definition == "drone",
             )
 
-            category = classify_outcome(final_info)
+            category = classify_outcome(
+                final_info,
+                args.success_min_coverage_ratio,
+                args.task_definition,
+            )
+            final_info["drone_task_success"] = bool(
+                final_info.get("drone_goal_found", False)
+                and float(final_info.get("coverage_ratio", 0.0))
+                >= args.success_min_coverage_ratio
+            )
+            final_info["drone_task_success_min_coverage_ratio"] = float(
+                args.success_min_coverage_ratio
+            )
             if category_counts[category] >= args.num_episodes:
                 if attempted_episodes % 10 == 0:
                     print(
@@ -804,6 +928,8 @@ def main() -> None:
                 collection_env_config=collection_env_config,
                 trajectory=trajectory,
                 final_info=final_info,
+                success_min_coverage_ratio=args.success_min_coverage_ratio,
+                task_definition=args.task_definition,
             )
             category_counts[category] += 1
             print_saved_shapes(output_path, payload)

@@ -36,10 +36,14 @@ from skill_discovery.collect_offline_data import (
     load_inference_algorithm,
 )
 from skill_discovery.models import DroneBehaviorCloningPolicy
+from skill_discovery.drone_task import (
+    DRONE_SKILL_SUCCESS_MIN_COVERAGE_RATIO,
+    classify_drone_skill_outcome,
+)
 
 
 DEFAULT_BC_CHECKPOINT = (
-    PROJECT_ROOT / "src/skill_discovery/bc_checkpoints/drone_bc_best.pt"
+    PROJECT_ROOT / "src/skill_discovery/checkpoints/bc_checkpoints/drone_bc_best.pt"
 )
 
 
@@ -58,6 +62,8 @@ class EpisodeResult:
     drone_crash: bool
     observer_crash: bool
     coverage_ratio: float
+    mission_success: bool = False
+    drone_task_success: bool = False
 
 
 def parse_args() -> argparse.Namespace:
@@ -268,14 +274,22 @@ def run_episode(
         agent_id.startswith("drone_") and agent_found_goal(core_env, agent_id)
         for agent_id in env.possible_agents
     )
-    coverage_method = getattr(core_env, "current_drone_reward_coverage_ratio", None)
+    coverage_method = getattr(core_env, "current_coverage_ratio", None)
     coverage_ratio = float(coverage_method()) if callable(coverage_method) else 0.0
+    drone_task_success = classify_drone_skill_outcome(
+        drone_goal_found,
+        coverage_ratio,
+        DRONE_SKILL_SUCCESS_MIN_COVERAGE_RATIO,
+    ) == "success"
+    mission_success = bool(final_info.get("success", core_env.mission_success))
     return EpisodeResult(
         controller=controller,
         difficulty=difficulty,
         seed=seed,
         cycles=cycles,
-        success=bool(final_info.get("success", core_env.mission_success)),
+        success=mission_success,
+        mission_success=mission_success,
+        drone_task_success=drone_task_success,
         goal_found=bool(final_info.get("goal_found", core_env.found_goal)),
         drone_goal_found=drone_goal_found,
         fatal_crash=bool(final_info.get("fatal_crash", core_env.collided)),
@@ -299,13 +313,18 @@ def summarize(results: list[EpisodeResult]) -> dict[str, float | int]:
     return {
         "episodes": count,
         "success_rate": rate("success"),
+        "mission_success_rate": rate("mission_success"),
+        "drone_task_success_rate": rate("drone_task_success"),
         "goal_found_rate": rate("goal_found"),
         "drone_goal_found_rate": rate("drone_goal_found"),
         "fatal_crash_rate": rate("fatal_crash"),
         "drone_crash_rate": rate("drone_crash"),
         "observer_crash_rate": rate("observer_crash"),
-        "mean_coverage_ratio": sum(r.coverage_ratio for r in results) / count,
-        "mean_cycles": sum(r.cycles for r in results) / count,
+        "mean_coverage_ratio": round(
+            sum(r.coverage_ratio for r in results) / count,
+            12,
+        ),
+        "mean_cycles": round(sum(r.cycles for r in results) / count, 12),
     }
 
 
@@ -315,6 +334,7 @@ def print_summary(controller: str, difficulty: int, summary: dict[str, Any]) -> 
         f"SUMMARY controller={controller} difficulty={difficulty} "
         f"episodes={summary['episodes']} "
         f"success={summary['success_rate']:.3f} "
+        f"drone_task_success={summary['drone_task_success_rate']:.3f} "
         f"goal_found={summary['goal_found_rate']:.3f} "
         f"drone_goal_found={summary['drone_goal_found_rate']:.3f} "
         f"fatal_crash={summary['fatal_crash_rate']:.3f} "

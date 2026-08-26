@@ -12,10 +12,19 @@ from typing import Any
 
 import torch
 
+from skill_discovery.drone_task import (
+    DRONE_SKILL_SUCCESS_MIN_COVERAGE_RATIO,
+    DRONE_SKILL_SUCCESS_REWARD,
+    drone_skill_outcome_from_payload,
+)
+from skill_discovery.task_descriptor import TASK_DESCRIPTOR_NAMES
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATA_ROOT = PROJECT_ROOT / "src/skill_discovery/offline_data"
-DEFAULT_MANIFEST_PATH = DEFAULT_DATA_ROOT / "dataset_splits.json"
+MISSION_MANIFEST_PATH = DEFAULT_DATA_ROOT / "dataset_splits.json"
+DRONE_TASK_MANIFEST_PATH = DEFAULT_DATA_ROOT / "drone_task_dataset_splits.json"
+DEFAULT_MANIFEST_PATH = MISSION_MANIFEST_PATH
 DEFAULT_SOURCE_DIFFICULTIES = (1, 2, 3)
 DEFAULT_TARGET_DIFFICULTIES = (4, 5, 6)
 OUTCOME_CATEGORIES = (
@@ -23,14 +32,24 @@ OUTCOME_CATEGORIES = (
     "goal_found_failure",
     "goal_not_found",
 )
-MINIMUM_FORMAT_VERSION = 4
+MINIMUM_FORMAT_VERSION = 5
 
 
 def parse_args() -> argparse.Namespace:
     """Parse split locations, ratios, and deterministic seed."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", type=Path, default=DEFAULT_DATA_ROOT)
-    parser.add_argument("--output", type=Path, default=DEFAULT_MANIFEST_PATH)
+    parser.add_argument(
+        "--task-definition",
+        choices=("mission", "drone"),
+        default="mission",
+        help="Use observer goal arrival (mission) or drone exploration labels.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Defaults to the manifest matching --task-definition.",
+    )
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--train-ratio", type=float, default=0.8)
     parser.add_argument("--val-ratio", type=float, default=0.1)
@@ -51,45 +70,58 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=MINIMUM_FORMAT_VERSION,
     )
+    parser.add_argument(
+        "--success-min-coverage-ratio",
+        type=float,
+        default=DRONE_SKILL_SUCCESS_MIN_COVERAGE_RATIO,
+    )
     return parser.parse_args()
 
 
 def scalar_bool(value: Any) -> bool:
-    """Convert a scalar tensor or Python value to bool."""
+    """Convert a persisted scalar tensor or Python value to bool."""
     if isinstance(value, torch.Tensor):
         if value.numel() != 1:
-            raise ValueError(f"Expected scalar outcome label, got {tuple(value.shape)}.")
+            raise ValueError(f"Expected a scalar bool, got {tuple(value.shape)}.")
         return bool(value.item())
     return bool(value)
 
 
-def validate_outcome(category: str, outcome: dict[str, Any], path: Path) -> None:
-    """Verify directory category and persisted final labels agree."""
-    success = scalar_bool(outcome.get("success", False))
-    goal_found = scalar_bool(outcome.get("goal_found", False))
-    expected = {
-        "success": success,
-        "goal_found_failure": (not success and goal_found),
-        "goal_not_found": (not success and not goal_found),
-    }
-    if category not in expected or not expected[category]:
-        raise ValueError(
-            f"Outcome labels in {path} do not match category {category!r}: "
-            f"success={success}, goal_found={goal_found}."
+def mission_outcome_from_payload(
+    payload: dict[str, Any],
+) -> tuple[str, bool, float]:
+    """Derive the original observer-goal task outcome from any saved format."""
+    outcome = payload.get("outcome", {})
+    final_info = payload.get("metadata", {}).get("final_info", {})
+    success = scalar_bool(
+        outcome.get(
+            "mission_success",
+            outcome.get("success", final_info.get("success", False)),
         )
-    stored_category = outcome.get("category")
-    if stored_category is not None and stored_category != category:
-        raise ValueError(
-            f"Stored category {stored_category!r} does not match {category!r}: {path}"
+    )
+    goal_found = scalar_bool(
+        outcome.get(
+            "mission_goal_found",
+            outcome.get("goal_found", final_info.get("goal_found", False)),
         )
+    )
+    if success:
+        category = "success"
+    elif goal_found:
+        category = "goal_found_failure"
+    else:
+        category = "goal_not_found"
+    coverage_ratio = float(final_info.get("coverage_ratio", 0.0))
+    return category, goal_found, coverage_ratio
 
 
 def inspect_episode(
     path: Path,
     data_root: Path,
     difficulty: int,
-    category: str,
     minimum_format_version: int,
+    success_min_coverage_ratio: float,
+    task_definition: str,
 ) -> dict[str, Any]:
     """Read lightweight episode metadata and validate trajectory alignment."""
     payload = torch.load(path, map_location="cpu", weights_only=False, mmap=True)
@@ -99,6 +131,12 @@ def inspect_episode(
         raise ValueError(
             f"{path} uses format v{format_version}; expected v{minimum_format_version}+"
         )
+    task_descriptor = payload.get("task_descriptor")
+    if format_version >= 6 and (
+        not isinstance(task_descriptor, torch.Tensor)
+        or tuple(task_descriptor.shape) != (len(TASK_DESCRIPTOR_NAMES),)
+    ):
+        raise ValueError(f"Invalid v6 task descriptor in {path}.")
     stored_difficulty = int(metadata.get("difficulty", difficulty))
     if stored_difficulty != difficulty:
         raise ValueError(
@@ -106,8 +144,15 @@ def inspect_episode(
             f"difficulty {difficulty}: {path}"
         )
 
-    outcome = payload.get("outcome", {})
-    validate_outcome(category, outcome, path)
+    if task_definition == "mission":
+        category, task_goal_found, coverage_ratio = mission_outcome_from_payload(
+            payload
+        )
+    else:
+        category, task_goal_found, coverage_ratio = drone_skill_outcome_from_payload(
+            payload,
+            success_min_coverage_ratio,
+        )
     transition_count = int(payload["team_reward"].shape[0])
     if transition_count <= 0:
         raise ValueError(f"Episode has no transitions: {path}")
@@ -128,6 +173,15 @@ def inspect_episode(
         "difficulty": difficulty,
         "task_id": difficulty - 1,
         "category": category,
+        "task_success": category == "success",
+        "task_goal_found": task_goal_found,
+        "coverage_ratio": coverage_ratio,
+        "task_success_reward": (
+            DRONE_SKILL_SUCCESS_REWARD if task_definition == "drone" else 0.0
+        ),
+        "original_category": str(
+            payload.get("outcome", {}).get("category", path.parent.name)
+        ),
         "episode_index": int(metadata.get("episode_index", path.stem.split("_")[-1])),
         "collection_attempt": int(metadata.get("collection_attempt", -1)),
         "seed": int(metadata.get("seed", -1)),
@@ -140,32 +194,32 @@ def discover_episodes(
     data_root: Path,
     difficulties: tuple[int, ...],
     minimum_format_version: int,
+    success_min_coverage_ratio: float,
+    task_definition: str,
 ) -> dict[tuple[int, str], list[dict[str, Any]]]:
-    """Discover and validate every requested difficulty/category stratum."""
-    strata = {}
+    """Discover episodes and re-label them without moving legacy PT files."""
+    strata: dict[tuple[int, str], list[dict[str, Any]]] = defaultdict(list)
     for difficulty in difficulties:
         difficulty_dir = data_root / f"difficulty_{difficulty:02d}"
         if not difficulty_dir.is_dir():
             raise FileNotFoundError(f"Missing difficulty directory: {difficulty_dir}")
-        for category in OUTCOME_CATEGORIES:
-            category_dir = difficulty_dir / category
-            paths = sorted(category_dir.glob("*.pt"))
-            if not paths:
-                raise FileNotFoundError(f"No PT episodes found in {category_dir}")
-            strata[(difficulty, category)] = [
-                inspect_episode(
-                    path,
-                    data_root,
-                    difficulty,
-                    category,
-                    minimum_format_version,
-                )
-                for path in paths
-            ]
-    return strata
+        paths = sorted(difficulty_dir.glob("*/*.pt"))
+        if not paths:
+            raise FileNotFoundError(f"No PT episodes found in {difficulty_dir}")
+        for path in paths:
+            entry = inspect_episode(
+                path,
+                data_root,
+                difficulty,
+                minimum_format_version,
+                success_min_coverage_ratio,
+                task_definition,
+            )
+            strata[(difficulty, entry["category"])].append(entry)
+    return dict(strata)
 
 
-def split_source_stratum(
+def split_stratum(
     entries: list[dict[str, Any]],
     difficulty: int,
     category: str,
@@ -173,12 +227,19 @@ def split_source_stratum(
     val_ratio: float,
     seed: int,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-    """Deterministically split one source task/outcome stratum by episode."""
+    """Deterministically split one task/outcome stratum by episode."""
     shuffled = list(entries)
     random.Random(f"{seed}:{difficulty}:{category}").shuffle(shuffled)
     count = len(shuffled)
-    train_count = int(count * train_ratio)
-    val_count = int(count * val_ratio)
+    if count == 1:
+        return shuffled, [], []
+    if count == 2:
+        return shuffled[:1], [], shuffled[1:]
+    train_count = max(int(count * train_ratio), 1)
+    val_count = max(int(count * val_ratio), 1)
+    if train_count + val_count >= count:
+        train_count = count - 2
+        val_count = 1
     if train_count <= 0 or val_count <= 0 or train_count + val_count >= count:
         raise ValueError(
             f"Stratum difficulty={difficulty}, category={category} is too small "
@@ -214,24 +275,32 @@ def build_manifest(
     val_ratio: float,
     seed: int,
     minimum_format_version: int,
+    success_min_coverage_ratio: float,
+    task_definition: str = "mission",
 ) -> dict[str, Any]:
-    """Build source train/val/test splits and a held-out target test split."""
+    """Build disjoint source and target train/val/test episode splits."""
     overlap = set(source_difficulties).intersection(target_difficulties)
     if overlap:
         raise ValueError(f"Source and target difficulties overlap: {sorted(overlap)}")
     if train_ratio <= 0.0 or val_ratio <= 0.0 or train_ratio + val_ratio >= 1.0:
         raise ValueError("Split ratios must satisfy train > 0, val > 0, train + val < 1.")
+    if task_definition not in ("mission", "drone"):
+        raise ValueError(f"Unsupported task definition: {task_definition!r}")
 
     all_difficulties = tuple(source_difficulties) + tuple(target_difficulties)
     strata = discover_episodes(
         data_root,
         all_difficulties,
         minimum_format_version,
+        success_min_coverage_ratio,
+        task_definition,
     )
     splits: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for difficulty in source_difficulties:
         for category in OUTCOME_CATEGORIES:
-            train, val, test = split_source_stratum(
+            if (difficulty, category) not in strata:
+                continue
+            train, val, test = split_stratum(
                 strata[(difficulty, category)],
                 difficulty,
                 category,
@@ -244,10 +313,22 @@ def build_manifest(
             splits["source_test"].extend(test)
     for difficulty in target_difficulties:
         for category in OUTCOME_CATEGORIES:
-            splits["target_test"].extend(strata[(difficulty, category)])
+            if (difficulty, category) not in strata:
+                continue
+            train, val, test = split_stratum(
+                strata[(difficulty, category)],
+                difficulty,
+                category,
+                train_ratio,
+                val_ratio,
+                seed + 1,
+            )
+            splits["target_train"].extend(train)
+            splits["target_val"].extend(val)
+            splits["target_test"].extend(test)
 
     result = {
-        "manifest_version": 1,
+        "manifest_version": 2,
         "data_root": str(data_root),
         "seed": seed,
         "source_difficulties": list(source_difficulties),
@@ -259,6 +340,20 @@ def build_manifest(
         },
         "outcome_categories": list(OUTCOME_CATEGORIES),
         "minimum_format_version": minimum_format_version,
+        "success_definition": (
+            {
+                "name": "observer_goal_arrival",
+                "condition": "observer reaches goal",
+            }
+            if task_definition == "mission"
+            else {
+                "name": "drone_exploration",
+                "drone_goal_found": True,
+                "coverage_ratio": "full_map",
+                "minimum_coverage_ratio": success_min_coverage_ratio,
+                "terminal_reward": DRONE_SKILL_SUCCESS_REWARD,
+            }
+        ),
         "splits": dict(splits),
     }
     result["summary"] = summarize_splits(result["splits"])
@@ -291,7 +386,14 @@ def main() -> None:
     """Generate and save deterministic source/target episode splits."""
     args = parse_args()
     data_root = args.data_root.expanduser().resolve()
-    output_path = args.output.expanduser().resolve()
+    default_output = (
+        MISSION_MANIFEST_PATH
+        if args.task_definition == "mission"
+        else DRONE_TASK_MANIFEST_PATH
+    )
+    output_path = (args.output or default_output).expanduser().resolve()
+    if not 0.0 <= args.success_min_coverage_ratio <= 1.0:
+        raise ValueError("--success-min-coverage-ratio must be in [0, 1].")
     manifest = build_manifest(
         data_root=data_root,
         source_difficulties=tuple(args.source_difficulties),
@@ -300,6 +402,8 @@ def main() -> None:
         val_ratio=float(args.val_ratio),
         seed=int(args.seed),
         minimum_format_version=int(args.minimum_format_version),
+        success_min_coverage_ratio=float(args.success_min_coverage_ratio),
+        task_definition=args.task_definition,
     )
     save_manifest(manifest, output_path)
     print_summary(manifest, output_path)

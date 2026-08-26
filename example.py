@@ -12,10 +12,8 @@ PROJECT_SRC = PROJECT_ROOT / "src"
 if str(PROJECT_SRC) not in sys.path:
     sys.path.insert(0, str(PROJECT_SRC))
 
-import ray
-from ray.rllib.algorithms.algorithm import Algorithm
-from ray.tune.registry import register_env
-from ray.rllib.env.wrappers.pettingzoo_env import PettingZooEnv
+from ray.rllib.policy.policy import Policy
+from ray.rllib.utils.spaces.space_utils import unsquash_action
 import numpy as np
 from hemac import HeMAC_v0
 from hemac.rllib_policy import register_hemac_rllib_models
@@ -46,9 +44,10 @@ GOAL_CONFIG = {
     "spawn_quadrant": ["bottom_right", "bottom_left", "top_right"],
 }
 
+TRAIN_ROOT = PROJECT_ROOT / "src/train"
 CHECKPOINT_ROOTS = (
     PROJECT_ROOT / "hemac_checkpoints",
-    PROJECT_ROOT / "src/train/hemac_checkpoints",
+    *(sorted(TRAIN_ROOT.glob("*checkpoints*")) if TRAIN_ROOT.is_dir() else ()),
 )
 
 NUM_EVAL_SEEDS = 10
@@ -65,7 +64,7 @@ OBS_WINDOW_PADDING = 12
 OBS_WINDOW_HEADER_HEIGHT = 42
 
 
-def find_complete_checkpoints(required_policy_ids=("observer_policy", "drone_policy")):
+def find_complete_checkpoints(required_policy_ids=("drone_policy",)):
     """Return complete checkpoints and their creation timestamps."""
     checkpoints = []
     for root in CHECKPOINT_ROOTS:
@@ -90,7 +89,7 @@ def find_complete_checkpoints(required_policy_ids=("observer_policy", "drone_pol
     return checkpoints
 
 
-def find_latest_checkpoint(required_policy_ids=("observer_policy", "drone_policy")):
+def find_latest_checkpoint(required_policy_ids=("drone_policy",)):
     """Return the newest complete checkpoint found below the checkpoint roots."""
     checkpoints = find_complete_checkpoints(required_policy_ids)
 
@@ -99,7 +98,7 @@ def find_latest_checkpoint(required_policy_ids=("observer_policy", "drone_policy
 
 def find_checkpoint_by_iteration(
     iteration,
-    required_policy_ids=("observer_policy", "drone_policy"),
+    required_policy_ids=("drone_policy",),
 ):
     """Return the newest complete checkpoint matching one training iteration."""
     target_iteration = int(iteration)
@@ -120,6 +119,138 @@ def find_checkpoint_by_iteration(
         )
 
     return max(matches, key=lambda item: (item[0], str(item[1])))[1].resolve()
+
+
+def resolve_checkpoint(checkpoint):
+    """Resolve an iteration number or an explicit Algorithm checkpoint path."""
+    if checkpoint is None:
+        return find_latest_checkpoint()
+
+    candidate = Path(str(checkpoint)).expanduser()
+    if candidate.exists():
+        candidate = candidate.resolve()
+        if candidate.name == "drone_policy" and candidate.parent.name == "policies":
+            candidate = candidate.parent.parent
+        if not (candidate / "algorithm_state.pkl").is_file():
+            raise FileNotFoundError(
+                f"Checkpoint directory has no algorithm_state.pkl: {candidate}"
+            )
+        if not (candidate / "policies/drone_policy/policy_state.pkl").is_file():
+            raise FileNotFoundError(f"Checkpoint has no drone_policy: {candidate}")
+        return candidate
+
+    try:
+        return find_checkpoint_by_iteration(int(str(checkpoint)))
+    except ValueError as error:
+        raise ValueError(
+            "--checkpoint must be an iteration number or checkpoint directory path."
+        ) from error
+
+
+def _uses_legacy_four_conv_encoder(weights):
+    keys = tuple(weights)
+    has_old_final_conv = any(
+        key.endswith(("map_encoder.7.weight", "global_map_encoder.7.weight"))
+        for key in keys
+    )
+    has_current_final_conv = any(
+        key.endswith(("map_encoder.9.weight", "global_map_encoder.9.weight"))
+        for key in keys
+    )
+    return has_old_final_conv and not has_current_final_conv
+
+
+def _policy_original_space(policy):
+    return getattr(policy.observation_space, "original_space", policy.observation_space)
+
+
+def adapt_observation_for_policy(observation, policy):
+    """Convert current observations to the schema stored in a checkpoint."""
+    expected_space = _policy_original_space(policy)
+    expected_spaces = getattr(expected_space, "spaces", None)
+    if not isinstance(observation, dict) or expected_spaces is None:
+        return observation
+
+    expected_keys = set(expected_spaces)
+    if "relative_map" in expected_keys and "relative_map" not in observation:
+        global_map = np.asarray(observation["global_map"], dtype=np.float32)
+        channel_count = int(expected_spaces["relative_map"].shape[-1])
+        observation = dict(observation)
+        observation["relative_map"] = global_map[:, :, :channel_count]
+
+    missing = expected_keys.difference(observation)
+    if missing:
+        raise ValueError(
+            f"Checkpoint observation keys are missing from the environment: {sorted(missing)}"
+        )
+    adapted = {
+        key: np.asarray(observation[key], dtype=expected_spaces[key].dtype)
+        for key in expected_spaces
+    }
+    mismatches = {
+        key: (adapted[key].shape, expected_spaces[key].shape)
+        for key in expected_spaces
+        if adapted[key].shape != expected_spaces[key].shape
+    }
+    if mismatches:
+        raise ValueError(f"Checkpoint observation shape mismatch: {mismatches}")
+    return adapted
+
+
+class DronePolicyRunner:
+    """Minimal Algorithm-compatible wrapper around one restored drone policy."""
+
+    def __init__(self, policy):
+        self.policy = policy
+        original_space = _policy_original_space(policy)
+        spaces = getattr(original_space, "spaces", {})
+        central_vector_space = spaces.get("central_vector")
+        if central_vector_space is None:
+            self.required_observer_count = 0
+        else:
+            # 3 drones: two peers, plus one goal. Every remaining pair is observer.
+            entity_count = int(central_vector_space.shape[0]) // 2
+            self.required_observer_count = max(entity_count - 3, 0)
+
+    def compute_single_action(self, observation, policy_id=None, explore=False):
+        if policy_id == "observer_policy":
+            return np.zeros((3,), dtype=np.float32)
+        if policy_id != "drone_policy":
+            raise ValueError(f"Unsupported policy ID: {policy_id!r}.")
+        action, _, _ = self.policy.compute_single_action(
+            adapt_observation_for_policy(observation, self.policy),
+            explore=explore,
+        )
+        if self.policy.config.get("normalize_actions", False):
+            action = unsquash_action(action, self.policy.action_space)
+        return action
+
+
+def load_drone_policy(checkpoint_dir):
+    """Restore drone_policy without rebuilding training-time Ray workers."""
+    register_hemac_rllib_models()
+    policy_state_path = (
+        Path(checkpoint_dir) / "policies/drone_policy/policy_state.pkl"
+    )
+    with policy_state_path.open("rb") as file_obj:
+        state = pickle.load(file_obj)
+
+    weights = state.get("weights") or {}
+    encoder_variant = "current"
+    if _uses_legacy_four_conv_encoder(weights):
+        model_config = state["policy_spec"]["config"]["model"]
+        model_config.setdefault("custom_model_config", {})[
+            "encoder_variant"
+        ] = "legacy_4conv"
+        encoder_variant = "legacy_4conv"
+
+    state.pop("_optimizer_variables", None)
+    policy = Policy.from_state(state)
+    print(
+        f"[drone_policy] <- {policy_state_path} "
+        f"(encoder={encoder_variant})"
+    )
+    return DronePolicyRunner(policy)
 
 
 def load_policy_weights_from_checkpoint(checkpoint_dir, policy_id):
@@ -816,55 +947,16 @@ def run_single_episode(env, algo, eval_seed, playback_state, observation_window=
 
 
 def run_trained_model_simulation(playback_mode="step", checkpoint_iteration=None):
-    # 1. Ray 및 가상환경 내 초기화
-    ray.init(ignore_reinit_error=True)
+    # Standalone policy restoration avoids rebuilding training-time Ray workers.
     register_hemac_rllib_models()
-
-    def env_creator(config):
-        # 훈련 때 사용했던 동일한 스펙을 반환해야 합니다. (render_mode 제외)
-        train_env_config = {
-            "n_observers": 1,
-            "observer_speed": 10,
-            "n_drones": 3,
-            "n_provisioners": 0,
-            "known_goals": False,
-            "max_cycles": 300,
-            "drone_config": {
-                "drone_max_speed": 25,
-                "drone_max_thrust": 8,
-                "drones_starting_pos": DRONE_START_POSITIONS,
-            },
-            "min_obstacles": 9,
-            "max_obstacles": 9,
-            "obstacle_min_speed": 3,
-            "obstacle_max_speed": 7,
-            "n_static_obstacles": 3,
-            "poi_config": [GOAL_CONFIG],
-            "log_step_rewards": True
-        }
-        env = HeMAC_v0.env(**train_env_config)
-        return PettingZooEnv(env)
-
-    # 학습 때 사용했던 정확히 그 이름으로 등록합니다.
-    register_env("hemac_asymmetric_env", env_creator)
-
-    # 2. 두 정책이 모두 저장된 가장 최근 체크포인트를 로드합니다.
-    if checkpoint_iteration is None:
-        checkpoint_path = find_latest_checkpoint()
-        print(f"가장 최근 체크포인트를 불러오는 중: {checkpoint_path}")
-    else:
-        checkpoint_path = find_checkpoint_by_iteration(checkpoint_iteration)
-        print(f"Iteration {checkpoint_iteration} 체크포인트를 불러오는 중: {checkpoint_path}")
-    algo = Algorithm.from_checkpoint(str(checkpoint_path))
-    restore_policy_from_checkpoint(algo, "observer_policy", checkpoint_path)
-    restore_policy_from_checkpoint(algo, "drone_policy", checkpoint_path)
-    print(f"[observer_policy] <- {checkpoint_path}")
-    print(f"[drone_policy] <- {checkpoint_path}")
+    checkpoint_path = resolve_checkpoint(checkpoint_iteration)
+    print(f"드론 체크포인트를 불러오는 중: {checkpoint_path}")
+    algo = load_drone_policy(checkpoint_path)
 
     # 3. 평가용 비대칭 환경 구성 (학습 때 사용한 스펙과 완벽히 동일해야 합니다)
     env_config = {
-        # 유인기 1대 (느린 속도)
-        "n_observers": 1,
+        # MAPPO checkpoints may require an observer entry in central_vector.
+        "n_observers": algo.required_observer_count,
         "observer_speed": 10,
 
         # 무인기 3대 (빠른 속도)
@@ -886,6 +978,7 @@ def run_trained_model_simulation(playback_mode="step", checkpoint_iteration=None
         "n_static_obstacles": 2,
         "poi_config": [GOAL_CONFIG],
         "log_step_rewards": True,
+        "drone_only_success_min_coverage_ratio": 0.4,
 
         # [핵심] 화면 시각화 활성화
         "render_mode": "human" 
@@ -941,10 +1034,13 @@ def parse_args():
     )
     parser.add_argument(
         "--checkpoint",
-        type=int,
+        type=str,
         default=None,
-        metavar="ITERATION",
-        help="Load checkpoint_ITERATION. If omitted, load the newest checkpoint.",
+        metavar="ITERATION_OR_PATH",
+        help=(
+            "Load a drone checkpoint by iteration or explicit checkpoint path. "
+            "If omitted, load the newest checkpoint containing drone_policy."
+        ),
     )
     return parser.parse_args()
 

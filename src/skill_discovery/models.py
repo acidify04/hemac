@@ -211,3 +211,74 @@ class DroneBehaviorCloningPolicy(nn.Module):
         """Return serializable constructor settings for checkpoints."""
         return {**self.encoder.config(), "action_dim": self.action_dim}
 
+
+class ObserverTaskResidualPolicy(nn.Module):
+    """Task-conditioned residual on top of a frozen MAPPO observer action."""
+
+    def __init__(
+        self,
+        global_map_channels: int = 6,
+        local_map_channels: int = 6,
+        *,
+        task_skill_dim: int = 64,
+        action_dim: int = 3,
+        global_map_size: tuple[int, int] = (40, 40),
+        local_map_size: tuple[int, int] = (20, 20),
+        action_history_shape: tuple[int, int] = (5, 3),
+        hidden_sizes: Sequence[int] = DRONE_HIDDEN_SIZES,
+        residual_hidden_dim: int = 64,
+        activation: str = "relu",
+    ) -> None:
+        super().__init__()
+        self.task_skill_dim = int(task_skill_dim)
+        self.action_dim = int(action_dim)
+        self.residual_hidden_dim = int(residual_hidden_dim)
+        self.encoder = DroneObservationEncoder(
+            global_map_channels,
+            local_map_channels,
+            global_map_size=global_map_size,
+            local_map_size=local_map_size,
+            action_history_shape=action_history_shape,
+            hidden_sizes=hidden_sizes,
+            activation=activation,
+        )
+        self.residual_head = nn.Sequential(
+            nn.Linear(
+                self.encoder.output_dim + self.task_skill_dim,
+                self.residual_hidden_dim,
+            ),
+            nn.Tanh(),
+            nn.Linear(self.residual_hidden_dim, self.action_dim, bias=False),
+        )
+        nn.init.zeros_(self.residual_head[-1].weight)
+
+    def initialize_encoder_from_rllib(self, rllib_model: nn.Module) -> None:
+        """Copy the matching MAPPO observer CNN/fusion feature extractor."""
+        self.encoder.global_map_encoder.load_state_dict(
+            rllib_model.global_map_encoder.state_dict()
+        )
+        self.encoder.local_map_encoder.load_state_dict(
+            rllib_model.local_map_encoder.state_dict()
+        )
+        self.encoder.fusion.load_state_dict(rllib_model.encoder.state_dict())
+
+    def forward(
+        self,
+        global_map: torch.Tensor,
+        local_map: torch.Tensor,
+        action_history: torch.Tensor,
+        task_skill: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        features = self.encoder(global_map, local_map, action_history)
+        if features.shape[:-1] != task_skill.shape[:-1]:
+            raise ValueError("Observer features and task skill have different batches.")
+        residual = self.residual_head(torch.cat((features, task_skill), dim=-1))
+        return residual, features
+
+    def config(self) -> dict[str, object]:
+        return {
+            **self.encoder.config(),
+            "task_skill_dim": self.task_skill_dim,
+            "action_dim": self.action_dim,
+            "residual_hidden_dim": self.residual_hidden_dim,
+        }

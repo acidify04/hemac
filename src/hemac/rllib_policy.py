@@ -98,8 +98,15 @@ def _to_float_tensor(obs, device=None):
 class _SpatialObsEncoder(nn.Module):
     """Shared encoder for vector + 2D relative-map observations."""
 
-    def __init__(self, obs_space, hidden_sizes, activation_name):
+    def __init__(
+        self,
+        obs_space,
+        hidden_sizes,
+        activation_name,
+        encoder_variant="current",
+    ):
         super().__init__()
+        self.encoder_variant = str(encoder_variant)
         original_space = getattr(obs_space, "original_space", obs_space)
         self._obs_schema = "flat"
         self._use_spatial_obs = False
@@ -118,12 +125,14 @@ class _SpatialObsEncoder(nn.Module):
                 self.global_map_channels,
                 activation_name,
                 GLOBAL_MAP_ENCODER_CHANNELS,
+                encoder_variant=self.encoder_variant,
             )
             self.local_map_encoder = self._build_map_encoder(
                 self.local_map_channels,
                 activation_name,
                 LOCAL_MAP_ENCODER_CHANNELS,
                 final_stride=1,
+                encoder_variant=self.encoder_variant,
             )
             with torch.no_grad():
                 dummy_global_map = torch.zeros(
@@ -155,6 +164,7 @@ class _SpatialObsEncoder(nn.Module):
                 self.map_channels,
                 activation_name,
                 GLOBAL_MAP_ENCODER_CHANNELS,
+                encoder_variant=self.encoder_variant,
             )
             with torch.no_grad():
                 dummy_map = torch.zeros(
@@ -195,8 +205,24 @@ class _SpatialObsEncoder(nn.Module):
         activation_name,
         encoder_channels,
         final_stride=2,
+        encoder_variant="current",
     ):
         """Build a compact CNN encoder for one spatial map."""
+        if encoder_variant == "legacy_4conv":
+            return nn.Sequential(
+                nn.Conv2d(map_channels, 16, kernel_size=5, stride=2, padding=2),
+                _activation_module(activation_name),
+                nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),
+                _activation_module(activation_name),
+                nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1),
+                _activation_module(activation_name),
+                nn.MaxPool2d(2),
+                nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
+                _activation_module(activation_name),
+                nn.Flatten(),
+            )
+        if encoder_variant != "current":
+            raise ValueError(f"Unsupported encoder_variant: {encoder_variant!r}")
         conv1_channels, conv2_channels, conv3_channels, conv4_channels = encoder_channels
         return nn.Sequential(
             nn.Conv2d(map_channels, conv1_channels, kernel_size=5, stride=2, padding=2),
@@ -271,7 +297,13 @@ class ClampedGaussianTorchModel(TorchModelV2, _SpatialObsEncoder):
         self.log_std_min = float(custom_config.get("log_std_min", DRONE_LOG_STD_MIN))
         self.log_std_max = float(custom_config.get("log_std_max", DRONE_LOG_STD_MAX))
         log_std_init = float(custom_config.get("log_std_init", DRONE_LOG_STD_INIT))
-        _SpatialObsEncoder.__init__(self, obs_space, hidden_sizes, activation_name)
+        _SpatialObsEncoder.__init__(
+            self,
+            obs_space,
+            hidden_sizes,
+            activation_name,
+            encoder_variant=custom_config.get("encoder_variant", "current"),
+        )
 
         self.policy_head = nn.Linear(self.output_dim, action_dim)
         self.value_head = nn.Linear(self.output_dim, 1)
@@ -348,6 +380,7 @@ class MAPPOCentralizedCriticTorchModel(ClampedGaussianTorchModel):
             activation_name,
             CENTRAL_MAP_ENCODER_CHANNELS,
             final_stride=1,
+            encoder_variant=self.encoder_variant,
         )
 
         with torch.no_grad():
