@@ -800,7 +800,8 @@ class HeMAC:
         if self.terminate or self.mission_success or not self.found_goal:
             return False
 
-        if self.current_drone_reward_coverage_ratio() < self.drone_only_success_min_coverage_ratio:
+        coverage_ratio = self.current_drone_reward_coverage_ratio()
+        if coverage_ratio + 1e-6 < self.drone_only_success_min_coverage_ratio:
             return False
 
         return self._mark_mission_success(

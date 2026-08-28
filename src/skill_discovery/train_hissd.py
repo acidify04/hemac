@@ -32,10 +32,17 @@ from skill_discovery.task_descriptor import TASK_DESCRIPTOR_NAMES
 
 
 DEFAULT_BC_CHECKPOINT = (
-    PROJECT_ROOT / "src/skill_discovery/bc_checkpoints/drone_bc_best.pt"
+    PROJECT_ROOT
+    / "src/skill_discovery/checkpoints/bc_checkpoints/drone_bc_best.pt"
 )
 DEFAULT_OUTPUT_DIR = (
-    PROJECT_ROOT / "src/skill_discovery/hissd_checkpoints_drone_task"
+    PROJECT_ROOT / "src/skill_discovery/checkpoints/hissd_checkpoints"
+)
+ABLATION_CHOICES = (
+    "full",
+    "no_descriptor",
+    "no_task_contrast",
+    "no_task_auxiliary",
 )
 
 
@@ -46,6 +53,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data-root", type=Path)
     parser.add_argument("--bc-checkpoint", type=Path, default=DEFAULT_BC_CHECKPOINT)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument(
+        "--ablation",
+        choices=ABLATION_CHOICES,
+        default="full",
+        help=(
+            "Task-skill auxiliary objective to remove. Ablation runs use a "
+            "separate default output directory."
+        ),
+    )
     parser.add_argument("--epochs", type=int, default=70)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument(
@@ -133,7 +149,30 @@ def parse_args() -> argparse.Namespace:
         help="Stop after this many epochs without task-validation improvement; 0 disables.",
     )
     parser.add_argument("--no-tensorboard", action="store_true")
-    return parser.parse_args()
+    args = parser.parse_args()
+    configure_ablation(args)
+    return args
+
+
+def configure_ablation(args: argparse.Namespace) -> None:
+    """Resolve one named ablation into model and loss settings."""
+    args.descriptor_enabled = args.ablation not in {
+        "no_descriptor",
+        "no_task_auxiliary",
+    }
+    args.task_contrastive_enabled = args.ablation not in {
+        "no_task_contrast",
+        "no_task_auxiliary",
+    }
+    if not args.descriptor_enabled:
+        args.descriptor_weight = 0.0
+        args.descriptor_metric_weight = 0.0
+    if not args.task_contrastive_enabled:
+        args.task_contrastive_weight = 0.0
+    if args.ablation != "full" and args.output_dir == DEFAULT_OUTPUT_DIR:
+        args.output_dir = DEFAULT_OUTPUT_DIR.parent / (
+            f"{DEFAULT_OUTPUT_DIR.name}_{args.ablation}"
+        )
 
 
 def seed_everything(seed: int) -> None:
@@ -255,6 +294,10 @@ def continuous_task_objective(
     args: argparse.Namespace,
 ) -> tuple[torch.Tensor, torch.Tensor, dict[str, float]]:
     """Regress task-distribution parameters and preserve latent geometry."""
+    if model.task_descriptor_head is None:
+        zero = contrastive_skills.sum() * 0.0
+        return zero, zero, empty_descriptor_metrics()
+
     prediction, valid_windows = model.predict_task_descriptor(
         contrastive_skills, batch["valid_agents"]
     )
@@ -265,21 +308,7 @@ def continuous_task_objective(
     )
     if not available.any():
         zero = contrastive_skills.sum() * 0.0
-        metrics = {
-            "descriptor_loss": 0.0,
-            "descriptor_mae": 0.0,
-            "descriptor_metric_loss": 0.0,
-            "descriptor_distance_correlation": 0.0,
-            "descriptor_samples": 0.0,
-            "descriptor_training_samples": 0.0,
-            "descriptor_prediction_std": 0.0,
-            "descriptor_target_std": 0.0,
-            "descriptor_std_ratio": 0.0,
-            "descriptor_median_baseline_mae": 0.0,
-            "descriptor_mae_gain": 0.0,
-            "task_context_std": 0.0,
-        }
-        return zero, zero, metrics
+        return zero, zero, empty_descriptor_metrics()
 
     sequence_prediction, sequence_valid = model.predict_task_descriptor_sequence(
         contrastive_skills, batch["valid_agents"]
@@ -381,6 +410,28 @@ def continuous_task_objective(
     return descriptor_loss, metric_loss, metrics
 
 
+def empty_descriptor_metrics() -> dict[str, float]:
+    """Return stable zero-valued logging fields for descriptor ablations."""
+    metrics = {
+        "descriptor_loss": 0.0,
+        "descriptor_mae": 0.0,
+        "descriptor_metric_loss": 0.0,
+        "descriptor_distance_correlation": 0.0,
+        "descriptor_samples": 0.0,
+        "descriptor_training_samples": 0.0,
+        "descriptor_prediction_std": 0.0,
+        "descriptor_target_std": 0.0,
+        "descriptor_std_ratio": 0.0,
+        "descriptor_median_baseline_mae": 0.0,
+        "descriptor_mae_gain": 0.0,
+        "task_context_std": 0.0,
+    }
+    metrics.update(
+        {f"descriptor_mae/{name}": 0.0 for name in TASK_DESCRIPTOR_NAMES}
+    )
+    return metrics
+
+
 def task_contrastive_objective(
     model: HeMACHISSD,
     contrastive_skills: torch.Tensor,
@@ -388,6 +439,17 @@ def task_contrastive_objective(
     args: argparse.Namespace,
 ) -> tuple[torch.Tensor, dict[str, float]]:
     """Match every valid causal context to its fixed source-task prior."""
+    if model.task_prior_count <= 0:
+        zero = contrastive_skills.sum() * 0.0
+        return zero, {
+            "task_contrastive_loss": 0.0,
+            "task_contrastive_accuracy": 0.0,
+            "task_contrastive_chance": 0.0,
+            "task_contrastive_samples": 0.0,
+            "task_contrastive_confidence": 0.0,
+            "task_contrastive_entropy": 0.0,
+        }
+
     logits = model.task_prior_sequence_logits(
         contrastive_skills,
         args.task_contrastive_temperature,
@@ -754,12 +816,14 @@ def build_model(sample: dict[str, Any], args: argparse.Namespace) -> HeMACHISSD:
         transformer_heads=args.transformer_heads,
         contrastive_from_action_skill=True,
         task_context_pooling=True,
-        task_descriptor_dim=len(TASK_DESCRIPTOR_NAMES),
-        task_prior_count=3,
+        task_descriptor_dim=(
+            len(TASK_DESCRIPTOR_NAMES) if args.descriptor_enabled else 0
+        ),
+        task_prior_count=3 if args.task_contrastive_enabled else 0,
         task_dropout=args.task_dropout,
         task_feature_deltas=True,
         separate_task_observation_encoder=True,
-        learned_task_classifier=True,
+        learned_task_classifier=args.task_contrastive_enabled,
         task_spatial_statistics=True,
         normalize_task_context=False,
         task_running_statistics=True,
@@ -807,6 +871,9 @@ def save_checkpoint(
                 "advantage-weighted planner"
             ),
             "task_context_objective": "direct_causal_task_summary_v15",
+            "ablation": args.ablation,
+            "descriptor_enabled": args.descriptor_enabled,
+            "task_contrastive_enabled": args.task_contrastive_enabled,
             "task_descriptor_names": TASK_DESCRIPTOR_NAMES,
             "model_config": model.config(),
             "model_state_dict": model.state_dict(),
@@ -920,13 +987,15 @@ def main() -> None:
 
     first_train_sample = train_dataset[0]
     first_val_sample = val_dataset[0]
-    if not bool(
+    if args.descriptor_enabled and not bool(
         first_train_sample["task_distribution_descriptor_available"]
     ):
         raise ValueError(
             "The source dataset does not contain a task descriptor."
         )
-    if not bool(first_val_sample["task_distribution_descriptor_available"]):
+    if args.descriptor_enabled and not bool(
+        first_val_sample["task_distribution_descriptor_available"]
+    ):
         raise ValueError("The validation dataset has no task descriptor.")
 
     model = build_model(first_train_sample, args)
@@ -1006,6 +1075,11 @@ def main() -> None:
         f"trainable_parameters={sum(p.numel() for p in trainable_parameters):,}"
     )
     print(
+        f"ablation={args.ablation}, descriptor={args.descriptor_enabled}, "
+        f"task_contrastive={args.task_contrastive_enabled}, "
+        f"output_dir={args.output_dir}"
+    )
+    print(
         f"learning_rate={args.learning_rate:.2e}, task_learning_rate="
         f"{args.learning_rate * args.task_learning_rate_multiplier:.2e}, "
         f"task_weight_decay={args.task_weight_decay:.2e}"
@@ -1022,6 +1096,14 @@ def main() -> None:
     best_validation_epoch = 0
     best_task_validation_epoch = 0
     epochs_without_task_improvement = 0
+    task_auxiliary_enabled = (
+        args.descriptor_enabled or args.task_contrastive_enabled
+    )
+    selection_metric_name = (
+        "task auxiliary validation loss"
+        if task_auxiliary_enabled
+        else "combined validation loss"
+    )
     try:
         for epoch in range(1, args.epochs + 1):
             train_metrics = run_train_epoch(
@@ -1044,6 +1126,11 @@ def main() -> None:
                 * validation_metrics["descriptor_metric_loss"]
                 + args.task_contrastive_weight
                 * validation_metrics["task_contrastive_loss"]
+            )
+            early_stopping_loss = (
+                task_validation_loss
+                if task_auxiliary_enabled
+                else validation_loss
             )
             print(
                 f"epoch={epoch:03d} "
@@ -1113,8 +1200,8 @@ def main() -> None:
                     args=args,
                     bc_info=bc_info,
                 )
-            if task_validation_loss < best_task_validation_loss:
-                best_task_validation_loss = task_validation_loss
+            if early_stopping_loss < best_task_validation_loss:
+                best_task_validation_loss = early_stopping_loss
                 best_task_validation_epoch = epoch
                 epochs_without_task_improvement = 0
                 save_checkpoint(
@@ -1135,7 +1222,7 @@ def main() -> None:
                 >= args.early_stopping_patience
             ):
                 print(
-                    "Early stopping: task validation did not improve for "
+                    f"Early stopping: {selection_metric_name} did not improve for "
                     f"{args.early_stopping_patience} epochs."
                 )
                 break
@@ -1148,7 +1235,7 @@ def main() -> None:
         f"({args.output_dir / 'hissd_best.pt'})"
     )
     print(
-        f"Best task validation loss: {best_task_validation_loss:.6f} "
+        f"Best {selection_metric_name}: {best_task_validation_loss:.6f} "
         f"at epoch {best_task_validation_epoch} "
         f"({args.output_dir / 'hissd_best_task.pt'})"
     )

@@ -137,6 +137,30 @@ def test_same_task_batch_has_finite_controller_gradients() -> None:
     )
 
 
+def test_task_auxiliary_ablation_keeps_action_training_active() -> None:
+    """Removing both auxiliary heads must retain finite action gradients."""
+    model = HeMACHISSD(
+        7,
+        7,
+        7,
+        contrastive_from_action_skill=True,
+        task_context_pooling=True,
+        task_descriptor_dim=0,
+        task_prior_count=0,
+        learned_task_classifier=False,
+    )
+
+    loss, metrics = controller_objective(model, make_batch(), objective_args())
+    loss.backward()
+
+    assert torch.isfinite(loss)
+    assert model.task_descriptor_head is None
+    assert model.task_classifier_head is None
+    assert metrics["descriptor_loss"] == 0.0
+    assert metrics["task_contrastive_loss"] == 0.0
+    assert model.task_skill_encoder.context_gru.weight_hh.grad is not None
+
+
 def test_task_action_residual_upgrade_preserves_actions_and_serializes() -> None:
     """An old checkpoint can gain the task head without initial policy drift."""
     torch.manual_seed(11)

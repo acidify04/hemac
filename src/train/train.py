@@ -1,5 +1,6 @@
 """
 새 학습: python src/train/train.py --num-iterations 1000
+Drone-only MAPPO: python src/train/train.py --drone-only --drone-success-coverage-ratio 0.6
 최신 체크포인트 재개: python src/train/train.py --resume-from latest
 특정 체크포인트 재개: python src/train/train.py --load-checkpoint src/train/hemac_checkpoints/checkpoint_07300
 """
@@ -79,7 +80,7 @@ ROLLOUT_FRAGMENT_LENGTH = 100
 SAMPLE_TIMEOUT_S = 300.0
 CURRICULUM_COVERAGE_LEVELS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 CURRICULUM_PROMOTION_SUCCESS_RATE = 0.8
-CURRICULUM_STABILITY_WINDOW = 5
+CURRICULUM_STABILITY_WINDOW = 3
 CURRENT_DRONE_SUCCESS_MIN_COVERAGE_RATIO = CURRICULUM_COVERAGE_LEVELS[0]
 DEFAULT_CHECKPOINT_DIR = TRAIN_DIR / "hemac_checkpoints"
 DEFAULT_WANDB_PROJECT = "HeMAC-RL"
@@ -87,6 +88,7 @@ DEFAULT_WANDB_RUN_NAME = "MAPPO-Agent-Training"
 DEFAULT_NUM_ITERATIONS = 10_000_000_000
 DEFAULT_CHECKPOINT_INTERVAL = 100
 DEFAULT_NUM_GPUS = 1
+DEFAULT_DRONE_SUCCESS_COVERAGE_RATIO = 0.6
 CURRENT_OBSTACLE_DIFFICULTY = dict(OBSTACLE_CURRICULUM_LEVELS[0])
 
 
@@ -562,11 +564,18 @@ def apply_obstacle_curriculum_to_algo(algo, level):
     return updated_count
 
 
-def build_env_config(render_mode=None):
+def build_env_config(
+    render_mode=None,
+    *,
+    drone_only=False,
+    drone_success_coverage_ratio=None,
+):
     """Return the shared environment config for training and evaluation."""
     obstacle_difficulty = dict(CURRENT_OBSTACLE_DIFFICULTY)
+    if drone_success_coverage_ratio is None:
+        drone_success_coverage_ratio = CURRENT_DRONE_SUCCESS_MIN_COVERAGE_RATIO
     env_config = {
-        "n_observers": 1,
+        "n_observers": 0 if drone_only else 1,
         "observer_speed": 10,
         "n_drones": TRAIN_NUM_DRONES,
         "n_provisioners": 0,
@@ -584,7 +593,7 @@ def build_env_config(render_mode=None):
         "goal_min_base_distance": obstacle_difficulty["goal_min_base_distance"],
         "goal_max_base_distance": obstacle_difficulty["goal_max_base_distance"],
         "poi_config": [GOAL_CONFIG],
-        "drone_only_success_min_coverage_ratio": CURRENT_DRONE_SUCCESS_MIN_COVERAGE_RATIO,
+        "drone_only_success_min_coverage_ratio": float(drone_success_coverage_ratio),
         "drone_only_success_reward": 300.0,
     }
     if render_mode is not None:
@@ -636,11 +645,24 @@ def extract_final_info_from_wrapped_env(env):
     return {}
 
 
-def run_rollout(algo, seed, render_mode=None, capture_frames=False, explore=False, env=None):
+def run_rollout(
+    algo,
+    seed,
+    render_mode=None,
+    capture_frames=False,
+    explore=False,
+    env=None,
+    env_config=None,
+):
     """Run one rollout and return its final info plus optional frames."""
     owns_env = env is None
     if env is None:
-        env = HeMAC_v0.env(**build_env_config(render_mode=render_mode))
+        rollout_env_config = build_env_config(render_mode=render_mode)
+        if env_config:
+            rollout_env_config.update(env_config)
+        if render_mode is not None:
+            rollout_env_config["render_mode"] = render_mode
+        env = HeMAC_v0.env(**rollout_env_config)
     env.reset(seed=seed)
 
     frames = []
@@ -708,7 +730,7 @@ def save_frames_as_gif(frames, iteration):
     return gif_path
 
 
-def collect_visualization_video(algo, iteration, seed=VIDEO_SEED):
+def collect_visualization_video(algo, iteration, seed=VIDEO_SEED, env_config=None):
     """Run one evaluation rollout and return a WandB-compatible video artifact."""
     final_info, frames = run_rollout(
         algo,
@@ -716,6 +738,7 @@ def collect_visualization_video(algo, iteration, seed=VIDEO_SEED):
         render_mode="rgb_array",
         capture_frames=True,
         explore=False,
+        env_config=env_config,
     )
 
     if not frames:
@@ -725,7 +748,14 @@ def collect_visualization_video(algo, iteration, seed=VIDEO_SEED):
     return wandb.Video(str(gif_path), format="gif")
 
 
-def collect_eval_success_rate(algo, num_episodes=5, seed=VIDEO_SEED, explore=False, seeds=None):
+def collect_eval_success_rate(
+    algo,
+    num_episodes=5,
+    seed=VIDEO_SEED,
+    explore=False,
+    seeds=None,
+    env_config=None,
+):
     """Run evaluation episodes and return average success rate."""
     return collect_eval_metrics(
         algo,
@@ -733,15 +763,27 @@ def collect_eval_success_rate(algo, num_episodes=5, seed=VIDEO_SEED, explore=Fal
         seed=seed,
         explore=explore,
         seeds=seeds,
+        env_config=env_config,
     )["success_rate"]
 
 
-def collect_eval_metrics(algo, num_episodes=5, seed=VIDEO_SEED, explore=False, seeds=None):
+def collect_eval_metrics(
+    algo,
+    num_episodes=5,
+    seed=VIDEO_SEED,
+    explore=False,
+    seeds=None,
+    env_config=None,
+):
     """Run each evaluation rollout once and collect all episode-level rates."""
     successes = []
     crash_flags = []
     rollout_seeds = seeds if seeds is not None else [seed + episode_idx for episode_idx in range(num_episodes)]
-    env = HeMAC_v0.env(**build_env_config(render_mode=None))
+    rollout_env_config = build_env_config(render_mode=None)
+    if env_config:
+        rollout_env_config.update(env_config)
+    rollout_env_config.pop("render_mode", None)
+    env = HeMAC_v0.env(**rollout_env_config)
     try:
         for rollout_seed in rollout_seeds:
             final_info, _ = run_rollout(
@@ -762,7 +804,14 @@ def collect_eval_metrics(algo, num_episodes=5, seed=VIDEO_SEED, explore=False, s
     }
 
 
-def collect_eval_drone_crash_rate(algo, num_episodes=5, seed=VIDEO_SEED, explore=False, seeds=None):
+def collect_eval_drone_crash_rate(
+    algo,
+    num_episodes=5,
+    seed=VIDEO_SEED,
+    explore=False,
+    seeds=None,
+    env_config=None,
+):
     """Run evaluation episodes and return average drone-crash rate."""
     return collect_eval_metrics(
         algo,
@@ -770,6 +819,7 @@ def collect_eval_drone_crash_rate(algo, num_episodes=5, seed=VIDEO_SEED, explore
         seed=seed,
         explore=explore,
         seeds=seeds,
+        env_config=env_config,
     )["drone_crash_rate"]
 
 
@@ -933,6 +983,28 @@ def parse_args():
         help="Observer checkpoint directory to load before training starts.",
     )
     parser.add_argument(
+        "--drone-only",
+        action="store_true",
+        help="Remove the observer and train only the shared MAPPO drone policy.",
+    )
+    parser.add_argument(
+        "--drone-success-coverage-ratio",
+        type=float,
+        default=DEFAULT_DRONE_SUCCESS_COVERAGE_RATIO,
+        help=(
+            "Drone-only success coverage threshold in [0, 1]. Success also "
+            "requires at least one drone to find the goal (default: 0.6)."
+        ),
+    )
+    parser.add_argument(
+        "--coverage-curriculum",
+        action="store_true",
+        help=(
+            "In drone-only mode, promote the coverage threshold through the "
+            "configured curriculum instead of keeping it fixed."
+        ),
+    )
+    parser.add_argument(
         "--num-iterations",
         type=int,
         default=DEFAULT_NUM_ITERATIONS,
@@ -990,7 +1062,14 @@ def parse_args():
         default=DEFAULT_NUM_GPUS,
         help="Number of GPUs requested by RLlib.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if not 0.0 <= args.drone_success_coverage_ratio <= 1.0:
+        parser.error("--drone-success-coverage-ratio must be between 0 and 1.")
+    if args.coverage_curriculum and not args.drone_only:
+        parser.error("--coverage-curriculum requires --drone-only.")
+    if args.drone_only and args.restore_observer_from is not None:
+        parser.error("--restore-observer-from cannot be used with --drone-only.")
+    return args
 
 
 def is_algorithm_checkpoint_dir(path):
@@ -1077,7 +1156,11 @@ def _find_obstacle_stage_index(levels, obstacle_level):
     return nearest_stage_index
 
 
-def initialize_curricula_from_env_config(env_config):
+def initialize_curricula_from_env_config(
+    env_config,
+    *,
+    coverage_curriculum_enabled=False,
+):
     """Build curriculum objects that match the current environment config."""
     obstacle_curriculum = ObstacleDifficultyCurriculum(
         levels=OBSTACLE_CURRICULUM_LEVELS,
@@ -1118,7 +1201,11 @@ def initialize_curricula_from_env_config(env_config):
     env_config.update(obstacle_curriculum.current_level)
 
     coverage_curriculum = None
-    curriculum_enabled = env_config.get("n_observers", 0) == 0 and env_config.get("n_drones", 0) > 0
+    curriculum_enabled = (
+        coverage_curriculum_enabled
+        and env_config.get("n_observers", 0) == 0
+        and env_config.get("n_drones", 0) > 0
+    )
     if curriculum_enabled:
         coverage_curriculum = CoverageCurriculum(
             levels=CURRICULUM_COVERAGE_LEVELS,
@@ -1173,8 +1260,24 @@ def main():
             )
         env_config = build_env_config()
         env_config.update(restored_env_config)
+        checkpoint_is_drone_only = (
+            env_config.get("n_observers", 0) == 0
+            and env_config.get("n_drones", 0) > 0
+        )
+        if args.drone_only and not checkpoint_is_drone_only:
+            raise ValueError(
+                "--drone-only cannot convert a joint observer/drone checkpoint. "
+                "Start a new drone-only run or resume a drone-only checkpoint."
+            )
+        if args.drone_only:
+            env_config["drone_only_success_min_coverage_ratio"] = float(
+                args.drone_success_coverage_ratio
+            )
     else:
-        env_config = build_env_config()
+        env_config = build_env_config(
+            drone_only=args.drone_only,
+            drone_success_coverage_ratio=args.drone_success_coverage_ratio,
+        )
 
         temp_env = env_creator(env_config)
         obs_space = temp_env.observation_space
@@ -1220,7 +1323,7 @@ def main():
             .multi_agent(
                 policies=policies,
                 policy_mapping_fn=policy_mapping_fn,
-                policies_to_train=["observer_policy", "drone_policy"],
+                policies_to_train=list(policies),
             )
             .resources(num_gpus=args.num_gpus)
             .training(
@@ -1249,8 +1352,13 @@ def main():
         f"timeout={args.sample_timeout_s:.0f}s"
     )
 
+    is_drone_only_run = (
+        env_config.get("n_observers", 0) == 0
+        and env_config.get("n_drones", 0) > 0
+    )
     obstacle_curriculum, coverage_curriculum = initialize_curricula_from_env_config(
-        env_config
+        env_config,
+        coverage_curriculum_enabled=args.coverage_curriculum,
     )
 
     if args.restore_observer_from is not None:
@@ -1277,18 +1385,30 @@ def main():
     )
 
     coverage_updated_envs = 0
-    if coverage_curriculum is not None:
+    if is_drone_only_run:
+        current_coverage_target = float(
+            env_config["drone_only_success_min_coverage_ratio"]
+        )
+        if coverage_curriculum is not None:
+            current_coverage_target = coverage_curriculum.current_coverage_ratio
         coverage_updated_envs = apply_curriculum_to_algo(
-            algo, coverage_curriculum.current_coverage_ratio
+            algo, current_coverage_target
         )
         if coverage_updated_envs <= 0:
-            print("[warn] curriculum target was not applied to any live env at startup.")
-        print(
-            "[curriculum] start stage "
-            f"{coverage_curriculum.stage_number}/{coverage_curriculum.num_stages} "
-            f"(coverage >= {coverage_curriculum.current_coverage_ratio:.1f}, "
-            f"updated_envs={coverage_updated_envs})"
-        )
+            print("[warn] coverage target was not applied to any live env at startup.")
+        if coverage_curriculum is not None:
+            print(
+                "[curriculum] start stage "
+                f"{coverage_curriculum.stage_number}/{coverage_curriculum.num_stages} "
+                f"(coverage >= {current_coverage_target:.1f}, "
+                f"updated_envs={coverage_updated_envs})"
+            )
+        else:
+            print(
+                "[task] drone-only fixed success condition: "
+                f"coverage >= {current_coverage_target:.1f} and goal found "
+                f"(updated_envs={coverage_updated_envs})"
+            )
     else:
         print("[curriculum] disabled because this run includes an observer.")
 
@@ -1431,6 +1551,7 @@ def main():
                     algo,
                     iteration=iteration,
                     seed=visualization_seed,
+                    env_config=env_config,
                 )
                 if video is not None:
                     log_payload["visualization/policy_rollout"] = video
@@ -1448,6 +1569,7 @@ def main():
                     num_episodes=20,
                     seeds=current_eval_seeds,
                     explore=False,
+                    env_config=env_config,
                 )
                 eval_success_rate = deterministic_eval["success_rate"]
                 log_payload["metrics/eval_success_rate"] = eval_success_rate
@@ -1459,6 +1581,7 @@ def main():
                         num_episodes=20,
                         seeds=current_eval_seeds,
                         explore=True,
+                        env_config=env_config,
                     )
                     log_payload["metrics/eval_success_rate_stochastic"] = stochastic_eval["success_rate"]
                     log_payload["metrics/eval_drone_crash_rate_stochastic"] = stochastic_eval["drone_crash_rate"]
@@ -1471,6 +1594,7 @@ def main():
                 obstacle_curriculum_updated_envs = apply_obstacle_curriculum_to_algo(
                     algo, obstacle_curriculum.current_level
                 )
+                env_config.update(obstacle_curriculum.current_level)
                 if obstacle_curriculum_updated_envs <= 0:
                     print("[warn] obstacle curriculum promoted, but no live env received the new obstacle target.")
                 current_obstacle_level = obstacle_curriculum.current_level
@@ -1490,6 +1614,9 @@ def main():
                 if coverage_curriculum_promoted:
                     coverage_curriculum_updated_envs = apply_curriculum_to_algo(
                         algo, coverage_curriculum.current_coverage_ratio
+                    )
+                    env_config["drone_only_success_min_coverage_ratio"] = (
+                        coverage_curriculum.current_coverage_ratio
                     )
                     if coverage_curriculum_updated_envs <= 0:
                         print("[warn] curriculum promoted, but no live env received the new coverage target.")
