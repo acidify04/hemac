@@ -48,6 +48,7 @@ from skill_discovery.collect_offline_data import (
 from skill_discovery.evaluate_drone_bc import drone_action_scale
 from skill_discovery.hissd_models import HeMACHISSD
 from skill_discovery.models import ObserverTaskResidualPolicy
+from skill_discovery.analyze_learning_efficiency import append_curve_points
 from skill_discovery.visualize_hissd_skills import load_hissd_model, resolve_device
 
 
@@ -119,7 +120,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reward-scale", type=float, default=100.0)
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=2026)
+    parser.add_argument(
+        "--method-name",
+        default="hissd_joint_online",
+        help="Unique learning-curve method label for ablation comparisons.",
+    )
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    parser.add_argument(
+        "--learning-curve-output",
+        type=Path,
+        help="Defaults to learning_curve_seed_<seed>.json under --output-dir.",
+    )
     return parser.parse_args()
 
 
@@ -150,6 +161,9 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--gamma and --gae-lambda must be in (0, 1].")
     if args.log_std_min >= args.log_std_max:
         raise ValueError("--log-std-min must be lower than --log-std-max.")
+    args.method_name = args.method_name.strip()
+    if not args.method_name:
+        raise ValueError("--method-name cannot be empty.")
 
 
 def seed_everything(seed: int) -> None:
@@ -664,6 +678,8 @@ def save_checkpoint(
     *,
     stage: int,
     iteration: int,
+    stage_joint_env_steps: int,
+    total_joint_env_steps: int,
     metrics: dict[str, float],
     args: argparse.Namespace,
 ) -> None:
@@ -683,10 +699,13 @@ def save_checkpoint(
             "online_optimizer_state_dict": optimizer.state_dict(),
             "online_finetuning": {
                 "method": "joint_observer_drone_task_residual_team_ppo",
+                "curve_method": args.method_name,
                 "source_checkpoint": str(args.hissd_checkpoint.resolve()),
                 "observer_base_checkpoint": str(args.mappo_checkpoint.resolve()),
                 "stage": stage,
                 "iteration": iteration,
+                "stage_joint_env_steps": stage_joint_env_steps,
+                "total_joint_env_steps": total_joint_env_steps,
                 "stage_mixture": STAGE_MIXTURES[stage],
                 "metrics": metrics,
                 "hyperparameters": vars(args),
@@ -773,8 +792,15 @@ def main() -> None:
     )
     rng = random.Random(args.seed)
     global_iteration = 0
+    total_joint_env_steps = 0
+    learning_curve_path = (
+        args.learning_curve_output.expanduser().resolve()
+        if args.learning_curve_output is not None
+        else args.output_dir / f"learning_curve_seed_{args.seed}.json"
+    )
     try:
         for stage in range(args.start_stage, args.end_stage + 1):
+            stage_joint_env_steps = 0
             print(f"\nStarting online PPO stage {stage}: mixture={STAGE_MIXTURES[stage]}")
             baseline = evaluate_policy(
                 difficulty=stage,
@@ -805,6 +831,36 @@ def main() -> None:
                 f"fatal={baseline['fatal_crash']:.3f} "
                 f"score={stage_best_score:.4f}"
             )
+            append_curve_points(
+                learning_curve_path,
+                [
+                    {
+                        "method": args.method_name,
+                        "seed": args.seed,
+                        "difficulty": stage,
+                        "joint_env_steps": stage_joint_env_steps,
+                        "total_joint_env_steps": total_joint_env_steps,
+                        "iteration": global_iteration,
+                        "success_rate": baseline["success"],
+                        "goal_found_rate": baseline["goal_found"],
+                        "fatal_crash_rate": baseline["fatal_crash"],
+                        "drone_crash_rate": baseline["drone_crash"],
+                        "observer_crash_rate": baseline["observer_crash"],
+                        "mean_coverage_ratio": baseline["coverage"],
+                        "mean_cycles": baseline["cycles"],
+                    }
+                ],
+                metadata={
+                    "evaluation_episodes": args.eval_episodes,
+                    "source_checkpoint": str(args.hissd_checkpoint.resolve()),
+                    "curve_method": args.method_name,
+                    "success_definition": "observer_goal_arrival",
+                    "training_step_definition": (
+                        "sum of world cycles from target training episodes; "
+                        "evaluation cycles excluded"
+                    ),
+                },
+            )
             save_checkpoint(
                 args.output_dir / f"hissd_online_stage_{stage:02d}_best.pt",
                 model,
@@ -816,6 +872,8 @@ def main() -> None:
                 optimizer,
                 stage=stage,
                 iteration=global_iteration,
+                stage_joint_env_steps=stage_joint_env_steps,
+                total_joint_env_steps=total_joint_env_steps,
                 metrics=baseline,
                 args=args,
             )
@@ -831,6 +889,8 @@ def main() -> None:
                     optimizer,
                     stage=stage,
                     iteration=global_iteration,
+                    stage_joint_env_steps=stage_joint_env_steps,
+                    total_joint_env_steps=total_joint_env_steps,
                     metrics=baseline,
                     args=args,
                 )
@@ -869,6 +929,9 @@ def main() -> None:
                     add_gae(episode, args.gamma, args.gae_lambda)
                     trajectories.extend(episode)
                     train_episode_metrics.append(metrics)
+                    episode_joint_steps = int(round(metrics["cycles"]))
+                    stage_joint_env_steps += episode_joint_steps
+                    total_joint_env_steps += episode_joint_steps
                 update_metrics = ppo_update(
                     model,
                     observer_residual_policy,
@@ -906,6 +969,8 @@ def main() -> None:
                     optimizer,
                     stage=stage,
                     iteration=global_iteration,
+                    stage_joint_env_steps=stage_joint_env_steps,
+                    total_joint_env_steps=total_joint_env_steps,
                     metrics={**train_metrics, **update_metrics},
                     args=args,
                 )
@@ -934,6 +999,26 @@ def main() -> None:
                     f"observer_crash={evaluation['observer_crash']:.3f} "
                     f"coverage={evaluation['coverage']:.3f} score={score:.4f}"
                 )
+                append_curve_points(
+                    learning_curve_path,
+                    [
+                        {
+                            "method": args.method_name,
+                            "seed": args.seed,
+                            "difficulty": stage,
+                            "joint_env_steps": stage_joint_env_steps,
+                            "total_joint_env_steps": total_joint_env_steps,
+                            "iteration": global_iteration,
+                            "success_rate": evaluation["success"],
+                            "goal_found_rate": evaluation["goal_found"],
+                            "fatal_crash_rate": evaluation["fatal_crash"],
+                            "drone_crash_rate": evaluation["drone_crash"],
+                            "observer_crash_rate": evaluation["observer_crash"],
+                            "mean_coverage_ratio": evaluation["coverage"],
+                            "mean_cycles": evaluation["cycles"],
+                        }
+                    ],
+                )
                 if score > stage_best_score:
                     stage_best_score = score
                     stage_best_state = {
@@ -957,6 +1042,8 @@ def main() -> None:
                         optimizer,
                         stage=stage,
                         iteration=global_iteration,
+                        stage_joint_env_steps=stage_joint_env_steps,
+                        total_joint_env_steps=total_joint_env_steps,
                         metrics=evaluation,
                         args=args,
                     )
@@ -972,6 +1059,8 @@ def main() -> None:
                             optimizer,
                             stage=stage,
                             iteration=global_iteration,
+                            stage_joint_env_steps=stage_joint_env_steps,
+                            total_joint_env_steps=total_joint_env_steps,
                             metrics=evaluation,
                             args=args,
                         )
@@ -993,6 +1082,8 @@ def main() -> None:
             optimizer,
             stage=args.end_stage,
             iteration=global_iteration,
+            stage_joint_env_steps=stage_joint_env_steps,
+            total_joint_env_steps=total_joint_env_steps,
             metrics={},
             args=args,
         )

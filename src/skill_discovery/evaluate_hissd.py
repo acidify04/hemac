@@ -1,4 +1,4 @@
-"""Evaluate HiSSD drones online with the frozen MAPPO observer policy."""
+"""Evaluate HiSSD drones online with an optional frozen MAPPO observer."""
 
 from __future__ import annotations
 
@@ -80,6 +80,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--episodes", type=int, default=100)
     parser.add_argument("--base-seed", type=int, default=200_000)
     parser.add_argument(
+        "--task-definition",
+        choices=("mission", "drone"),
+        default="mission",
+        help="Report success using observer arrival or the drone exploration task.",
+    )
+    parser.add_argument(
+        "--success-min-coverage-ratio",
+        type=float,
+        default=DRONE_SKILL_SUCCESS_MIN_COVERAGE_RATIO,
+    )
+    parser.add_argument(
         "--compare-baselines",
         action="store_true",
         help="Also evaluate BC and MAPPO drones on exactly the same seeds.",
@@ -88,7 +99,7 @@ def parse_args() -> argparse.Namespace:
         "--ablate-skills",
         action="store_true",
         help=(
-            "Also evaluate HiSSD with 50% task/common residual, without task skill, "
+            "Also evaluate HiSSD with half task/common residual, without task skill, "
             "without common skill, and with only its BC-compatible base action head."
         ),
     )
@@ -332,8 +343,10 @@ def run_episode(
     bc_policy=None,
     observer_residual_policy: ObserverTaskResidualPolicy | None = None,
     observer_residual_scale: float = 0.0,
+    task_definition: str = "mission",
+    success_min_coverage_ratio: float = DRONE_SKILL_SUCCESS_MIN_COVERAGE_RATIO,
 ) -> EpisodeResult:
-    """Run one deterministic observer plus drone episode."""
+    """Run one deterministic drone episode with any configured observer."""
     env.reset(seed=seed)
     core_env = get_core_env(env)
     last_agent_id = env.possible_agents[-1]
@@ -382,15 +395,18 @@ def run_episode(
     drone_task_success = classify_drone_skill_outcome(
         drone_goal_found,
         coverage_ratio,
-        DRONE_SKILL_SUCCESS_MIN_COVERAGE_RATIO,
+        success_min_coverage_ratio,
     ) == "success"
     mission_success = bool(final_info.get("success", core_env.mission_success))
+    task_success = (
+        drone_task_success if task_definition == "drone" else mission_success
+    )
     return EpisodeResult(
         controller=controller,
         difficulty=difficulty,
         seed=seed,
         cycles=cycles,
-        success=mission_success,
+        success=task_success,
         mission_success=mission_success,
         drone_task_success=drone_task_success,
         goal_found=bool(final_info.get("goal_found", core_env.found_goal)),
@@ -407,6 +423,8 @@ def main() -> None:
     args = parse_args()
     if args.episodes <= 0:
         raise ValueError("--episodes must be positive.")
+    if not 0.0 <= args.success_min_coverage_ratio <= 1.0:
+        raise ValueError("--success-min-coverage-ratio must be in [0, 1].")
     device = resolve_device(args.device)
     hissd_model, hissd_payload = load_hissd_model(args.hissd_checkpoint, device)
     observer_residual_policy, observer_residual_scale = load_observer_residual(
@@ -485,6 +503,10 @@ def main() -> None:
                             bc_policy=bc_policy,
                             observer_residual_policy=observer_residual_policy,
                             observer_residual_scale=observer_residual_scale,
+                            task_definition=args.task_definition,
+                            success_min_coverage_ratio=(
+                                args.success_min_coverage_ratio
+                            ),
                         )
                         controller_results.append(result)
                         all_results.append(result)
@@ -514,10 +536,14 @@ def main() -> None:
         output_path.write_text(
             json.dumps(
                 {
-                    "success_definition": "observer_goal_arrival",
+                    "success_definition": (
+                        "observer_goal_arrival"
+                        if args.task_definition == "mission"
+                        else "drone_goal_found_and_coverage"
+                    ),
                     "drone_task_success_definition": (
                         "drone_goal_found and full_map_coverage_ratio >= "
-                        f"{DRONE_SKILL_SUCCESS_MIN_COVERAGE_RATIO}"
+                        f"{args.success_min_coverage_ratio}"
                     ),
                     "hissd_half_task_definition": (
                         "no_task_action + 0.5 * (full_hissd_action - no_task_action)"

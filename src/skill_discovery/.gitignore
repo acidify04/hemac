@@ -1,5 +1,5 @@
 __pycache__/
-offline_data/
+offline_data*/
 bc_checkpoints*/
 hissd_checkpoints*/
 outputs/

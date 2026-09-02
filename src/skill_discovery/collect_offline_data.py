@@ -45,6 +45,14 @@ from skill_discovery.task_descriptor import (
 # Collection settings. Edit these for repeated experiments or use CLI overrides.
 CHECKPOINT_PATH = PROJECT_ROOT / "src/train/mappo_checkpoints/checkpoint_19000"
 OUTPUT_DIR = PROJECT_ROOT / "src/skill_discovery/offline_data"
+DRONE_COVERAGE60_CHECKPOINT_PATH = (
+    PROJECT_ROOT
+    / "src/train/drone_mappo_coverage60_checkpoints/checkpoint_31400"
+)
+DRONE_COVERAGE60_OUTPUT_DIR = (
+    PROJECT_ROOT / "src/skill_discovery/offline_data_drone_coverage60"
+)
+DRONE_COVERAGE60_SUCCESS_RATIO = 0.6
 NUM_EPISODES_PER_LABEL = 100
 MAX_COLLECTION_ATTEMPTS = 10000
 BASE_SEED = 0
@@ -116,8 +124,17 @@ CHANNEL_NAMES = {
 def parse_args() -> argparse.Namespace:
     """Parse optional one-off overrides while keeping editable globals."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--checkpoint", type=Path, default=CHECKPOINT_PATH)
-    parser.add_argument("--output-dir", type=Path, default=OUTPUT_DIR)
+    parser.add_argument(
+        "--profile",
+        choices=("mission", "drone-coverage60"),
+        default="mission",
+        help=(
+            "Use the original joint mission defaults or the isolated drone-only "
+            "coverage-60 experiment. Explicit path/task options override a profile."
+        ),
+    )
+    parser.add_argument("--checkpoint", type=Path)
+    parser.add_argument("--output-dir", type=Path)
     parser.add_argument(
         "--num-episodes",
         type=int,
@@ -134,13 +151,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--task-definition",
         choices=("mission", "drone"),
-        default=TASK_DEFINITION,
+        default=None,
         help="Balance labels by observer goal arrival or by the drone task.",
     )
     parser.add_argument(
         "--success-min-coverage-ratio",
         type=float,
-        default=DRONE_SKILL_SUCCESS_MIN_COVERAGE_RATIO,
+        default=None,
         help="Drone-task success requires this full-map coverage and goal discovery.",
     )
     parser.add_argument(
@@ -157,7 +174,43 @@ def parse_args() -> argparse.Namespace:
         default=EXPLORE,
         help="Sample actions instead of using deterministic policy outputs.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.profile == "drone-coverage60":
+        args.checkpoint = args.checkpoint or DRONE_COVERAGE60_CHECKPOINT_PATH
+        args.output_dir = args.output_dir or DRONE_COVERAGE60_OUTPUT_DIR
+        args.task_definition = args.task_definition or "drone"
+        if args.success_min_coverage_ratio is None:
+            args.success_min_coverage_ratio = DRONE_COVERAGE60_SUCCESS_RATIO
+    else:
+        args.checkpoint = args.checkpoint or CHECKPOINT_PATH
+        args.output_dir = args.output_dir or OUTPUT_DIR
+        args.task_definition = args.task_definition or TASK_DEFINITION
+        if args.success_min_coverage_ratio is None:
+            args.success_min_coverage_ratio = DRONE_SKILL_SUCCESS_MIN_COVERAGE_RATIO
+    return args
+
+
+def resolve_algorithm_checkpoint(path: Path) -> Path:
+    """Resolve one checkpoint or the highest numbered checkpoint below a root."""
+    candidate = path.expanduser().resolve()
+    if (candidate / "algorithm_state.pkl").is_file():
+        return candidate
+    if not candidate.is_dir():
+        raise FileNotFoundError(f"Checkpoint path does not exist: {candidate}")
+
+    checkpoints = [
+        marker.parent
+        for marker in candidate.rglob("algorithm_state.pkl")
+    ]
+    if not checkpoints:
+        raise FileNotFoundError(f"No RLlib checkpoint found under: {candidate}")
+
+    def checkpoint_key(checkpoint: Path) -> tuple[int, str]:
+        suffix = checkpoint.name.rsplit("_", 1)[-1]
+        iteration = int(suffix) if suffix.isdigit() else -1
+        return iteration, checkpoint.as_posix()
+
+    return max(checkpoints, key=checkpoint_key)
 
 
 def policy_id_for_agent(agent_id: str) -> str:
@@ -361,6 +414,7 @@ def compute_joint_actions(
 
 def load_inference_algorithm(checkpoint_path: Path) -> Algorithm:
     """Restore checkpoint state without rollout workers or a GPU learner."""
+    checkpoint_path = resolve_algorithm_checkpoint(checkpoint_path)
     checkpoint_info = get_checkpoint_info(str(checkpoint_path))
     state = Algorithm._checkpoint_info_to_algorithm_state(
         checkpoint_info=checkpoint_info,
@@ -828,11 +882,9 @@ def main() -> None:
     args = parse_args()
     if not 0.0 <= args.success_min_coverage_ratio <= 1.0:
         raise ValueError("--success-min-coverage-ratio must be in [0, 1].")
-    checkpoint_path = args.checkpoint.expanduser().resolve()
+    checkpoint_path = resolve_algorithm_checkpoint(args.checkpoint)
     output_root = args.output_dir.expanduser().resolve()
     output_dir = output_root / f"difficulty_{args.difficulty:02d}"
-    if not (checkpoint_path / "algorithm_state.pkl").is_file():
-        raise FileNotFoundError(f"Invalid RLlib checkpoint: {checkpoint_path}")
     if args.num_episodes <= 0:
         raise ValueError("--num-episodes must be positive.")
     minimum_attempts = args.num_episodes * len(OUTCOME_CATEGORIES)
@@ -856,6 +908,7 @@ def main() -> None:
         args.difficulty,
     )
     print(
+        f"Collection profile={args.profile}, checkpoint={checkpoint_path}\n"
         f"Offline collection difficulty {args.difficulty}/"
         f"{len(OBSTACLE_CURRICULUM_LEVELS)}: "
         f"task={args.task_definition}, "

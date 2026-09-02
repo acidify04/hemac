@@ -1,4 +1,4 @@
-"""Evaluate a drone BC checkpoint with the frozen MAPPO observer policy."""
+"""Evaluate a drone BC checkpoint with an optional frozen MAPPO observer."""
 
 from __future__ import annotations
 
@@ -90,6 +90,17 @@ def parse_args() -> argparse.Namespace:
         help="Number of held-out seeds evaluated per difficulty and controller.",
     )
     parser.add_argument("--base-seed", type=int, default=100_000)
+    parser.add_argument(
+        "--task-definition",
+        choices=("mission", "drone"),
+        default="mission",
+        help="Report success using observer arrival or the drone exploration task.",
+    )
+    parser.add_argument(
+        "--success-min-coverage-ratio",
+        type=float,
+        default=DRONE_SKILL_SUCCESS_MIN_COVERAGE_RATIO,
+    )
     parser.add_argument(
         "--compare-mappo",
         action="store_true",
@@ -233,8 +244,10 @@ def run_episode(
     seed: int,
     action_scale: float,
     device: torch.device,
+    task_definition: str = "mission",
+    success_min_coverage_ratio: float = DRONE_SKILL_SUCCESS_MIN_COVERAGE_RATIO,
 ) -> EpisodeResult:
-    """Run one deterministic observer+drone episode."""
+    """Run one deterministic drone episode with any configured observer."""
     env.reset(seed=seed)
     core_env = get_core_env(env)
     last_agent_id = env.possible_agents[-1]
@@ -279,15 +292,18 @@ def run_episode(
     drone_task_success = classify_drone_skill_outcome(
         drone_goal_found,
         coverage_ratio,
-        DRONE_SKILL_SUCCESS_MIN_COVERAGE_RATIO,
+        success_min_coverage_ratio,
     ) == "success"
     mission_success = bool(final_info.get("success", core_env.mission_success))
+    task_success = (
+        drone_task_success if task_definition == "drone" else mission_success
+    )
     return EpisodeResult(
         controller=controller,
         difficulty=difficulty,
         seed=seed,
         cycles=cycles,
-        success=mission_success,
+        success=task_success,
         mission_success=mission_success,
         drone_task_success=drone_task_success,
         goal_found=bool(final_info.get("goal_found", core_env.found_goal)),
@@ -350,6 +366,8 @@ def main() -> None:
     args = parse_args()
     if args.episodes <= 0:
         raise ValueError("--episodes must be positive.")
+    if not 0.0 <= args.success_min_coverage_ratio <= 1.0:
+        raise ValueError("--success-min-coverage-ratio must be in [0, 1].")
     device = resolve_device(args.device)
     bc_policy = load_bc_policy(args.bc_checkpoint, device)
 
@@ -392,6 +410,10 @@ def main() -> None:
                             seed=seed,
                             action_scale=action_scale,
                             device=device,
+                            task_definition=args.task_definition,
+                            success_min_coverage_ratio=(
+                                args.success_min_coverage_ratio
+                            ),
                         )
                         controller_results.append(result)
                         all_results.append(result)
@@ -420,6 +442,10 @@ def main() -> None:
         output_path.write_text(
             json.dumps(
                 {
+                    "success_definition": args.task_definition,
+                    "success_min_coverage_ratio": (
+                        args.success_min_coverage_ratio
+                    ),
                     "bc_checkpoint": str(args.bc_checkpoint.expanduser().resolve()),
                     "mappo_checkpoint": str(
                         args.mappo_checkpoint.expanduser().resolve()

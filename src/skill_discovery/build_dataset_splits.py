@@ -162,11 +162,18 @@ def inspect_episode(
             f"Expected T+1 central states in {path}, got {state_count} for T={transition_count}."
         )
     for role in ("observer", "drone"):
-        observations = payload[role]["observations"]
+        role_payload = payload[role]
+        actions = role_payload["actions"]
+        if int(actions.shape[0]) != transition_count:
+            raise ValueError(f"Misaligned {role} actions: {path}")
+        agent_ids = role_payload.get("agent_ids", [])
+        observations = role_payload["observations"]
+        if not agent_ids:
+            if int(actions.shape[1]) != 0 or observations:
+                raise ValueError(f"Invalid empty {role} group: {path}")
+            continue
         if int(observations["global_map"].shape[0]) != state_count:
             raise ValueError(f"Misaligned {role} observations: {path}")
-        if int(payload[role]["actions"].shape[0]) != transition_count:
-            raise ValueError(f"Misaligned {role} actions: {path}")
 
     return {
         "path": path.relative_to(data_root).as_posix(),
@@ -386,12 +393,16 @@ def main() -> None:
     """Generate and save deterministic source/target episode splits."""
     args = parse_args()
     data_root = args.data_root.expanduser().resolve()
-    default_output = (
-        MISSION_MANIFEST_PATH
+    default_output_name = (
+        MISSION_MANIFEST_PATH.name
         if args.task_definition == "mission"
-        else DRONE_TASK_MANIFEST_PATH
+        else DRONE_TASK_MANIFEST_PATH.name
     )
-    output_path = (args.output or default_output).expanduser().resolve()
+    output_path = (
+        args.output.expanduser().resolve()
+        if args.output is not None
+        else data_root / default_output_name
+    )
     if not 0.0 <= args.success_min_coverage_ratio <= 1.0:
         raise ValueError("--success-min-coverage-ratio must be in [0, 1].")
     manifest = build_manifest(
