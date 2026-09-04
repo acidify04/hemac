@@ -9,9 +9,10 @@ from src.skill_discovery.models import ObserverTaskResidualPolicy
 from src.skill_discovery.train_hissd import (
     controller_objective,
     planner_objective,
+    prepare_batch,
     value_objective,
 )
-from src.skill_discovery.task_descriptor import TASK_DESCRIPTOR_NAMES
+from src.skill_discovery.task_descriptor import REALIZED_TASK_DESCRIPTOR_NAMES
 
 
 def make_batch() -> dict:
@@ -36,10 +37,10 @@ def make_batch() -> dict:
         "episode_id": torch.tensor([0, 1, 2, 3]),
         "task_descriptor": torch.tensor(
             [
-                [0.333, 0.444, 0.667, 0.143, 0.429, 0.475, 0.550],
-                [0.333, 0.444, 0.667, 0.143, 0.429, 0.475, 0.550],
-                [0.444, 0.556, 0.667, 0.286, 0.429, 0.550, 0.650],
-                [0.444, 0.667, 1.000, 0.429, 0.714, 0.650, 0.750],
+                [0.222, 0.667, 0.286, 0.050, 0.429, 0.520],
+                [0.111, 0.667, 0.214, 0.000, 0.214, 0.580],
+                [0.333, 0.667, 0.357, 0.080, 0.429, 0.610],
+                [0.222, 1.000, 0.500, 0.120, 0.714, 0.720],
             ],
             dtype=torch.float32,
         ),
@@ -58,6 +59,11 @@ def objective_args() -> SimpleNamespace:
     return SimpleNamespace(
         descriptor_weight=1.0,
         descriptor_metric_weight=0.1,
+        task_variance_weight=0.5,
+        task_variance_target=0.05,
+        task_action_descriptor_weight=0.5,
+        task_action_variance_weight=0.5,
+        task_action_contrastive_weight=0.1,
         task_contrastive_weight=0.1,
         task_contrastive_temperature=0.1,
         task_contrastive_tail_steps=2,
@@ -68,7 +74,58 @@ def objective_args() -> SimpleNamespace:
         reward_scale=100.0,
         contrastive_temperature=0.1,
         max_contrastive_samples=256,
+        detach_task_skill_for_action=True,
     )
+
+
+def test_prepare_batch_uses_realized_episode_descriptor() -> None:
+    """Training must not replace realized dynamics with curriculum bounds."""
+    batch_size, sequence_length, agent_count = 1, 2, 3
+    observations = {
+        "global_map": torch.zeros(
+            batch_size, sequence_length, agent_count, 7, 40, 40
+        ),
+        "local_map": torch.zeros(
+            batch_size, sequence_length, agent_count, 7, 20, 20
+        ),
+        "action_history": torch.zeros(
+            batch_size, sequence_length, agent_count, 5, 3
+        ),
+    }
+    realized = torch.tensor([[0.2, 0.7, 0.3, 0.1, 0.4, 0.6]])
+    raw_batch = {
+        "drone": {
+            "actions": torch.zeros(batch_size, sequence_length, agent_count, 3),
+            "observations": observations,
+            "next_observations": observations,
+        },
+        "agent_mask": torch.ones(
+            batch_size, sequence_length, agent_count, dtype=torch.bool
+        ),
+        "filled": torch.ones(batch_size, sequence_length, 1),
+        "terminated": torch.zeros(batch_size, sequence_length, 1),
+        "truncated": torch.zeros(batch_size, sequence_length, 1),
+        "global_state": {
+            "central_map": torch.zeros(batch_size, sequence_length, 7, 20, 20)
+        },
+        "next_global_state": {
+            "central_map": torch.zeros(batch_size, sequence_length, 7, 20, 20)
+        },
+        "drone_task_reward": torch.zeros(batch_size, sequence_length, 1),
+        "task_descriptor": realized,
+        "task_descriptor_available": torch.ones(batch_size, dtype=torch.bool),
+        "task_distribution_descriptor": torch.ones(batch_size, 7),
+        "task_distribution_descriptor_available": torch.ones(
+            batch_size, dtype=torch.bool
+        ),
+        "task_id": torch.zeros(batch_size, dtype=torch.long),
+        "window_start": torch.zeros(batch_size, dtype=torch.long),
+    }
+
+    prepared = prepare_batch(raw_batch, torch.device("cpu"))
+
+    assert prepared["task_descriptor"].shape == (batch_size, 6)
+    assert torch.equal(prepared["task_descriptor"], realized)
 
 
 def test_hissd_objectives_are_finite_and_shape_preserving() -> None:
@@ -79,7 +136,7 @@ def test_hissd_objectives_are_finite_and_shape_preserving() -> None:
         7,
         contrastive_from_action_skill=True,
         task_context_pooling=True,
-        task_descriptor_dim=len(TASK_DESCRIPTOR_NAMES),
+        task_descriptor_dim=len(REALIZED_TASK_DESCRIPTOR_NAMES),
         task_prior_count=3,
     )
     batch = make_batch()
@@ -108,7 +165,7 @@ def test_hissd_objectives_are_finite_and_shape_preserving() -> None:
     assert 0.0 <= controller_metrics["task_contrastive_accuracy"] <= 1.0
     controller_loss.backward()
     assert model.task_descriptor_head[-2].weight.grad is not None
-    assert model.task_skill_encoder.context_gru.weight_hh.grad is not None
+    assert model.action_decoder.residual_head[-1].weight.grad is not None
 
 
 def test_same_task_batch_has_finite_controller_gradients() -> None:
@@ -119,7 +176,7 @@ def test_same_task_batch_has_finite_controller_gradients() -> None:
         7,
         contrastive_from_action_skill=True,
         task_context_pooling=True,
-        task_descriptor_dim=len(TASK_DESCRIPTOR_NAMES),
+        task_descriptor_dim=len(REALIZED_TASK_DESCRIPTOR_NAMES),
         task_prior_count=3,
     )
     batch = make_batch()
@@ -159,6 +216,36 @@ def test_task_auxiliary_ablation_keeps_action_training_active() -> None:
     assert metrics["descriptor_loss"] == 0.0
     assert metrics["task_contrastive_loss"] == 0.0
     assert model.task_skill_encoder.context_gru.weight_hh.grad is not None
+
+
+def test_action_loss_does_not_override_task_encoder_when_detached() -> None:
+    """BC reconstruction should train the decoder without collapsing task context."""
+    model = HeMACHISSD(
+        7,
+        7,
+        7,
+        contrastive_from_action_skill=True,
+        task_context_pooling=True,
+        task_descriptor_dim=0,
+        task_prior_count=0,
+    )
+    args = objective_args()
+    args.descriptor_weight = 0.0
+    args.descriptor_metric_weight = 0.0
+    args.task_variance_weight = 0.0
+    args.task_action_descriptor_weight = 0.0
+    args.task_action_variance_weight = 0.0
+    args.task_action_contrastive_weight = 0.0
+    args.task_contrastive_weight = 0.0
+
+    loss, _ = controller_objective(model, make_batch(), args)
+    loss.backward()
+
+    assert all(
+        parameter.grad is None or torch.count_nonzero(parameter.grad) == 0
+        for parameter in model.task_skill_encoder.parameters()
+    )
+    assert model.action_decoder.residual_head[-1].weight.grad is not None
 
 
 def test_task_action_residual_upgrade_preserves_actions_and_serializes() -> None:
@@ -216,7 +303,7 @@ def test_online_inference_matches_batched_sequence() -> None:
         7,
         contrastive_from_action_skill=True,
         task_context_pooling=True,
-        task_descriptor_dim=len(TASK_DESCRIPTOR_NAMES),
+        task_descriptor_dim=len(REALIZED_TASK_DESCRIPTOR_NAMES),
         task_prior_count=3,
         task_feature_deltas=True,
         separate_task_observation_encoder=True,
@@ -263,5 +350,5 @@ def test_online_inference_matches_batched_sequence() -> None:
     assert torch.stack(step_descriptors, dim=1).shape == (
         4,
         3,
-        len(TASK_DESCRIPTOR_NAMES),
+        len(REALIZED_TASK_DESCRIPTOR_NAMES),
     )

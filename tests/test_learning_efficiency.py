@@ -21,7 +21,10 @@ def test_run_metrics_uses_trapezoidal_auc_and_first_observed_crossing():
     metrics = run_metrics(points, budget=200, threshold=0.5)
 
     assert metrics["success_auc"] == pytest.approx(0.5)
+    assert metrics["success_gain_auc"] == pytest.approx(0.4)
+    assert metrics["initial_success_rate"] == pytest.approx(0.1)
     assert metrics["final_success_rate"] == pytest.approx(0.9)
+    assert metrics["final_success_gain"] == pytest.approx(0.8)
     assert metrics["first_threshold_step"] == 100
 
 
@@ -35,6 +38,7 @@ def test_run_metrics_interpolates_at_budget():
     metrics = run_metrics(points, budget=150, threshold=0.8)
 
     assert metrics["success_auc"] == pytest.approx(0.4)
+    assert metrics["success_gain_auc"] == pytest.approx(0.3)
     assert metrics["final_success_rate"] == pytest.approx(0.7)
     assert metrics["first_threshold_step"] is None
     assert metrics["capped_threshold_step"] == 150

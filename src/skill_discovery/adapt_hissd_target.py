@@ -1,4 +1,4 @@
-"""Adapt HiSSD target-task skills and drone actions to difficulties 4-6.
+"""Adapt HiSSD skills and drone actions to manifest-defined target tasks.
 
 The common representation and BC-compatible base policy stay frozen. Target
 actions are learned from successful, collision-safe trajectory segments while
@@ -36,6 +36,7 @@ from skill_discovery.hissd_models import HeMACHISSD
 from skill_discovery.train_hissd import (
     move_observations,
     resolve_device,
+    standardized_descriptor_loss,
     task_tail_mask,
 )
 from skill_discovery.visualize_hissd_skills import load_hissd_model
@@ -69,7 +70,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stride", type=int, default=128)
     parser.add_argument("--num-workers", type=int, default=2)
     parser.add_argument("--learning-rate", type=float, default=2e-5)
-    parser.add_argument("--task-learning-rate", type=float, default=5e-6)
+    parser.add_argument("--task-learning-rate", type=float, default=5e-5)
+    parser.add_argument(
+        "--classifier-learning-rate",
+        type=float,
+        default=1e-3,
+        help="Learning rate for the newly expanded source+target task classifier.",
+    )
     parser.add_argument("--task-action-learning-rate", type=float, default=2e-4)
     parser.add_argument("--weight-decay", type=float, default=1e-5)
     parser.add_argument("--grad-clip", type=float, default=2.0)
@@ -155,6 +162,7 @@ def validate_args(args: argparse.Namespace) -> None:
         "stride",
         "learning_rate",
         "task_learning_rate",
+        "classifier_learning_rate",
         "task_action_learning_rate",
         "grad_clip",
         "task_tail_steps",
@@ -214,12 +222,12 @@ def prepare_batch(raw_batch: dict[str, Any], device: torch.device) -> dict[str, 
         "observer_rewards": observer_rewards,
         "difficulty": raw_batch["difficulty"].to(device, non_blocking=True),
         "task_id": raw_batch["task_id"].to(device, non_blocking=True),
-        "task_descriptor": raw_batch["task_distribution_descriptor"].to(
+        "task_descriptor": raw_batch["task_descriptor"].to(
             device, non_blocking=True
         ),
-        "task_descriptor_available": raw_batch[
-            "task_distribution_descriptor_available"
-        ].to(device, non_blocking=True).bool(),
+        "task_descriptor_available": raw_batch["task_descriptor_available"].to(
+            device, non_blocking=True
+        ).bool(),
         "task_supervision": (
             raw_batch["window_start"].to(device, non_blocking=True) == 0
         ),
@@ -423,7 +431,7 @@ def task_representation_objective(
     batch: dict[str, Any],
     args: argparse.Namespace,
 ) -> tuple[torch.Tensor, torch.Tensor, dict[str, float]]:
-    """Learn continuous task dynamics and six-way difficulty separation."""
+    """Learn continuous task dynamics and manifest-wide difficulty separation."""
     sequence_prediction, sequence_valid = model.predict_task_descriptor_sequence(
         query, batch["valid_agents"]
     )
@@ -440,8 +448,10 @@ def task_representation_objective(
         sequence_prediction
     )
     if supervision.any():
-        descriptor_loss = nn.functional.smooth_l1_loss(
-            sequence_prediction[supervision], target[supervision]
+        descriptor_loss = standardized_descriptor_loss(
+            sequence_prediction[supervision],
+            target[supervision],
+            args,
         )
         descriptor_mae = (
             sequence_prediction[supervision] - target[supervision]
@@ -805,10 +815,13 @@ def run_validation(
     accumulator: dict[str, float] = defaultdict(float)
     category_error = torch.zeros(3, device=device)
     category_weight = torch.zeros(3, device=device)
-    difficulty_category_error = torch.zeros(3, 3, device=device)
-    difficulty_category_weight = torch.zeros(3, 3, device=device)
-    safe_success_error = torch.zeros(3, device=device)
-    safe_success_weight = torch.zeros(3, device=device)
+    target_difficulties = tuple(args.target_difficulties)
+    difficulty_category_error = torch.zeros(
+        len(target_difficulties), 3, device=device
+    )
+    difficulty_category_weight = torch.zeros_like(difficulty_category_error)
+    safe_success_error = torch.zeros(len(target_difficulties), device=device)
+    safe_success_weight = torch.zeros_like(safe_success_error)
     count = 0
     source_iterator = iter(source_loader)
     for batch_index, raw_batch in enumerate(target_loader):
@@ -841,7 +854,7 @@ def run_validation(
             )
             category_error[category] += squared_error[category_mask].sum()
             category_weight[category] += category_mask.sum()
-            for difficulty_index, difficulty in enumerate((4, 5, 6)):
+            for difficulty_index, difficulty in enumerate(target_difficulties):
                 difficulty_mask = (
                     category_mask
                     & (batch["difficulty"] == difficulty)[:, None, None]
@@ -852,7 +865,7 @@ def run_validation(
                 difficulty_category_weight[difficulty_index, category] += (
                     difficulty_mask.sum()
                 )
-        for difficulty_index, difficulty in enumerate((4, 5, 6)):
+        for difficulty_index, difficulty in enumerate(target_difficulties):
             safe_mask = (
                 batch["valid_agents"]
                 & (batch["outcome_category"] == 0)[:, None, None]
@@ -875,7 +888,7 @@ def run_validation(
         result[name] = float(
             category_error[index] / category_weight[index].clamp_min(1.0)
         )
-    for difficulty_index, difficulty in enumerate((4, 5, 6)):
+    for difficulty_index, difficulty in enumerate(target_difficulties):
         for category_index, category_name in enumerate(
             ("success", "goal_found_failure", "goal_not_found")
         ):
@@ -968,13 +981,13 @@ def save_checkpoint(
             "adaptation": {
                 "method": "v22_explicit_task_action_residual",
                 "source_checkpoint": str(args.checkpoint.expanduser().resolve()),
-                "training_tasks": [4, 5, 6],
+                "training_tasks": list(args.target_difficulties),
                 "held_out_split": "target_test",
                 "hyperparameters": vars(args),
             },
         }
     )
-    payload["training_tasks"] = [1, 2, 3, 4, 5, 6]
+    payload["training_tasks"] = list(args.all_difficulties)
     payload["held_out_tasks"] = []
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(payload, path)
@@ -987,16 +1000,49 @@ def main() -> None:
     manifest = load_manifest(args.manifest)
     success_definition = manifest.get("success_definition", {})
     task_name = success_definition.get("name")
-    if task_name != "observer_goal_arrival":
+    supported_tasks = {"observer_goal_arrival", "drone_exploration"}
+    if task_name not in supported_tasks:
         raise ValueError(
-            "Target adaptation requires the original observer-goal mission "
-            f"manifest, but {args.manifest} defines {task_name or 'an unknown task'!r}. "
-            "Rebuild it with: python src/skill_discovery/build_dataset_splits.py "
-            "--task-definition mission"
+            "Target adaptation requires a mission or drone-exploration manifest, "
+            f"but {args.manifest} defines {task_name or 'an unknown task'!r}."
         )
+    args.source_difficulties = tuple(
+        sorted(int(value) for value in manifest.get("source_difficulties", ()))
+    )
+    args.target_difficulties = tuple(
+        sorted(int(value) for value in manifest.get("target_difficulties", ()))
+    )
+    if not args.source_difficulties or not args.target_difficulties:
+        raise ValueError("Manifest must define non-empty source and target difficulties.")
+    if set(args.source_difficulties).intersection(args.target_difficulties):
+        raise ValueError("Source and target difficulties must not overlap.")
+    args.all_difficulties = tuple(
+        sorted((*args.source_difficulties, *args.target_difficulties))
+    )
+    expected_difficulties = tuple(range(1, max(args.all_difficulties) + 1))
+    if args.all_difficulties != expected_difficulties:
+        raise ValueError(
+            "Difficulty IDs must be contiguous and start at 1; got "
+            f"{args.all_difficulties}."
+        )
+    args.classifier_tasks = max(args.all_difficulties)
     seed_everything(args.seed)
     device = resolve_device(args.device)
     model, source_payload = load_hissd_model(args.checkpoint, device)
+    source_hyperparameters = source_payload.get("hyperparameters", {})
+    args.task_descriptor_scale = source_hyperparameters.get(
+        "task_descriptor_scale",
+        [1.0] * model.task_descriptor_dim,
+    )
+    checkpoint_source_tasks = tuple(
+        sorted(int(value) for value in source_payload.get("training_tasks", ()))
+    )
+    if checkpoint_source_tasks != args.source_difficulties:
+        raise ValueError(
+            "Source checkpoint tasks do not match the manifest: "
+            f"checkpoint={checkpoint_source_tasks}, "
+            f"manifest={args.source_difficulties}."
+        )
     teacher = FrozenTaskTeacher(
         task_observation_encoder=(
             copy.deepcopy(model.task_observation_encoder).to(device).eval()
@@ -1029,11 +1075,36 @@ def main() -> None:
         if module is not None:
             for parameter in module.parameters():
                 parameter.requires_grad_(True)
-    task_classifier = nn.Linear(model.skill_dim, 6).to(device)
+    task_classifier = nn.Linear(model.skill_dim, args.classifier_tasks).to(device)
     classifier_state = source_payload.get("target_task_classifier_state_dict")
     if classifier_state is not None:
-        task_classifier.load_state_dict(classifier_state)
-        print("Restored task classifier from the source adaptation checkpoint.")
+        try:
+            task_classifier.load_state_dict(classifier_state)
+            print("Restored task classifier from the source adaptation checkpoint.")
+        except RuntimeError:
+            print(
+                "Skipped incompatible task classifier from the source checkpoint; "
+                f"new classifier has {args.classifier_tasks} outputs."
+            )
+            classifier_state = None
+    if classifier_state is None and model.task_classifier_head is not None:
+        source_classifier = model.task_classifier_head
+        source_rows = min(
+            source_classifier.out_features,
+            len(args.source_difficulties),
+            task_classifier.out_features,
+        )
+        with torch.no_grad():
+            task_classifier.weight[:source_rows].copy_(
+                source_classifier.weight[:source_rows]
+            )
+            task_classifier.bias[:source_rows].copy_(
+                source_classifier.bias[:source_rows]
+            )
+        print(
+            "Initialized the expanded task classifier with "
+            f"{source_rows} source-task rows; target rows remain trainable."
+        )
 
     target_dataset, target_loader = build_loader(
         args, "target_train", include_labels=True, train=True, device=device
@@ -1047,16 +1118,27 @@ def main() -> None:
     _, source_val_loader = build_loader(
         args, "source_val", include_labels=False, train=False, device=device
     )
+    target_descriptor_dim = int(target_dataset[0]["task_descriptor"].numel())
+    if model.task_descriptor_dim != target_descriptor_dim:
+        raise ValueError(
+            "Source checkpoint and target dataset use different task descriptor "
+            f"dimensions: checkpoint={model.task_descriptor_dim}, "
+            f"dataset={target_descriptor_dim}. Retrain the source HiSSD checkpoint "
+            "with the same realized-task descriptor schema before adaptation."
+        )
     target_tasks = {int(entry["difficulty"]) for entry in target_dataset.entries}
-    if target_tasks != {4, 5, 6}:
-        raise ValueError(f"target_train must contain difficulties 4-6, got {target_tasks}")
+    if target_tasks != set(args.target_difficulties):
+        raise ValueError(
+            "target_train difficulties do not match the manifest: "
+            f"expected {args.target_difficulties}, got {sorted(target_tasks)}"
+        )
     target_success_counts = {
         difficulty: sum(
             int(entry["difficulty"]) == difficulty
             and entry["category"] == "success"
             for entry in target_dataset.entries
         )
-        for difficulty in (4, 5, 6)
+        for difficulty in args.target_difficulties
     }
 
     context_adapter = getattr(model.task_skill_encoder, "context_adapter", None)
@@ -1082,8 +1164,14 @@ def main() -> None:
         if parameter.requires_grad
         and id(parameter) not in action_parameter_ids
         and id(parameter) not in task_action_parameter_ids
-    ] + list(task_classifier.parameters())
-    parameters = action_parameters + task_action_parameters + task_parameters
+    ]
+    classifier_parameters = list(task_classifier.parameters())
+    parameters = (
+        action_parameters
+        + task_action_parameters
+        + task_parameters
+        + classifier_parameters
+    )
     optimizer_groups = [
         {
             "params": action_parameters,
@@ -1093,6 +1181,11 @@ def main() -> None:
         {
             "params": task_parameters,
             "lr": args.task_learning_rate,
+            "weight_decay": args.weight_decay,
+        },
+        {
+            "params": classifier_parameters,
+            "lr": args.classifier_learning_rate,
             "weight_decay": args.weight_decay,
         },
     ]
@@ -1112,7 +1205,7 @@ def main() -> None:
         f"Adaptation source={args.checkpoint}, output={args.output_dir}, "
         f"manifest={args.manifest}, task={task_name}"
     )
-    print(f"Target mission-success episodes={target_success_counts}")
+    print(f"Target success episodes={target_success_counts}")
     missing_success_tasks = [
         difficulty
         for difficulty, count in target_success_counts.items()
@@ -1120,9 +1213,9 @@ def main() -> None:
     ]
     if missing_success_tasks:
         print(
-            "WARNING: no successful mission trajectories for target difficulties "
+            "WARNING: no successful trajectories for target difficulties "
             f"{missing_success_tasks}; adaptation cannot learn successful behavior "
-            "for those tasks until the mission dataset is recollected."
+            "for those tasks until the dataset is recollected."
         )
     print(
         f"device={device}, target_train_windows={len(target_dataset)}, "
@@ -1138,7 +1231,9 @@ def main() -> None:
         f"target_skill_learning=enabled, warmup_epochs={args.skill_warmup_epochs}, "
         f"decoder_lr={args.learning_rate:.2e}, "
         f"task_action_lr={args.task_action_learning_rate:.2e}, "
-        f"representation_lr={args.task_learning_rate:.2e}, classifier_tasks=6"
+        f"representation_lr={args.task_learning_rate:.2e}, "
+        f"classifier_lr={args.classifier_learning_rate:.2e}, "
+        f"classifier_tasks={args.classifier_tasks}"
     )
 
     best_loss = math.inf
@@ -1175,8 +1270,8 @@ def main() -> None:
         )
         difficulty_success_mse = sum(
             val_metrics[f"difficulty_{difficulty}/safe_success_mse"]
-            for difficulty in (4, 5, 6)
-        ) / 3.0
+            for difficulty in args.target_difficulties
+        ) / len(args.target_difficulties)
         selection_loss = (
             difficulty_success_mse
             + args.target_anchor_weight * val_metrics["target_anchor_mse"]
@@ -1196,6 +1291,14 @@ def main() -> None:
                 + val_metrics["decoder_contrastive_loss"]
             )
         )
+        success_by_task = "/".join(
+            f"{val_metrics[f'difficulty_{difficulty}/success_mse']:.5f}"
+            for difficulty in args.target_difficulties
+        )
+        safe_success_by_task = "/".join(
+            f"{val_metrics[f'difficulty_{difficulty}/safe_success_mse']:.5f}"
+            for difficulty in args.target_difficulties
+        )
         print(
             f"epoch={epoch:03d} "
             f"target={train_metrics['target_weighted_mse']:.5f}/"
@@ -1204,14 +1307,8 @@ def main() -> None:
             f"success={val_metrics['success_mse']:.5f} "
             f"goal_fail={val_metrics['goal_found_failure_mse']:.5f} "
             f"not_found={val_metrics['goal_not_found_mse']:.5f} "
-            f"success_by_task="
-            f"{val_metrics['difficulty_4/success_mse']:.5f}/"
-            f"{val_metrics['difficulty_5/success_mse']:.5f}/"
-            f"{val_metrics['difficulty_6/success_mse']:.5f} "
-            f"safe_success_by_task="
-            f"{val_metrics['difficulty_4/safe_success_mse']:.5f}/"
-            f"{val_metrics['difficulty_5/safe_success_mse']:.5f}/"
-            f"{val_metrics['difficulty_6/safe_success_mse']:.5f} "
+            f"success_by_task={success_by_task} "
+            f"safe_success_by_task={safe_success_by_task} "
             f"source_drift={val_metrics['source_validation_mse']:.6f} "
             f"target_drift={val_metrics['target_anchor_mse']:.6f} "
             f"descriptor={val_metrics['target_descriptor_mae']:.4f}/"

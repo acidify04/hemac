@@ -17,7 +17,10 @@ from skill_discovery.drone_task import (
     DRONE_SKILL_SUCCESS_REWARD,
     drone_skill_outcome_from_payload,
 )
-from skill_discovery.task_descriptor import TASK_DESCRIPTOR_NAMES
+from skill_discovery.task_descriptor import (
+    REALIZED_TASK_DESCRIPTOR_NAMES,
+    TASK_DESCRIPTOR_NAMES,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -137,6 +140,13 @@ def inspect_episode(
         or tuple(task_descriptor.shape) != (len(TASK_DESCRIPTOR_NAMES),)
     ):
         raise ValueError(f"Invalid v6 task descriptor in {path}.")
+    realized_descriptor = payload.get("realized_task_descriptor")
+    if format_version >= 7 and (
+        not isinstance(realized_descriptor, torch.Tensor)
+        or tuple(realized_descriptor.shape)
+        != (len(REALIZED_TASK_DESCRIPTOR_NAMES),)
+    ):
+        raise ValueError(f"Invalid v7 realized task descriptor in {path}.")
     stored_difficulty = int(metadata.get("difficulty", difficulty))
     if stored_difficulty != difficulty:
         raise ValueError(
@@ -347,6 +357,12 @@ def build_manifest(
         },
         "outcome_categories": list(OUTCOME_CATEGORIES),
         "minimum_format_version": minimum_format_version,
+        "task_descriptor": {
+            "kind": "realized_episode",
+            "scope": "environment",
+            "shared_across_agents": True,
+            "names": list(REALIZED_TASK_DESCRIPTOR_NAMES),
+        },
         "success_definition": (
             {
                 "name": "observer_goal_arrival",

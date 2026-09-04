@@ -20,7 +20,10 @@ if str(PROJECT_SRC) not in sys.path:
 
 from skill_discovery.dataset import DEFAULT_MANIFEST_PATH, create_dataloader
 from skill_discovery.hissd_models import HeMACHISSD
-from skill_discovery.task_descriptor import TASK_DESCRIPTOR_NAMES
+from skill_discovery.task_descriptor import (
+    REALIZED_TASK_DESCRIPTOR_NAMES,
+    TASK_DESCRIPTOR_NAMES,
+)
 
 
 DEFAULT_CHECKPOINT = (
@@ -91,6 +94,33 @@ def load_hissd_model(
     model.load_state_dict(payload["model_state_dict"])
     model.eval()
     return model, payload
+
+
+def resolve_descriptor_schema(
+    model: HeMACHISSD,
+    payload: dict[str, Any],
+) -> tuple[tuple[str, ...], str, str]:
+    """Select realized descriptors for new models while supporting old checkpoints."""
+    saved_names = tuple(payload.get("task_descriptor_names", ()))
+    if saved_names:
+        descriptor_names = saved_names
+    elif model.task_descriptor_dim == len(TASK_DESCRIPTOR_NAMES):
+        descriptor_names = TASK_DESCRIPTOR_NAMES
+    else:
+        descriptor_names = REALIZED_TASK_DESCRIPTOR_NAMES
+
+    if model.task_descriptor_dim not in (0, len(descriptor_names)):
+        raise ValueError(
+            "Checkpoint descriptor metadata does not match its model: "
+            f"head={model.task_descriptor_dim}, names={len(descriptor_names)}."
+        )
+    if descriptor_names == tuple(TASK_DESCRIPTOR_NAMES):
+        return (
+            descriptor_names,
+            "task_distribution_descriptor",
+            "task_distribution_descriptor_available",
+        )
+    return descriptor_names, "task_descriptor", "task_descriptor_available"
 
 
 def _move_observations(
@@ -240,7 +270,7 @@ def collect_embeddings(
                 )
                 target["descriptor"].append(
                     np.repeat(
-                        batch["task_distribution_descriptor"][batch_index]
+                        batch[args.descriptor_field][batch_index]
                         .reshape(1, -1)
                         .numpy(),
                         flat_indices.numel(),
@@ -251,16 +281,14 @@ def collect_embeddings(
                     np.full(
                         flat_indices.numel(),
                         bool(
-                            batch["task_distribution_descriptor_available"][
-                                batch_index
-                            ]
+                            batch[args.descriptor_available_field][batch_index]
                         ),
                         dtype=np.bool_,
                     )
                 )
                 if descriptor_prediction is None:
                     prediction = np.zeros(
-                        (1, len(TASK_DESCRIPTOR_NAMES)), dtype=np.float32
+                        (1, len(args.descriptor_names)), dtype=np.float32
                     )
                 else:
                     prediction = (
@@ -436,11 +464,12 @@ def grouped_descriptor_probe(
     difficulty: np.ndarray,
     episode_groups: np.ndarray,
     *,
+    descriptor_names: tuple[str, ...],
     seed: int,
     train_fraction: float = 0.7,
     ridge: float = 1e-2,
 ) -> dict[str, Any]:
-    """Measure how linearly recoverable task-distribution parameters are."""
+    """Measure how linearly recoverable episode task parameters are."""
     rng = np.random.default_rng(seed)
     train_groups: list[int] = []
     test_groups: list[int] = []
@@ -484,11 +513,11 @@ def grouped_descriptor_probe(
         "mean_r2": float(r2.mean()),
         "per_component_mae": {
             name: float(absolute_error[:, index].mean())
-            for index, name in enumerate(TASK_DESCRIPTOR_NAMES)
+            for index, name in enumerate(descriptor_names)
         },
         "per_component_r2": {
             name: float(r2[index])
-            for index, name in enumerate(TASK_DESCRIPTOR_NAMES)
+            for index, name in enumerate(descriptor_names)
         },
         "train_episodes": len(train_groups),
         "test_episodes": len(test_groups),
@@ -498,6 +527,7 @@ def grouped_descriptor_probe(
 def evaluate_descriptor_probes(
     embeddings: dict[str, np.ndarray],
     *,
+    descriptor_names: tuple[str, ...],
     seed: int,
 ) -> dict[str, dict[str, Any]]:
     """Evaluate continuous task information in each learned representation."""
@@ -519,7 +549,7 @@ def evaluate_descriptor_probes(
             "normalized_mae": float(direct_error.mean()),
             "per_component_mae": {
                 name: float(direct_error[:, index].mean())
-                for index, name in enumerate(TASK_DESCRIPTOR_NAMES)
+                for index, name in enumerate(descriptor_names)
             },
         }
         print(
@@ -532,6 +562,7 @@ def evaluate_descriptor_probes(
                 embeddings["descriptor"][selected],
                 embeddings["difficulty"][selected],
                 embeddings["episode_group"][selected],
+                descriptor_names=descriptor_names,
                 seed=seed + split_index,
             )
             split_results[name] = metrics
@@ -631,10 +662,16 @@ def main() -> None:
         raise ValueError("--max-points-per-episode must be positive.")
     device = resolve_device(args.device)
     model, payload = load_hissd_model(args.checkpoint, device)
+    (
+        args.descriptor_names,
+        args.descriptor_field,
+        args.descriptor_available_field,
+    ) = resolve_descriptor_schema(model, payload)
     print(
         f"Loaded HiSSD epoch={payload.get('epoch')} on {device}; "
         f"training_tasks={payload.get('training_tasks')}, "
-        f"held_out_tasks={payload.get('held_out_tasks')}"
+        f"held_out_tasks={payload.get('held_out_tasks')}, "
+        f"descriptor={args.descriptor_field}[{len(args.descriptor_names)}]"
     )
     embeddings = collect_embeddings(model, args, device)
     probe_results = {
@@ -642,7 +679,9 @@ def main() -> None:
             embeddings, seed=args.seed
         ),
         "continuous_descriptor_regression": evaluate_descriptor_probes(
-            embeddings, seed=args.seed
+            embeddings,
+            descriptor_names=args.descriptor_names,
+            seed=args.seed,
         ),
     }
     output_path = args.output.expanduser().resolve()

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import itertools
 import json
 import math
 import statistics
@@ -321,10 +322,16 @@ def run_metrics(
         ),
         None,
     )
+    initial_success_rate = float(ordered[0]["success_rate"])
+    final_success_rate = float(clipped[-1]["success_rate"])
+    success_auc = area / budget
     return {
         "budget": budget,
-        "success_auc": area / budget,
-        "final_success_rate": float(clipped[-1]["success_rate"]),
+        "initial_success_rate": initial_success_rate,
+        "success_auc": success_auc,
+        "success_gain_auc": success_auc - initial_success_rate,
+        "final_success_rate": final_success_rate,
+        "final_success_gain": final_success_rate - initial_success_rate,
         "threshold": threshold,
         "first_threshold_step": reached,
         "threshold_reached": reached is not None,
@@ -427,8 +434,17 @@ def analyze(
                 "success_auc": mean_ci95(
                     [float(result["success_auc"]) for result in results]
                 ),
+                "success_gain_auc": mean_ci95(
+                    [float(result["success_gain_auc"]) for result in results]
+                ),
+                "initial_success_rate": mean_ci95(
+                    [float(result["initial_success_rate"]) for result in results]
+                ),
                 "final_success_rate": mean_ci95(
                     [float(result["final_success_rate"]) for result in results]
+                ),
+                "final_success_gain": mean_ci95(
+                    [float(result["final_success_gain"]) for result in results]
                 ),
                 "threshold_reached_fraction": (
                     len(reached_steps) / len(results)
@@ -441,6 +457,44 @@ def analyze(
                 ),
             }
         )
+    per_run_lookup = {
+        (result["method"], result["difficulty"], result["seed"]): result
+        for result in per_run
+    }
+    pairwise = []
+    methods = sorted({result["method"] for result in per_run})
+    for difficulty in sorted(budgets):
+        for method_a, method_b in itertools.combinations(methods, 2):
+            seeds = sorted(
+                seed
+                for method, task, seed in per_run_lookup
+                if method == method_a
+                and task == difficulty
+                and (method_b, difficulty, seed) in per_run_lookup
+            )
+            if not seeds:
+                continue
+            comparison = {
+                "method_a": method_a,
+                "method_b": method_b,
+                "difference_definition": "method_a - method_b",
+                "difficulty": difficulty,
+                "seeds": len(seeds),
+            }
+            for metric in (
+                "success_auc",
+                "success_gain_auc",
+                "final_success_rate",
+                "final_success_gain",
+                "capped_threshold_step",
+            ):
+                differences = [
+                    float(per_run_lookup[(method_a, difficulty, seed)][metric])
+                    - float(per_run_lookup[(method_b, difficulty, seed)][metric])
+                    for seed in seeds
+                ]
+                comparison[metric] = mean_ci95(differences)
+            pairwise.append(comparison)
     return {
         "format_version": FORMAT_VERSION,
         "step_unit": STEP_UNIT,
@@ -448,6 +502,7 @@ def analyze(
         "thresholds": {str(key): value for key, value in thresholds.items()},
         "per_run": per_run,
         "aggregates": aggregates,
+        "pairwise": pairwise,
     }
 
 
@@ -463,6 +518,8 @@ def write_analysis(path: Path, analysis: dict[str, Any]) -> None:
                 "method", "difficulty", "seeds", "budget", "threshold",
                 "success_auc_mean", "success_auc_std", "success_auc_ci95_low",
                 "success_auc_ci95_high", "final_success_mean",
+                "success_gain_auc_mean", "initial_success_mean",
+                "final_success_gain_mean",
                 "threshold_reached_fraction", "capped_threshold_step_mean",
             )
         )
@@ -474,6 +531,9 @@ def write_analysis(path: Path, analysis: dict[str, Any]) -> None:
                     row["success_auc"]["std"], row["success_auc"]["ci95_low"],
                     row["success_auc"]["ci95_high"],
                     row["final_success_rate"]["mean"],
+                    row["success_gain_auc"]["mean"],
+                    row["initial_success_rate"]["mean"],
+                    row["final_success_gain"]["mean"],
                     row["threshold_reached_fraction"],
                     row["capped_threshold_step"]["mean"],
                 )
@@ -577,7 +637,7 @@ def plot_learning_curves(
 
     aggregates = analysis["aggregates"]
     summary_path = output_path.with_name(f"{output_path.stem}_metrics.png")
-    figure, axes = plt.subplots(1, 2, figsize=(12, 4.6))
+    figure, axes = plt.subplots(1, 3, figsize=(16, 4.6))
     width = 0.8 / max(len(methods), 1)
     positions = list(range(len(difficulties)))
     for method_index, method in enumerate(methods):
@@ -594,6 +654,10 @@ def plot_learning_curves(
             rows[difficulty]["success_auc"]["mean"]
             for difficulty in difficulties
         ]
+        gain_auc_values = [
+            rows[difficulty]["success_gain_auc"]["mean"]
+            for difficulty in difficulties
+        ]
         step_values = [
             rows[difficulty]["capped_threshold_step"]["mean"] / 1000.0
             for difficulty in difficulties
@@ -607,6 +671,13 @@ def plot_learning_curves(
         )
         axes[1].bar(
             offsets,
+            gain_auc_values,
+            width=width,
+            label=method,
+            color=colors[method],
+        )
+        axes[2].bar(
+            offsets,
             step_values,
             width=width,
             label=method,
@@ -618,8 +689,11 @@ def plot_learning_curves(
     axes[0].set_title("Normalized Success AUC")
     axes[0].set_ylim(0.0, 1.0)
     axes[0].set_ylabel("AUC")
-    axes[1].set_title("Steps to Threshold (capped at budget)")
-    axes[1].set_ylabel("Joint env steps (thousands)")
+    axes[1].set_title("Success Gain AUC (AUC - Step-0 Success)")
+    axes[1].set_ylabel("Gain AUC")
+    axes[1].axhline(0.0, color="#333333", linewidth=1.0)
+    axes[2].set_title("Steps to Threshold (capped at budget)")
+    axes[2].set_ylabel("Joint env steps (thousands)")
     handles, labels = axes[0].get_legend_handles_labels()
     figure.legend(
         handles,

@@ -545,6 +545,30 @@ class JointTrajectoryDataset(Dataset):
             weights.append(weight)
         return torch.tensor(weights, dtype=torch.double)
 
+    def task_descriptor_statistics(
+        self,
+        minimum_std: float = 0.03,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return episode-balanced realized-descriptor mean and stable scale."""
+        descriptors = []
+        seen_paths = set()
+        for entry in self.entries:
+            path = entry["path"]
+            if path in seen_paths:
+                continue
+            seen_paths.add(path)
+            descriptor, available = self._task_descriptor(self._load_episode(path))
+            if bool(available):
+                descriptors.append(descriptor)
+        if not descriptors:
+            raise ValueError(
+                f"Split {self.split!r} contains no realized task descriptors."
+            )
+        values = torch.stack(descriptors)
+        return values.mean(dim=0), values.std(dim=0, unbiased=False).clamp_min(
+            float(minimum_std)
+        )
+
 
 class TaskBalancedBatchSampler(BatchSampler):
     """Build replacement-sampled batches containing every source task."""

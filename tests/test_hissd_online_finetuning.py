@@ -13,6 +13,9 @@ from src.skill_discovery.finetune_hissd_online import (
     sample_stage_difficulty,
     squashed_log_prob,
 )
+from src.skill_discovery.finetune_hissd_drone_online import (
+    per_drone_squashed_log_prob,
+)
 
 
 def test_squashed_log_prob_is_finite() -> None:
@@ -22,6 +25,16 @@ def test_squashed_log_prob_is_finite() -> None:
     log_prob = squashed_log_prob(distribution, raw_action)
 
     assert log_prob.shape == (1,)
+    assert torch.isfinite(log_prob).all()
+
+
+def test_drone_log_prob_keeps_shared_policy_agents_separate() -> None:
+    raw_action = torch.zeros(2, 3, 3)
+    distribution = Normal(torch.zeros_like(raw_action), torch.ones_like(raw_action))
+
+    log_prob = per_drone_squashed_log_prob(distribution, raw_action)
+
+    assert log_prob.shape == (2, 3)
     assert torch.isfinite(log_prob).all()
 
 

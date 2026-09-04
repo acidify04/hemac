@@ -96,6 +96,16 @@ def parse_args() -> argparse.Namespace:
         help="Also evaluate BC and MAPPO drones on exactly the same seeds.",
     )
     parser.add_argument(
+        "--compare-mappo",
+        action="store_true",
+        help="Evaluate only the MAPPO checkpoint baseline in addition to HiSSD.",
+    )
+    parser.add_argument(
+        "--compare-bc",
+        action="store_true",
+        help="Evaluate only the BC checkpoint baseline in addition to HiSSD.",
+    )
+    parser.add_argument(
         "--ablate-skills",
         action="store_true",
         help=(
@@ -451,8 +461,10 @@ def main() -> None:
                 "hissd_base",
             )
         )
-    if args.compare_baselines:
-        controllers.extend(("bc", "mappo"))
+    if args.compare_baselines or args.compare_bc:
+        controllers.append("bc")
+    if args.compare_baselines or args.compare_mappo:
+        controllers.append("mappo")
     controllers = tuple(controllers)
     bc_policy = load_bc_policy(args.bc_checkpoint, device) if "bc" in controllers else None
     print(

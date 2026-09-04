@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RESULTS = PROJECT_ROOT / "src/skill_discovery/hissd_rollout_results.json"
 RATE_METRICS = (
     "success",
+    "mission_success",
     "drone_task_success",
     "goal_found",
     "drone_goal_found",
@@ -31,6 +33,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bootstrap-samples", type=int, default=20_000)
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--plot",
+        type=Path,
+        help="Optionally save absolute success rates and paired differences.",
+    )
     return parser.parse_args()
 
 
@@ -109,7 +116,7 @@ def analyze_results(
             comparison = {}
             for metric in (*RATE_METRICS, *CONTINUOUS_METRICS):
                 def metric_value(item: dict[str, Any]) -> Any:
-                    if metric == "success":
+                    if metric == "mission_success":
                         return item.get("mission_success", item["success"])
                     if metric == "drone_task_success":
                         return item.get("drone_task_success", item["success"])
@@ -141,6 +148,100 @@ def analyze_results(
     return output
 
 
+def plot_results(
+    payload: dict[str, Any],
+    analysis: dict[str, Any],
+    output_path: Path,
+) -> None:
+    """Plot task-selected success rates and paired HiSSD differences."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    summaries = payload.get("summaries", {})
+    parsed = []
+    for key, summary in summaries.items():
+        if "/difficulty_" not in key:
+            continue
+        controller, difficulty_text = key.split("/difficulty_", 1)
+        parsed.append((controller, int(difficulty_text), summary))
+    difficulties = sorted({difficulty for _, difficulty, _ in parsed})
+    preferred = ("hissd", "hissd_reference", "bc", "mappo")
+    available = {controller for controller, _, _ in parsed}
+    controllers = [controller for controller in preferred if controller in available]
+    controllers.extend(sorted(available.difference(controllers)))
+
+    figure, axes = plt.subplots(1, 2, figsize=(13, 4.8))
+    width = 0.8 / max(len(controllers), 1)
+    positions = np.arange(len(difficulties), dtype=np.float64)
+    colors = dict(zip(controllers, plt.get_cmap("tab10").colors))
+    for controller_index, controller in enumerate(controllers):
+        values = []
+        errors = []
+        for difficulty in difficulties:
+            summary = next(
+                item
+                for name, task, item in parsed
+                if name == controller and task == difficulty
+            )
+            rate = float(summary["success_rate"])
+            episodes = max(int(summary.get("episodes", 1)), 1)
+            values.append(rate)
+            errors.append(1.96 * math.sqrt(rate * (1.0 - rate) / episodes))
+        offsets = positions - 0.4 + width / 2 + controller_index * width
+        axes[0].bar(
+            offsets,
+            values,
+            width=width,
+            yerr=errors,
+            capsize=3,
+            label=controller,
+            color=colors[controller],
+        )
+    axes[0].set_xticks(positions, [f"D{difficulty}" for difficulty in difficulties])
+    axes[0].set_ylim(0.0, 1.0)
+    axes[0].set_ylabel("Task-selected success rate")
+    axes[0].set_title("Checkpoint rollout success")
+    axes[0].grid(axis="y", alpha=0.25)
+    axes[0].legend()
+
+    labels = []
+    differences = []
+    lower_errors = []
+    upper_errors = []
+    for key, comparison in analysis.items():
+        difficulty_text, baseline = key.split("/hissd_vs_", 1)
+        success = comparison["success"]
+        labels.append(f"D{difficulty_text.removeprefix('difficulty_')} vs {baseline}")
+        difference = float(success["difference"])
+        differences.append(difference)
+        lower_errors.append(difference - float(success["ci95_low"]))
+        upper_errors.append(float(success["ci95_high"]) - difference)
+    y_positions = np.arange(len(labels), dtype=np.float64)
+    axes[1].errorbar(
+        differences,
+        y_positions,
+        xerr=np.asarray([lower_errors, upper_errors]),
+        fmt="o",
+        capsize=4,
+        color="#176b87",
+    )
+    axes[1].axvline(0.0, color="#9b2c2c", linestyle="--", linewidth=1.2)
+    axes[1].set_yticks(y_positions, labels)
+    axes[1].set_xlabel("HiSSD success-rate difference (paired 95% CI)")
+    axes[1].set_title("Paired comparison on identical seeds")
+    axes[1].grid(axis="x", alpha=0.25)
+
+    success_name = payload.get("success_definition", "configured task")
+    figure.suptitle(f"HiSSD evaluation: {success_name}")
+    figure.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    figure.savefig(output_path, dpi=180, bbox_inches="tight")
+    plt.close(figure)
+    print(f"Saved paired evaluation plot: {output_path}")
+
+
 def main() -> None:
     """Load one evaluator JSON and save paired statistical diagnostics."""
     args = parse_args()
@@ -158,6 +259,8 @@ def main() -> None:
     )
     output_path.write_text(json.dumps(analysis, indent=2), encoding="utf-8")
     print(f"Saved paired evaluation analysis: {output_path}")
+    if args.plot is not None:
+        plot_results(payload, analysis, args.plot.expanduser().resolve())
 
 
 if __name__ == "__main__":
