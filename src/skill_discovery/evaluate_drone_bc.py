@@ -289,12 +289,17 @@ def run_episode(
     )
     coverage_method = getattr(core_env, "current_coverage_ratio", None)
     coverage_ratio = float(coverage_method()) if callable(coverage_method) else 0.0
+    fatal_crash = bool(final_info.get("fatal_crash", core_env.collided))
     drone_task_success = classify_drone_skill_outcome(
         drone_goal_found,
         coverage_ratio,
         success_min_coverage_ratio,
+        fatal_crash=fatal_crash,
     ) == "success"
-    mission_success = bool(final_info.get("success", core_env.mission_success))
+    mission_success = (
+        bool(final_info.get("success", core_env.mission_success))
+        and not fatal_crash
+    )
     task_success = (
         drone_task_success if task_definition == "drone" else mission_success
     )
@@ -308,7 +313,7 @@ def run_episode(
         drone_task_success=drone_task_success,
         goal_found=bool(final_info.get("goal_found", core_env.found_goal)),
         drone_goal_found=drone_goal_found,
-        fatal_crash=bool(final_info.get("fatal_crash", core_env.collided)),
+        fatal_crash=fatal_crash,
         drone_crash=bool(final_info.get("drone_crash", core_env.drone_crash)),
         observer_crash=bool(
             final_info.get("observer_crash", core_env.observer_crash)
@@ -442,7 +447,13 @@ def main() -> None:
         output_path.write_text(
             json.dumps(
                 {
-                    "success_definition": args.task_definition,
+                    "success_definition": (
+                        "observer_goal_arrival"
+                        if args.task_definition == "mission"
+                        else (
+                            "drone_goal_found_and_coverage_without_fatal_crash"
+                        )
+                    ),
                     "success_min_coverage_ratio": (
                         args.success_min_coverage_ratio
                     ),

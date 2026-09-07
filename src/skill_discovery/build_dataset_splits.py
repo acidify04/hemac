@@ -374,6 +374,7 @@ def build_manifest(
                 "drone_goal_found": True,
                 "coverage_ratio": "full_map",
                 "minimum_coverage_ratio": success_min_coverage_ratio,
+                "fatal_crash": False,
                 "terminal_reward": DRONE_SKILL_SUCCESS_REWARD,
             }
         ),

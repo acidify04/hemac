@@ -11,6 +11,7 @@ import csv
 import itertools
 import json
 import math
+import random
 import statistics
 from collections import defaultdict
 from pathlib import Path
@@ -38,7 +39,7 @@ def canonical_success_definition(value: Any) -> str | None:
         return None
     return {
         "mission": "observer_goal_arrival",
-        "drone": "drone_goal_found_and_coverage",
+        "drone": "drone_goal_found_and_coverage_without_fatal_crash",
     }.get(str(value), str(value))
 
 
@@ -336,6 +337,9 @@ def run_metrics(
         "first_threshold_step": reached,
         "threshold_reached": reached is not None,
         "capped_threshold_step": reached if reached is not None else budget,
+        "capped_threshold_fraction": (
+            (reached if reached is not None else budget) / budget
+        ),
         "evaluation_points": len(clipped),
     }
 
@@ -361,6 +365,57 @@ def mean_ci95(values: list[float]) -> dict[str, float]:
         "std": std,
         "ci95_low": mean - margin,
         "ci95_high": mean + margin,
+    }
+
+
+def paired_randomization_statistics(
+    differences: list[float],
+    *,
+    lower_is_better: bool = False,
+) -> dict[str, float | str]:
+    """Return paired effect size and an exact sign-randomization p-value."""
+    if not differences:
+        raise ValueError("Paired statistics require at least one difference.")
+    observed = statistics.fmean(differences)
+    std = statistics.stdev(differences) if len(differences) > 1 else 0.0
+    effect = observed / std if std > 0.0 else (0.0 if observed == 0.0 else math.inf)
+    if len(differences) <= 16:
+        sign_sets = itertools.product((-1.0, 1.0), repeat=len(differences))
+        test_name = "exact_sign_randomization"
+    else:
+        rng = random.Random(0)
+        sign_sets = (
+            tuple(rng.choice((-1.0, 1.0)) for _ in differences)
+            for _ in range(100_000)
+        )
+        test_name = "monte_carlo_sign_randomization"
+    randomized_means = [
+        statistics.fmean(
+            sign * difference
+            for sign, difference in zip(signs, differences)
+        )
+        for signs in sign_sets
+    ]
+    tolerance = 1e-12
+    two_sided = sum(
+        abs(value) + tolerance >= abs(observed) for value in randomized_means
+    ) / len(randomized_means)
+    if lower_is_better:
+        one_sided = sum(
+            value <= observed + tolerance for value in randomized_means
+        ) / len(randomized_means)
+        direction = "lower"
+    else:
+        one_sided = sum(
+            value + tolerance >= observed for value in randomized_means
+        ) / len(randomized_means)
+        direction = "higher"
+    return {
+        "paired_effect_size_dz": effect,
+        "permutation_p_two_sided": two_sided,
+        "permutation_p_method_a_better": one_sided,
+        "permutation_test": test_name,
+        "better_direction": direction,
     }
 
 
@@ -493,8 +548,96 @@ def analyze(
                     - float(per_run_lookup[(method_b, difficulty, seed)][metric])
                     for seed in seeds
                 ]
-                comparison[metric] = mean_ci95(differences)
+                comparison[metric] = {
+                    **mean_ci95(differences),
+                    **paired_randomization_statistics(
+                        differences,
+                        lower_is_better=metric == "capped_threshold_step",
+                    ),
+                }
             pairwise.append(comparison)
+
+    target_difficulties = set(budgets)
+    overall_per_run = []
+    by_method_seed: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
+    for result in per_run:
+        by_method_seed[(result["method"], result["seed"])].append(result)
+    overall_metrics = (
+        "success_auc",
+        "success_gain_auc",
+        "initial_success_rate",
+        "final_success_rate",
+        "final_success_gain",
+        "capped_threshold_fraction",
+    )
+    for (method, seed), results in sorted(by_method_seed.items()):
+        if {result["difficulty"] for result in results} != target_difficulties:
+            continue
+        overall_per_run.append(
+            {
+                "method": method,
+                "seed": seed,
+                "difficulties": sorted(target_difficulties),
+                **{
+                    metric: statistics.fmean(
+                        float(result[metric]) for result in results
+                    )
+                    for metric in overall_metrics
+                },
+            }
+        )
+    overall_groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for result in overall_per_run:
+        overall_groups[result["method"]].append(result)
+    overall_aggregates = [
+        {
+            "method": method,
+            "seeds": len(results),
+            "difficulties": sorted(target_difficulties),
+            **{
+                metric: mean_ci95(
+                    [float(result[metric]) for result in results]
+                )
+                for metric in overall_metrics
+            },
+        }
+        for method, results in sorted(overall_groups.items())
+    ]
+    overall_lookup = {
+        (result["method"], result["seed"]): result
+        for result in overall_per_run
+    }
+    overall_pairwise = []
+    overall_methods = sorted(overall_groups)
+    for method_a, method_b in itertools.combinations(overall_methods, 2):
+        seeds = sorted(
+            seed
+            for method, seed in overall_lookup
+            if method == method_a and (method_b, seed) in overall_lookup
+        )
+        if not seeds:
+            continue
+        comparison = {
+            "method_a": method_a,
+            "method_b": method_b,
+            "difference_definition": "method_a - method_b",
+            "difficulties": sorted(target_difficulties),
+            "seeds": len(seeds),
+        }
+        for metric in overall_metrics:
+            differences = [
+                float(overall_lookup[(method_a, seed)][metric])
+                - float(overall_lookup[(method_b, seed)][metric])
+                for seed in seeds
+            ]
+            comparison[metric] = {
+                **mean_ci95(differences),
+                **paired_randomization_statistics(
+                    differences,
+                    lower_is_better=metric == "capped_threshold_fraction",
+                ),
+            }
+        overall_pairwise.append(comparison)
     return {
         "format_version": FORMAT_VERSION,
         "step_unit": STEP_UNIT,
@@ -503,6 +646,9 @@ def analyze(
         "per_run": per_run,
         "aggregates": aggregates,
         "pairwise": pairwise,
+        "overall_per_run": overall_per_run,
+        "overall_aggregates": overall_aggregates,
+        "overall_pairwise": overall_pairwise,
     }
 
 

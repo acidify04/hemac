@@ -14,6 +14,7 @@ from src.skill_discovery.finetune_hissd_online import (
     squashed_log_prob,
 )
 from src.skill_discovery.finetune_hissd_drone_online import (
+    add_per_drone_gae,
     per_drone_squashed_log_prob,
 )
 
@@ -49,6 +50,28 @@ def test_gae_propagates_terminal_reward_backward() -> None:
 
     assert [item["advantage"] for item in transitions] == [1.0, 1.0, 1.0]
     assert [item["return"] for item in transitions] == [1.0, 1.0, 1.0]
+
+
+def test_per_drone_gae_preserves_individual_credit() -> None:
+    transitions = [
+        {
+            "reward": torch.tensor([1.0, -1.0, 0.0]),
+            "value": torch.zeros(3),
+        },
+        {
+            "reward": torch.tensor([0.0, 0.0, 3.0]),
+            "value": torch.zeros(3),
+        },
+    ]
+
+    add_per_drone_gae(transitions, gamma=1.0, gae_lambda=1.0)
+
+    torch.testing.assert_close(
+        transitions[0]["advantage"], torch.tensor([1.0, -1.0, 3.0])
+    )
+    torch.testing.assert_close(
+        transitions[1]["advantage"], torch.tensor([0.0, 0.0, 3.0])
+    )
 
 
 def test_stage_six_mixture_includes_replay_difficulties() -> None:

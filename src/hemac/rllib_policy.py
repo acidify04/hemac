@@ -104,9 +104,15 @@ class _SpatialObsEncoder(nn.Module):
         hidden_sizes,
         activation_name,
         encoder_variant="current",
+        action_history_scale=1.0,
+        vector_last=False,
     ):
         super().__init__()
         self.encoder_variant = str(encoder_variant)
+        self.action_history_scale = float(action_history_scale)
+        if self.action_history_scale <= 0.0:
+            raise ValueError("action_history_scale must be positive.")
+        self.vector_last = bool(vector_last)
         original_space = getattr(obs_space, "original_space", obs_space)
         self._obs_schema = "flat"
         self._use_spatial_obs = False
@@ -246,6 +252,7 @@ class _SpatialObsEncoder(nn.Module):
             if not isinstance(obs_dict, dict) and isinstance(input_dict.get("obs_flat"), dict):
                 obs_dict = input_dict["obs_flat"]
             vector_obs = _to_float_tensor(obs_dict["vector"])
+            vector_obs = vector_obs / self.action_history_scale
             global_map = _to_float_tensor(obs_dict["global_map"])
             local_map = _to_float_tensor(obs_dict["local_map"])
             if vector_obs.dim() == 1:
@@ -260,12 +267,20 @@ class _SpatialObsEncoder(nn.Module):
                 local_map = local_map.permute(0, 3, 1, 2)
             global_map_features = self.global_map_encoder(global_map)
             local_map_features = self.local_map_encoder(local_map)
-            encoder_input = torch.cat([vector_obs, global_map_features, local_map_features], dim=1)
+            if self.vector_last:
+                encoder_input = torch.cat(
+                    [global_map_features, local_map_features, vector_obs], dim=1
+                )
+            else:
+                encoder_input = torch.cat(
+                    [vector_obs, global_map_features, local_map_features], dim=1
+                )
         elif self._obs_schema == "legacy_map":
             obs_dict = input_dict["obs"]
             if not isinstance(obs_dict, dict) and isinstance(input_dict.get("obs_flat"), dict):
                 obs_dict = input_dict["obs_flat"]
             vector_obs = _to_float_tensor(obs_dict["vector"])
+            vector_obs = vector_obs / self.action_history_scale
             relative_map = _to_float_tensor(obs_dict["relative_map"])
             if vector_obs.dim() == 1:
                 vector_obs = vector_obs.unsqueeze(0)
@@ -274,7 +289,10 @@ class _SpatialObsEncoder(nn.Module):
             if relative_map.shape[-1] == self.map_channels:
                 relative_map = relative_map.permute(0, 3, 1, 2)
             map_features = self.map_encoder(relative_map)
-            encoder_input = torch.cat([vector_obs, map_features], dim=1)
+            encoder_input = torch.cat(
+                [map_features, vector_obs] if self.vector_last else [vector_obs, map_features],
+                dim=1,
+            )
         else:
             encoder_input = _flatten_obs_tensor(input_dict["obs_flat"])
         return self.encoder(encoder_input)
@@ -303,6 +321,8 @@ class ClampedGaussianTorchModel(TorchModelV2, _SpatialObsEncoder):
             hidden_sizes,
             activation_name,
             encoder_variant=custom_config.get("encoder_variant", "current"),
+            action_history_scale=custom_config.get("action_history_scale", 1.0),
+            vector_last=custom_config.get("vector_last", False),
         )
 
         self.policy_head = nn.Linear(self.output_dim, action_dim)

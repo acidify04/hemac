@@ -266,6 +266,7 @@ def classify_outcome(
         bool(final_info.get("drone_goal_found", False)),
         float(final_info.get("coverage_ratio", 0.0)),
         min_coverage_ratio,
+        fatal_crash=bool(final_info.get("fatal_crash", False)),
     )
 
 
@@ -562,9 +563,14 @@ def collect_episode(
         current_cycle["goal_found"] = bool(core_env.found_goal)
         current_cycle["drone_goal_found"] = bool(drone_goal_found)
         current_cycle["coverage_ratio"] = float(core_env.current_coverage_ratio())
-        current_cycle["drone_task_success"] = bool(
-            drone_goal_found
-            and current_cycle["coverage_ratio"] >= success_min_coverage_ratio
+        current_cycle["drone_task_success"] = (
+            classify_drone_skill_outcome(
+                drone_goal_found,
+                current_cycle["coverage_ratio"],
+                success_min_coverage_ratio,
+                fatal_crash=bool(core_env.collided),
+            )
+            == "success"
         )
         current_cycle["agent_goal_found"] = np.asarray(
             [
@@ -792,7 +798,7 @@ def save_episode(
                 if task_definition == "mission"
                 else (
                     "drone_goal_found and full-map coverage_ratio >= "
-                    f"{success_min_coverage_ratio}"
+                    f"{success_min_coverage_ratio} and no fatal crash"
                 )
             ),
             "task_descriptor_names": task_descriptor["names"],
@@ -947,10 +953,14 @@ def main() -> None:
                 args.success_min_coverage_ratio,
                 args.task_definition,
             )
-            final_info["drone_task_success"] = bool(
-                final_info.get("drone_goal_found", False)
-                and float(final_info.get("coverage_ratio", 0.0))
-                >= args.success_min_coverage_ratio
+            final_info["drone_task_success"] = (
+                classify_drone_skill_outcome(
+                    bool(final_info.get("drone_goal_found", False)),
+                    float(final_info.get("coverage_ratio", 0.0)),
+                    args.success_min_coverage_ratio,
+                    fatal_crash=bool(final_info.get("fatal_crash", False)),
+                )
+                == "success"
             )
             final_info["drone_task_success_min_coverage_ratio"] = float(
                 args.success_min_coverage_ratio

@@ -895,6 +895,8 @@ class ContinuousActionDecoder(nn.Module):
         observation_features: torch.Tensor,
         common_skills: torch.Tensor,
         task_skills: torch.Tensor,
+        *,
+        direct_residual_skills: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Return pre-tanh action logits for deterministic or stochastic control."""
         leading_shape = observation_features.shape[:-1]
@@ -909,7 +911,12 @@ class ContinuousActionDecoder(nn.Module):
         decoded = self.transformer(tokens).reshape(*leading_shape, -1)
         logits = self.base_action_head(observation_features) + self.residual_head(decoded)
         if self.task_action_residual_head is not None:
-            logits = logits + self.task_action_residual_head(task_skills)
+            residual_skills = (
+                task_skills
+                if direct_residual_skills is None
+                else direct_residual_skills
+            )
+            logits = logits + self.task_action_residual_head(residual_skills)
         return logits
 
     def forward(
@@ -959,6 +966,7 @@ class HeMACHISSD(nn.Module):
         task_running_statistics: bool = False,
         direct_task_summary: bool = False,
         task_action_residual: bool = False,
+        skill_structure: str = "split",
     ) -> None:
         super().__init__()
         self.agent_count = int(agent_count)
@@ -980,6 +988,18 @@ class HeMACHISSD(nn.Module):
         self.task_running_statistics = bool(task_running_statistics)
         self.direct_task_summary = bool(direct_task_summary)
         self.task_action_residual = bool(task_action_residual)
+        if skill_structure not in {
+            "split",
+            "shared",
+            "common_only",
+            "task_only",
+        }:
+            raise ValueError(
+                "skill_structure must be one of split, shared, common_only, "
+                "or task_only; got "
+                f"{skill_structure!r}."
+            )
+        self.skill_structure = skill_structure
         self.model_config = {
             "global_map_channels": int(global_map_channels),
             "local_map_channels": int(local_map_channels),
@@ -1010,6 +1030,7 @@ class HeMACHISSD(nn.Module):
             "task_running_statistics": self.task_running_statistics,
             "direct_task_summary": self.direct_task_summary,
             "task_action_residual": self.task_action_residual,
+            "skill_structure": self.skill_structure,
         }
 
         self.observation_encoder = DroneObservationEncoder( # drone observation encoder (drone observation을 feature로 encoding)
@@ -1199,7 +1220,20 @@ class HeMACHISSD(nn.Module):
         valid_mask: torch.Tensor,
         task_observation_features: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        if self.skill_structure == "task_only":
+            if task_observation_features is None:
+                task_observation_features = observation_features
+            task_skill, contrastive = self.task_skill_encoder(
+                task_observation_features, valid_mask
+            )
+            return torch.zeros_like(task_skill), task_skill, contrastive
+
         common = self.common_skill_encoder(observation_features, valid_mask)
+        if self.skill_structure == "shared":
+            return common, common, common
+        if self.skill_structure == "common_only":
+            inactive = torch.zeros_like(common)
+            return common, inactive, inactive
         if task_observation_features is None:
             task_observation_features = observation_features
         task_skill, contrastive = self.task_skill_encoder(
@@ -1213,10 +1247,36 @@ class HeMACHISSD(nn.Module):
         common_skills: torch.Tensor,
         task_skills: torch.Tensor,
     ) -> torch.Tensor:
-        return self.action_decoder(
+        return torch.tanh(
+            self.decode_action_logits(
+                observation_features,
+                common_skills,
+                task_skills,
+            )
+        )
+
+    def conditioning_skill(
+        self,
+        common_skills: torch.Tensor,
+        task_skills: torch.Tensor,
+    ) -> torch.Tensor:
+        """Return the active latent used by adaptation and observer coupling."""
+        return common_skills if self.skill_structure == "common_only" else task_skills
+
+    def decode_action_logits(
+        self,
+        observation_features: torch.Tensor,
+        common_skills: torch.Tensor,
+        task_skills: torch.Tensor,
+    ) -> torch.Tensor:
+        """Decode logits and condition an optional residual on an active skill."""
+        return self.action_decoder.forward_logits(
             observation_features,
             common_skills,
             task_skills,
+            direct_residual_skills=self.conditioning_skill(
+                common_skills, task_skills
+            ),
         )
 
     def enable_task_action_residual(self) -> None:
@@ -1411,45 +1471,75 @@ class HeMACHISSD(nn.Module):
     ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
         """Run one recurrent actor step for all parameter-sharing drones."""
         features = self.encode_observations(observations)
-        task_features = self.encode_task_observations(observations)
+        task_features = (
+            self.encode_task_observations(observations)
+            if self.skill_structure in {"split", "task_only"}
+            else features
+        )
         if features.ndim != 3 or features.shape[1] != self.agent_count:
             raise ValueError(
                 "Online observations must encode to "
                 f"[B,{self.agent_count},D], got {features.shape}."
             )
-        common, common_history = self.common_skill_encoder.forward_step(
-            features,
-            valid_mask,
-            state["common_history"],
-        )
-        (
-            task_skill,
-            contrastive,
-            task_history,
-            task_context,
-            task_previous_pooled,
-            task_previous_observation,
-            task_previous_observation_valid,
-            task_running_sum,
-            task_running_square_sum,
-            task_running_abs_delta_sum,
-            task_running_count,
-            task_running_delta_count,
-        ) = self.task_skill_encoder.forward_step(
-            task_features,
-            valid_mask,
-            state["task_history"],
-            state["task_context"],
-            state["task_previous_pooled"],
-            state["task_previous_observation"],
-            state["task_previous_observation_valid"],
-            state["task_running_sum"],
-            state["task_running_square_sum"],
-            state["task_running_abs_delta_sum"],
-            state["task_running_count"],
-            state["task_running_delta_count"],
-        )
-        action_logits = self.action_decoder.forward_logits(
+        if self.skill_structure == "task_only":
+            common = features.new_zeros(
+                features.shape[0], features.shape[1], self.skill_dim
+            )
+            common_history = state["common_history"]
+        else:
+            common, common_history = self.common_skill_encoder.forward_step(
+                features,
+                valid_mask,
+                state["common_history"],
+            )
+        if self.skill_structure in {"shared", "common_only"}:
+            if self.skill_structure == "shared":
+                task_skill = common
+                contrastive = common
+            else:
+                task_skill = torch.zeros_like(common)
+                contrastive = torch.zeros_like(common)
+            task_history = state["task_history"]
+            task_context = state["task_context"]
+            task_previous_pooled = state["task_previous_pooled"]
+            task_previous_observation = state["task_previous_observation"]
+            task_previous_observation_valid = state[
+                "task_previous_observation_valid"
+            ]
+            task_running_sum = state["task_running_sum"]
+            task_running_square_sum = state["task_running_square_sum"]
+            task_running_abs_delta_sum = state["task_running_abs_delta_sum"]
+            task_running_count = state["task_running_count"]
+            task_running_delta_count = state["task_running_delta_count"]
+        else:
+            (
+                task_skill,
+                contrastive,
+                task_history,
+                task_context,
+                task_previous_pooled,
+                task_previous_observation,
+                task_previous_observation_valid,
+                task_running_sum,
+                task_running_square_sum,
+                task_running_abs_delta_sum,
+                task_running_count,
+                task_running_delta_count,
+            ) = self.task_skill_encoder.forward_step(
+                task_features,
+                valid_mask,
+                state["task_history"],
+                state["task_context"],
+                state["task_previous_pooled"],
+                state["task_previous_observation"],
+                state["task_previous_observation_valid"],
+                state["task_running_sum"],
+                state["task_running_square_sum"],
+                state["task_running_abs_delta_sum"],
+                state["task_running_count"],
+                state["task_running_delta_count"],
+            )
+        action_logits = self.decode_action_logits(
             features,
             common,
             task_skill,
@@ -1462,6 +1552,7 @@ class HeMACHISSD(nn.Module):
             "common_skills": common,
             "task_skills": task_skill,
             "contrastive_skills": contrastive,
+            "conditioning_skills": self.conditioning_skill(common, task_skill),
         }
         if self.task_descriptor_head is not None:
             numeric_mask = valid_mask.bool().unsqueeze(-1).to(contrastive.dtype)

@@ -24,11 +24,17 @@ def classify_drone_skill_outcome(
     drone_goal_found: bool,
     coverage_ratio: float,
     min_coverage_ratio: float = DRONE_SKILL_SUCCESS_MIN_COVERAGE_RATIO,
+    *,
+    fatal_crash: bool = False,
 ) -> str:
     """Classify an episode using the drone exploration task definition."""
     if not 0.0 <= min_coverage_ratio <= 1.0:
         raise ValueError("min_coverage_ratio must be in [0, 1].")
-    if bool(drone_goal_found) and float(coverage_ratio) >= min_coverage_ratio:
+    if (
+        not bool(fatal_crash)
+        and bool(drone_goal_found)
+        and float(coverage_ratio) >= min_coverage_ratio
+    ):
         return "success"
     if bool(drone_goal_found):
         return "goal_found_failure"
@@ -51,11 +57,15 @@ def drone_skill_outcome_from_payload(
     if "coverage_ratio" not in final_info:
         raise ValueError("Episode final_info has no coverage_ratio.")
     coverage_ratio = float(final_info["coverage_ratio"])
+    fatal_crash = scalar_bool(
+        outcome.get("fatal_crash", final_info.get("fatal_crash", False))
+    )
     return (
         classify_drone_skill_outcome(
             drone_goal_found,
             coverage_ratio,
             min_coverage_ratio,
+            fatal_crash=fatal_crash,
         ),
         drone_goal_found,
         coverage_ratio,

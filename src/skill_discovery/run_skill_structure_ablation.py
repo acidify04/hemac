@@ -1,0 +1,375 @@
+"""Run the four-way HiSSD skill-structure learning-efficiency ablation."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shlex
+import subprocess
+import sys
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+TRAIN_SCRIPT = PROJECT_ROOT / "src/skill_discovery/train_hissd.py"
+ADAPT_SCRIPT = PROJECT_ROOT / "src/skill_discovery/adapt_hissd_target.py"
+ONLINE_SCRIPT = (
+    PROJECT_ROOT / "src/skill_discovery/finetune_hissd_drone_online.py"
+)
+ANALYZE_SCRIPT = (
+    PROJECT_ROOT / "src/skill_discovery/analyze_learning_efficiency.py"
+)
+DEFAULT_MANIFEST = (
+    PROJECT_ROOT
+    / "src/skill_discovery/offline_data_drone_d12_t34_cp7800/"
+    "drone_task_dataset_splits.json"
+)
+DEFAULT_BC_CHECKPOINT = (
+    PROJECT_ROOT
+    / "src/skill_discovery/checkpoints/bc_drone_d12_t34_cp7800/"
+    "drone_bc_best.pt"
+)
+DEFAULT_MAPPO_CHECKPOINT = (
+    PROJECT_ROOT / "src/train/drone_mappo_coverage60_checkpoints/checkpoint_07800"
+)
+DEFAULT_CHECKPOINT_ROOT = (
+    PROJECT_ROOT / "src/skill_discovery/checkpoints/hissd_skill_structure_ablation"
+)
+DEFAULT_OUTPUT_ROOT = (
+    PROJECT_ROOT
+    / "src/skill_discovery/outputs/learning_efficiency/drone_d12_t34/"
+    "skill_structure_ablation"
+)
+SKILL_STRUCTURES = ("common_only", "task_only", "split", "shared")
+MODEL_VARIANTS = ("source", "adapted")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--stages",
+        nargs="+",
+        choices=("train", "adapt", "online", "analyze"),
+        default=("train", "adapt", "online", "analyze"),
+    )
+    parser.add_argument(
+        "--structures", nargs="+", choices=SKILL_STRUCTURES, default=SKILL_STRUCTURES
+    )
+    parser.add_argument(
+        "--variants", nargs="+", choices=MODEL_VARIANTS, default=MODEL_VARIANTS
+    )
+    parser.add_argument(
+        "--seeds", type=int, nargs="+", default=(2026, 2027, 2028, 2029, 2030)
+    )
+    parser.add_argument("--difficulties", type=int, nargs="+", default=(3, 4))
+    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
+    parser.add_argument("--bc-checkpoint", type=Path, default=DEFAULT_BC_CHECKPOINT)
+    parser.add_argument(
+        "--mappo-checkpoint", type=Path, default=DEFAULT_MAPPO_CHECKPOINT
+    )
+    parser.add_argument(
+        "--checkpoint-root", type=Path, default=DEFAULT_CHECKPOINT_ROOT
+    )
+    parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
+    parser.add_argument("--source-epochs", type=int, default=70)
+    parser.add_argument("--adapt-epochs", type=int, default=40)
+    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--sequence-length", type=int, default=128)
+    parser.add_argument("--num-workers", type=int, default=2)
+    parser.add_argument("--iterations", type=int, default=40)
+    parser.add_argument("--episodes-per-iteration", type=int, default=8)
+    parser.add_argument("--eval-every", type=int, default=5)
+    parser.add_argument("--eval-episodes", type=int, default=100)
+    parser.add_argument(
+        "--checkpoint-selection",
+        choices=("last", "best"),
+        default="last",
+        help="Use fixed-epoch last checkpoints by default for a fair ablation.",
+    )
+    parser.add_argument("--thresholds", nargs="+", default=("3=0.6", "4=0.5"))
+    parser.add_argument("--budget", type=int)
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args()
+    validate_args(args)
+    return args
+
+
+def validate_args(args: argparse.Namespace) -> None:
+    positive = (
+        "source_epochs",
+        "adapt_epochs",
+        "batch_size",
+        "sequence_length",
+        "iterations",
+        "episodes_per_iteration",
+        "eval_every",
+        "eval_episodes",
+    )
+    for name in positive:
+        if getattr(args, name) <= 0:
+            raise ValueError(f"--{name.replace('_', '-')} must be positive.")
+    if args.num_workers < 0:
+        raise ValueError("--num-workers cannot be negative.")
+    if args.budget is not None and args.budget <= 0:
+        raise ValueError("--budget must be positive.")
+    for name in ("structures", "variants", "seeds", "difficulties"):
+        values = getattr(args, name)
+        if len(values) != len(set(values)):
+            raise ValueError(f"--{name} must not contain duplicates.")
+
+
+def source_dir(args: argparse.Namespace, structure: str, seed: int) -> Path:
+    return args.checkpoint_root / structure / f"seed_{seed}" / "source"
+
+
+def adapted_dir(args: argparse.Namespace, structure: str, seed: int) -> Path:
+    return args.checkpoint_root / structure / f"seed_{seed}" / "adapted"
+
+
+def checkpoint_path(
+    args: argparse.Namespace, structure: str, seed: int, variant: str
+) -> Path:
+    if variant == "source":
+        name = f"hissd_{args.checkpoint_selection}.pt"
+        return source_dir(args, structure, seed) / name
+    name = f"hissd_adapted_{args.checkpoint_selection}.pt"
+    return adapted_dir(args, structure, seed) / name
+
+
+def online_dir(
+    args: argparse.Namespace,
+    structure: str,
+    variant: str,
+    difficulty: int,
+    seed: int,
+) -> Path:
+    return args.output_root / variant / structure / f"d{difficulty}_seed{seed}"
+
+
+def curve_path(
+    args: argparse.Namespace,
+    structure: str,
+    variant: str,
+    difficulty: int,
+    seed: int,
+) -> Path:
+    return online_dir(args, structure, variant, difficulty, seed) / (
+        f"learning_curve_seed_{seed}.json"
+    )
+
+
+def curve_is_complete(path: Path, expected_iteration: int) -> bool:
+    if not path.is_file():
+        return False
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return max(
+        (int(point.get("iteration", -1)) for point in payload.get("points", ())),
+        default=-1,
+    ) >= expected_iteration
+
+
+def train_command(args: argparse.Namespace, structure: str, seed: int) -> list[str]:
+    return [
+        sys.executable,
+        str(TRAIN_SCRIPT),
+        "--manifest",
+        str(args.manifest),
+        "--bc-checkpoint",
+        str(args.bc_checkpoint),
+        "--output-dir",
+        str(source_dir(args, structure, seed)),
+        "--skill-structure",
+        structure,
+        "--epochs",
+        str(args.source_epochs),
+        "--early-stopping-patience",
+        "0",
+        "--batch-size",
+        str(args.batch_size),
+        "--sequence-length",
+        str(args.sequence_length),
+        "--stride",
+        str(args.sequence_length),
+        "--num-workers",
+        str(args.num_workers),
+        "--seed",
+        str(seed),
+        "--device",
+        args.device,
+        "--no-tensorboard",
+    ]
+
+
+def adapt_command(args: argparse.Namespace, structure: str, seed: int) -> list[str]:
+    return [
+        sys.executable,
+        str(ADAPT_SCRIPT),
+        "--checkpoint",
+        str(checkpoint_path(args, structure, seed, "source")),
+        "--manifest",
+        str(args.manifest),
+        "--output-dir",
+        str(adapted_dir(args, structure, seed)),
+        "--epochs",
+        str(args.adapt_epochs),
+        "--early-stopping-patience",
+        "0",
+        "--batch-size",
+        str(args.batch_size),
+        "--sequence-length",
+        str(args.sequence_length),
+        "--stride",
+        str(args.sequence_length),
+        "--num-workers",
+        str(args.num_workers),
+        "--seed",
+        str(seed),
+        "--device",
+        args.device,
+    ]
+
+
+def online_command(
+    args: argparse.Namespace,
+    structure: str,
+    variant: str,
+    difficulty: int,
+    seed: int,
+) -> list[str]:
+    output_dir = online_dir(args, structure, variant, difficulty, seed)
+    return [
+        sys.executable,
+        str(ONLINE_SCRIPT),
+        "--hissd-checkpoint",
+        str(checkpoint_path(args, structure, seed, variant)),
+        "--mappo-checkpoint",
+        str(args.mappo_checkpoint),
+        "--output-dir",
+        str(output_dir),
+        "--learning-curve-output",
+        str(curve_path(args, structure, variant, difficulty, seed)),
+        "--method-name",
+        f"hissd_{structure}_{variant}",
+        "--difficulty",
+        str(difficulty),
+        "--iterations",
+        str(args.iterations),
+        "--episodes-per-iteration",
+        str(args.episodes_per_iteration),
+        "--eval-every",
+        str(args.eval_every),
+        "--eval-episodes",
+        str(args.eval_episodes),
+        "--seed",
+        str(seed),
+        "--device",
+        args.device,
+    ]
+
+
+def analyze_command(args: argparse.Namespace, curves: list[Path]) -> list[str]:
+    command = [
+        sys.executable,
+        str(ANALYZE_SCRIPT),
+        "analyze",
+        "--curves",
+        *(str(path) for path in curves),
+    ]
+    for threshold in args.thresholds:
+        command.extend(("--threshold", threshold))
+    if args.budget is not None:
+        command.extend(("--budget", str(args.budget)))
+    command.extend(("--output", str(args.output_root / "comparison.json")))
+    return command
+
+
+def execute(command: list[str], *, dry_run: bool) -> None:
+    print(f"$ {shlex.join(command)}", flush=True)
+    if dry_run:
+        return
+    environment = os.environ.copy()
+    environment.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+    subprocess.run(command, cwd=PROJECT_ROOT, env=environment, check=True)
+
+
+def require_file(path: Path, stage: str) -> None:
+    if not path.is_file():
+        raise FileNotFoundError(f"Cannot run {stage}; required file is missing: {path}")
+
+
+def main() -> None:
+    args = parse_args()
+    for name in ("manifest", "bc_checkpoint", "mappo_checkpoint"):
+        setattr(args, name, getattr(args, name).expanduser().resolve())
+    args.checkpoint_root = args.checkpoint_root.expanduser().resolve()
+    args.output_root = args.output_root.expanduser().resolve()
+
+    if "train" in args.stages:
+        for structure in args.structures:
+            for seed in args.seeds:
+                expected = checkpoint_path(args, structure, seed, "source")
+                if expected.is_file() and not args.force:
+                    print(f"SKIP source checkpoint: {expected}")
+                    continue
+                execute(train_command(args, structure, seed), dry_run=args.dry_run)
+
+    if "adapt" in args.stages:
+        for structure in args.structures:
+            for seed in args.seeds:
+                source = checkpoint_path(args, structure, seed, "source")
+                if not args.dry_run:
+                    require_file(source, "adapt")
+                expected = checkpoint_path(args, structure, seed, "adapted")
+                if expected.is_file() and not args.force:
+                    print(f"SKIP adapted checkpoint: {expected}")
+                    continue
+                execute(adapt_command(args, structure, seed), dry_run=args.dry_run)
+
+    curves = [
+        curve_path(args, structure, variant, difficulty, seed)
+        for structure in args.structures
+        for variant in args.variants
+        for difficulty in args.difficulties
+        for seed in args.seeds
+    ]
+    if "online" in args.stages:
+        for structure in args.structures:
+            for variant in args.variants:
+                for difficulty in args.difficulties:
+                    for seed in args.seeds:
+                        checkpoint = checkpoint_path(
+                            args, structure, seed, variant
+                        )
+                        if not args.dry_run:
+                            require_file(checkpoint, "online")
+                        curve = curve_path(
+                            args, structure, variant, difficulty, seed
+                        )
+                        if not args.force and curve_is_complete(
+                            curve, args.iterations
+                        ):
+                            print(f"SKIP complete curve: {curve}")
+                            continue
+                        execute(
+                            online_command(
+                                args, structure, variant, difficulty, seed
+                            ),
+                            dry_run=args.dry_run,
+                        )
+
+    if "analyze" in args.stages:
+        if not args.dry_run:
+            missing = [path for path in curves if not path.is_file()]
+            if missing:
+                raise FileNotFoundError(
+                    f"Cannot analyze before {len(missing)} curves are generated; "
+                    f"first missing path: {missing[0]}"
+                )
+        execute(analyze_command(args, curves), dry_run=args.dry_run)
+
+
+if __name__ == "__main__":
+    main()

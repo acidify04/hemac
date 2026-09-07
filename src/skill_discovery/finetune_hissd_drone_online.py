@@ -1,9 +1,10 @@
 """Fine-tune HiSSD drone residuals with PPO and record learning efficiency.
 
 This runner is intentionally separate from joint observer-drone fine-tuning.
-It keeps every pretrained encoder and the BC-compatible action path frozen and
-updates only the task-conditioned drone residual, exploration variance, and a
-centralized team-value head.
+It preserves the common skill and BC-compatible action path while adapting the
+task-conditioned residual and, after a short warm-up, the lightweight causal
+task-context adapter. The offline centralized value is reused as a baseline,
+while a residual critic assigns credit to each homogeneous drone.
 """
 
 from __future__ import annotations
@@ -43,6 +44,7 @@ from skill_discovery.collect_offline_data import (
     resolve_algorithm_checkpoint,
 )
 from skill_discovery.evaluate_drone_bc import drone_action_scale
+from skill_discovery.drone_task import classify_drone_skill_outcome
 from skill_discovery.finetune_hissd_online import (
     OnlineValueHead,
     add_gae,
@@ -56,7 +58,7 @@ from skill_discovery.visualize_hissd_skills import load_hissd_model, resolve_dev
 DEFAULT_HISSD_CHECKPOINT = (
     PROJECT_ROOT
     / "src/skill_discovery/checkpoints/"
-    "hissd_drone_d12_t34_adapted_stable_v3/hissd_adapted_best.pt"
+    "hissd_drone_d12_t34_adapted_stable_v4/hissd_adapted_best.pt"
 )
 DEFAULT_MAPPO_CHECKPOINT = (
     PROJECT_ROOT / "src/train/drone_mappo_coverage60_checkpoints/checkpoint_07800"
@@ -85,7 +87,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ppo-epochs", type=int, default=4)
     parser.add_argument("--minibatch-size", type=int, default=256)
     parser.add_argument("--actor-lr", type=float, default=1e-4)
+    parser.add_argument("--context-lr", type=float, default=2e-5)
     parser.add_argument("--critic-lr", type=float, default=3e-4)
+    parser.add_argument(
+        "--use-pretrained-value",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use the offline HiSSD centralized value as a frozen PPO baseline.",
+    )
+    parser.add_argument(
+        "--credit-assignment",
+        choices=("agent", "team"),
+        default="agent",
+        help=(
+            "Use per-drone dense rewards and values (recommended), or the legacy "
+            "single team advantage for every drone."
+        ),
+    )
     parser.add_argument("--log-std-lr", type=float, default=2e-5)
     parser.add_argument("--log-std-init", type=float, default=-2.0)
     parser.add_argument("--log-std-min", type=float, default=-3.0)
@@ -96,6 +114,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--value-coeff", type=float, default=0.5)
     parser.add_argument("--entropy-coeff", type=float, default=0.002)
     parser.add_argument("--anchor-coeff", type=float, default=0.02)
+    parser.add_argument(
+        "--skill-anchor-coeff",
+        type=float,
+        default=0.05,
+        help="Penalty on task-context drift from the input checkpoint.",
+    )
+    parser.add_argument(
+        "--context-warmup-iterations",
+        type=int,
+        default=5,
+        help="Train only the action residual before adapting task context.",
+    )
     parser.add_argument("--reward-scale", type=float, default=100.0)
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=2026)
@@ -114,6 +144,7 @@ def validate_args(args: argparse.Namespace) -> None:
         "ppo_epochs",
         "minibatch_size",
         "actor_lr",
+        "context_lr",
         "critic_lr",
         "log_std_lr",
         "gamma",
@@ -131,6 +162,10 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--gamma and --gae-lambda must be in (0, 1].")
     if args.log_std_min >= args.log_std_max:
         raise ValueError("--log-std-min must be lower than --log-std-max.")
+    if args.anchor_coeff < 0.0 or args.skill_anchor_coeff < 0.0:
+        raise ValueError("Anchor coefficients cannot be negative.")
+    if args.context_warmup_iterations < 0:
+        raise ValueError("--context-warmup-iterations cannot be negative.")
     args.method_name = args.method_name.strip()
     if not args.method_name:
         raise ValueError("--method-name cannot be empty.")
@@ -165,6 +200,32 @@ def per_drone_squashed_log_prob(
     return (distribution.log_prob(raw_action) - correction).sum(dim=-1)
 
 
+def add_per_drone_gae(
+    transitions: list[dict[str, Any]],
+    gamma: float,
+    gae_lambda: float,
+) -> None:
+    """Compute one GAE target per drone while sharing terminal success credit."""
+    if not transitions:
+        return
+    last_value = torch.as_tensor(transitions[-1]["value"], dtype=torch.float32)
+    advantage = torch.zeros_like(last_value)
+    next_value = torch.zeros_like(last_value)
+    for transition in reversed(transitions):
+        value = torch.as_tensor(transition["value"], dtype=torch.float32)
+        reward = torch.as_tensor(transition["reward"], dtype=torch.float32)
+        if value.ndim != 1 or reward.shape != value.shape:
+            raise ValueError(
+                "Per-drone GAE expects matching 1D reward/value vectors, got "
+                f"reward={tuple(reward.shape)}, value={tuple(value.shape)}."
+            )
+        delta = reward + gamma * next_value - value
+        advantage = delta + gamma * gae_lambda * advantage
+        transition["advantage"] = advantage.clone()
+        transition["return"] = advantage + value
+        next_value = value
+
+
 def build_env_config(
     checkpoint_env_config: dict[str, Any],
     difficulty: int,
@@ -182,6 +243,9 @@ def rollout_episode(
     model,
     value_head: OnlineValueHead,
     anchor_head: nn.Module,
+    anchor_context_adapter: nn.Module | None,
+    use_pretrained_value: bool,
+    credit_assignment: str,
     log_std: torch.Tensor,
     action_scale: float,
     reward_scale: float,
@@ -200,6 +264,12 @@ def rollout_episode(
     last_agent_id = agent_order[-1]
     valid_mask = torch.ones(1, len(drone_ids), dtype=torch.bool, device=device)
     recurrent_state = model.initial_inference_state(device=device)
+    value_history = model.value_network.backbone.initial_state(
+        1,
+        len(drone_ids),
+        device=device,
+        dtype=next(model.parameters()).dtype,
+    )
     transitions: list[dict[str, Any]] = []
     cached_actions: dict[str, np.ndarray] = {}
     cycle_rewards: np.ndarray | None = None
@@ -221,24 +291,88 @@ def rollout_episode(
                 )
                 task_skill = outputs["task_skills"][0]
                 action_logits = outputs["action_logits"][0]
-                direct_logits = model.action_decoder.task_action_residual_head(task_skill)
-                base_logits = action_logits - direct_logits
-                anchor_logits = base_logits + anchor_head(task_skill)
-                central_embedding = model.central_state_encoder(
+                observation_features = outputs["observation_features"][0]
+                common_skills = outputs["common_skills"][0]
+                task_context = recurrent_state["task_context"][0]
+                context_adapter = (
+                    getattr(model.task_skill_encoder, "context_adapter", None)
+                    if model.skill_structure in {"split", "task_only"}
+                    else None
+                )
+                if context_adapter is None:
+                    task_base_skill = task_skill
+                    anchor_task_skill = task_skill
+                else:
+                    task_base_skill = task_skill - context_adapter(
+                        task_context
+                    ).unsqueeze(0)
+                    anchor_task_skill = task_base_skill + anchor_context_adapter(
+                        task_context
+                    ).unsqueeze(0)
+                anchor_logits = model.decode_action_logits(
+                    observation_features, common_skills, anchor_task_skill
+                )
+                anchor_conditioning_skill = model.conditioning_skill(
+                    common_skills, anchor_task_skill
+                )
+                anchor_logits = (
+                    anchor_logits
+                    - model.action_decoder.task_action_residual_head(
+                        anchor_conditioning_skill
+                    )
+                    + anchor_head(anchor_conditioning_skill)
+                )
+                central_map = (
                     torch.from_numpy(build_global_central_map(core_env))
                     .unsqueeze(0)
                     .to(device)
-                )[0]
-                critic_features = torch.cat(
-                    (
-                        outputs["observation_features"][0].mean(dim=0),
-                        outputs["common_skills"][0].mean(dim=0),
-                        task_skill.mean(dim=0),
-                        central_embedding,
-                    ),
-                    dim=-1,
                 )
-                value = value_head(critic_features.unsqueeze(0))[0]
+                central_embedding = model.central_state_encoder(central_map)[0]
+                if use_pretrained_value:
+                    value_hidden, value_history = (
+                        model.value_network.backbone.forward_step(
+                            outputs["observation_features"],
+                            valid_mask,
+                            value_history,
+                        )
+                    )
+                    individual_value = model.value_network.value_head(value_hidden)
+                    pretrained_team_value = model.value_mixer(
+                        individual_value,
+                        central_embedding.unsqueeze(0),
+                        valid_mask.to(individual_value.dtype),
+                    ).squeeze()
+                else:
+                    pretrained_team_value = central_embedding.new_zeros(())
+                if credit_assignment == "agent":
+                    central_per_drone = central_embedding.unsqueeze(0).expand(
+                        len(drone_ids), -1
+                    )
+                    critic_features = torch.cat(
+                        (
+                            observation_features,
+                            common_skills,
+                            task_skill,
+                            central_per_drone,
+                        ),
+                        dim=-1,
+                    )
+                    pretrained_value = pretrained_team_value.expand(len(drone_ids))
+                    value = pretrained_value + value_head(critic_features)
+                else:
+                    critic_features = torch.cat(
+                        (
+                            observation_features.mean(dim=0),
+                            common_skills.mean(dim=0),
+                            task_skill.mean(dim=0),
+                            central_embedding,
+                        ),
+                        dim=-1,
+                    )
+                    pretrained_value = pretrained_team_value
+                    value = pretrained_value + value_head(
+                        critic_features.unsqueeze(0)
+                    )[0]
                 distribution = Normal(action_logits, log_std.exp())
                 raw_action = distribution.sample() if stochastic else action_logits
                 normalized_action = torch.tanh(raw_action)
@@ -255,11 +389,16 @@ def rollout_episode(
                 transitions.append(
                     {
                         "task_skill": task_skill.cpu(),
-                        "base_logits": base_logits.cpu(),
+                        "task_base_skill": task_base_skill.cpu(),
+                        "task_context": task_context.cpu(),
+                        "anchor_task_skill": anchor_task_skill.cpu(),
+                        "observation_features": observation_features.cpu(),
+                        "common_skills": common_skills.cpu(),
                         "anchor_logits": anchor_logits.cpu(),
                         "raw_action": raw_action.cpu(),
                         "old_log_prob": old_log_prob.cpu(),
                         "critic_features": critic_features.cpu(),
+                        "pretrained_value": pretrained_value.cpu(),
                         "value": value.cpu(),
                     }
                 )
@@ -282,15 +421,24 @@ def rollout_episode(
         )
         if not cycle_finished:
             continue
-        team_reward = _team_reward(
-            cycle_rewards,
-            cycle_mask,
-            [],
-            drone_indices,
-            shared_success_reward,
-        )
         if stochastic:
-            transitions[-1]["reward"] = float(team_reward / reward_scale)
+            transitions[-1]["agent_mask"] = torch.from_numpy(cycle_mask.copy())
+            if credit_assignment == "agent":
+                # Exploration and collision credit remains attributable, while
+                # mission success is cooperative and therefore shared in full.
+                per_drone_reward = cycle_rewards + shared_success_reward
+                transitions[-1]["reward"] = torch.from_numpy(
+                    per_drone_reward / reward_scale
+                )
+            else:
+                team_reward = _team_reward(
+                    cycle_rewards,
+                    cycle_mask,
+                    [],
+                    drone_indices,
+                    shared_success_reward,
+                )
+                transitions[-1]["reward"] = float(team_reward / reward_scale)
         cycle_count += 1
         cached_actions = {}
         cycle_rewards = None
@@ -298,11 +446,20 @@ def rollout_episode(
 
     drone_goal_found = any(agent_found_goal(core_env, drone_id) for drone_id in drone_ids)
     coverage = float(core_env.current_coverage_ratio())
-    success = drone_goal_found and coverage + 1e-6 >= success_min_coverage_ratio
+    fatal_crash = bool(core_env.collided)
+    success = (
+        classify_drone_skill_outcome(
+            drone_goal_found,
+            coverage + 1e-6,
+            success_min_coverage_ratio,
+            fatal_crash=fatal_crash,
+        )
+        == "success"
+    )
     metrics = {
         "success": float(success),
         "goal_found": float(drone_goal_found),
-        "fatal_crash": float(bool(core_env.collided)),
+        "fatal_crash": float(fatal_crash),
         "drone_crash": float(bool(core_env.drone_crash)),
         "observer_crash": 0.0,
         "coverage": coverage,
@@ -319,6 +476,8 @@ def ppo_update(
     transitions: list[dict[str, Any]],
     args: argparse.Namespace,
     device: torch.device,
+    *,
+    adapt_context: bool,
 ) -> dict[str, float]:
     if not transitions:
         raise RuntimeError("No drone PPO transitions were collected.")
@@ -326,64 +485,109 @@ def ppo_update(
         key: torch.stack([transition[key] for transition in transitions]).to(device)
         for key in (
             "task_skill",
-            "base_logits",
+            "task_base_skill",
+            "task_context",
+            "anchor_task_skill",
+            "observation_features",
+            "common_skills",
             "anchor_logits",
             "raw_action",
             "old_log_prob",
+            "agent_mask",
             "critic_features",
+            "pretrained_value",
         )
     }
-    advantages = torch.tensor(
-        [transition["advantage"] for transition in transitions],
-        dtype=torch.float32,
-        device=device,
-    )
-    returns = torch.tensor(
-        [transition["return"] for transition in transitions],
-        dtype=torch.float32,
-        device=device,
-    )
-    advantages = (advantages - advantages.mean()) / advantages.std(
-        unbiased=False
-    ).clamp_min(1e-6)
+    advantages = torch.stack(
+        [torch.as_tensor(transition["advantage"]) for transition in transitions]
+    ).to(device=device, dtype=torch.float32)
+    returns = torch.stack(
+        [torch.as_tensor(transition["return"]) for transition in transitions]
+    ).to(device=device, dtype=torch.float32)
+    agent_mask = data["agent_mask"].bool()
+    if advantages.ndim == 2:
+        valid_advantages = advantages[agent_mask]
+        normalized = (advantages - valid_advantages.mean()) / valid_advantages.std(
+            unbiased=False
+        ).clamp_min(1e-6)
+        advantages = torch.where(agent_mask, normalized, 0.0)
+    else:
+        advantages = (advantages - advantages.mean()) / advantages.std(
+            unbiased=False
+        ).clamp_min(1e-6)
     transition_count = len(transitions)
     accumulator: dict[str, float] = defaultdict(float)
     updates = 0
     task_head = model.action_decoder.task_action_residual_head
+    context_adapter = (
+        getattr(model.task_skill_encoder, "context_adapter", None)
+        if model.skill_structure in {"split", "task_only"}
+        else None
+    )
     for _ in range(args.ppo_epochs):
         permutation = torch.randperm(transition_count, device=device)
         for start in range(0, transition_count, args.minibatch_size):
             indices = permutation[start : start + args.minibatch_size]
-            logits = data["base_logits"][indices] + task_head(
-                data["task_skill"][indices]
+            if adapt_context and context_adapter is not None:
+                task_skill = data["task_base_skill"][indices] + context_adapter(
+                    data["task_context"][indices]
+                ).unsqueeze(1)
+            else:
+                task_skill = data["task_skill"][indices]
+            logits = model.decode_action_logits(
+                data["observation_features"][indices],
+                data["common_skills"][indices],
+                task_skill,
             )
             distribution = Normal(logits, log_std.exp())
             log_prob = per_drone_squashed_log_prob(
                 distribution, data["raw_action"][indices]
             )
             ratio = torch.exp(log_prob - data["old_log_prob"][indices])
-            advantage = advantages[indices, None]
+            advantage = advantages[indices]
+            if advantage.ndim == 1:
+                advantage = advantage.unsqueeze(-1)
             unclipped = ratio * advantage
             clipped = ratio.clamp(
                 1.0 - args.clip_ratio, 1.0 + args.clip_ratio
             ) * advantage
-            policy_loss = -torch.minimum(unclipped, clipped).mean()
-            value = value_head(data["critic_features"][indices])
-            value_loss = F.mse_loss(value, returns[indices])
-            entropy = distribution.entropy().sum(dim=-1).mean()
-            anchor_loss = F.mse_loss(
-                torch.tanh(logits), torch.tanh(data["anchor_logits"][indices])
+            minibatch_mask = agent_mask[indices]
+            surrogate = torch.minimum(unclipped, clipped)
+            policy_loss = -surrogate[minibatch_mask].mean()
+            value = data["pretrained_value"][indices] + value_head(
+                data["critic_features"][indices]
             )
+            if value.ndim == 2:
+                value_loss = F.mse_loss(
+                    value[minibatch_mask], returns[indices][minibatch_mask]
+                )
+            else:
+                value_loss = F.mse_loss(value, returns[indices])
+            entropy_by_agent = distribution.entropy().sum(dim=-1)
+            entropy = entropy_by_agent[minibatch_mask].mean()
+            action_mask = minibatch_mask.unsqueeze(-1).expand_as(logits)
+            anchor_error = (
+                torch.tanh(logits) - torch.tanh(data["anchor_logits"][indices])
+            ).square()
+            anchor_loss = anchor_error[action_mask].mean()
+            skill_mask = minibatch_mask.unsqueeze(-1).expand_as(task_skill)
+            skill_anchor_loss = (
+                task_skill - data["anchor_task_skill"][indices]
+            ).square()[skill_mask].mean()
             loss = (
                 policy_loss
                 + args.value_coeff * value_loss
                 - args.entropy_coeff * entropy
                 + args.anchor_coeff * anchor_loss
+                + args.skill_anchor_coeff * skill_anchor_loss
             )
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
+            actor_parameters = list(task_head.parameters())
+            if adapt_context and context_adapter is not None:
+                actor_parameters.extend(context_adapter.parameters())
             grad_norm = torch.nn.utils.clip_grad_norm_(
-                [*task_head.parameters(), *value_head.parameters(), log_std],
+                [*actor_parameters, *value_head.parameters(), log_std],
                 args.max_grad_norm,
             )
             optimizer.step()
@@ -393,11 +597,17 @@ def ppo_update(
             accumulator["value_loss"] += float(value_loss.detach())
             accumulator["entropy"] += float(entropy.detach())
             accumulator["anchor_loss"] += float(anchor_loss.detach())
+            accumulator["skill_anchor_loss"] += float(skill_anchor_loss.detach())
             accumulator["approx_kl"] += float(
-                (data["old_log_prob"][indices] - log_prob).mean().detach()
+                (data["old_log_prob"][indices] - log_prob)[minibatch_mask]
+                .mean()
+                .detach()
             )
             accumulator["clip_fraction"] += float(
-                ((ratio - 1.0).abs() > args.clip_ratio).float().mean().detach()
+                ((ratio - 1.0).abs() > args.clip_ratio)[minibatch_mask]
+                .float()
+                .mean()
+                .detach()
             )
             accumulator["grad_norm"] += float(grad_norm)
             updates += 1
@@ -414,6 +624,8 @@ def evaluate_policy(
     model,
     value_head: OnlineValueHead,
     anchor_head: nn.Module,
+    anchor_context_adapter: nn.Module | None,
+    use_pretrained_value: bool,
     log_std: torch.Tensor,
     args: argparse.Namespace,
     device: torch.device,
@@ -432,6 +644,9 @@ def evaluate_policy(
                 model=model,
                 value_head=value_head,
                 anchor_head=anchor_head,
+                anchor_context_adapter=anchor_context_adapter,
+                use_pretrained_value=args.use_pretrained_value,
+                credit_assignment=args.credit_assignment,
                 log_std=log_std,
                 action_scale=drone_action_scale(config),
                 reward_scale=args.reward_scale,
@@ -467,9 +682,11 @@ def save_checkpoint(
             "online_value_state_dict": value_head.state_dict(),
             "online_drone_log_std": log_std.detach().cpu(),
             "online_finetuning": {
-                "method": "drone_task_residual_parameter_sharing_ppo",
+                "method": "drone_task_context_residual_parameter_sharing_ppo",
                 "difficulty": args.difficulty,
-                "success_definition": "drone_goal_found_and_coverage",
+                "success_definition": (
+                    "drone_goal_found_and_coverage_without_fatal_crash"
+                ),
                 "success_min_coverage_ratio": args.success_min_coverage_ratio,
                 "iteration": iteration,
                 "joint_env_steps": joint_env_steps,
@@ -521,6 +738,18 @@ def main() -> None:
     anchor_head = copy.deepcopy(task_head).to(device).eval()
     for parameter in anchor_head.parameters():
         parameter.requires_grad_(False)
+    context_adapter = (
+        getattr(model.task_skill_encoder, "context_adapter", None)
+        if model.skill_structure in {"split", "task_only"}
+        else None
+    )
+    anchor_context_adapter = None
+    if context_adapter is not None:
+        anchor_context_adapter = copy.deepcopy(context_adapter).to(device).eval()
+        for parameter in anchor_context_adapter.parameters():
+            parameter.requires_grad_(False)
+        for parameter in context_adapter.parameters():
+            parameter.requires_grad_(False)
 
     resolved_mappo, checkpoint_env_config = load_checkpoint_env_config(
         args.mappo_checkpoint
@@ -529,17 +758,25 @@ def main() -> None:
         model.observation_encoder.output_dim + 2 * model.skill_dim + model.hidden_dim
     )
     value_head = OnlineValueHead(critic_input_dim).to(device)
+    with torch.no_grad():
+        value_head.network[-1].weight.zero_()
+        value_head.network[-1].bias.zero_()
     log_std = nn.Parameter(
         torch.full(
             (model.agent_count, model.action_dim), args.log_std_init, device=device
         )
     )
+    optimizer_groups = [
+        {"params": task_head.parameters(), "lr": args.actor_lr},
+        {"params": value_head.parameters(), "lr": args.critic_lr},
+        {"params": [log_std], "lr": args.log_std_lr},
+    ]
+    if context_adapter is not None:
+        optimizer_groups.insert(
+            1, {"params": context_adapter.parameters(), "lr": args.context_lr}
+        )
     optimizer = torch.optim.AdamW(
-        [
-            {"params": task_head.parameters(), "lr": args.actor_lr},
-            {"params": value_head.parameters(), "lr": args.critic_lr},
-            {"params": [log_std], "lr": args.log_std_lr},
-        ],
+        optimizer_groups,
         weight_decay=1e-5,
     )
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -550,10 +787,14 @@ def main() -> None:
     )
     print(
         f"Drone-only PPO difficulty={args.difficulty}, seed={args.seed}, "
-        f"checkpoint={args.hissd_checkpoint}, env_checkpoint={resolved_mappo}"
+        f"checkpoint={args.hissd_checkpoint}, env_checkpoint={resolved_mappo}, "
+        f"skill_structure={model.skill_structure}, "
+        f"credit={args.credit_assignment}, "
+        f"pretrained_value={args.use_pretrained_value}"
     )
     print(
         f"trainable drone_residual={sum(p.numel() for p in task_head.parameters()):,}, "
+        f"task_context_adapter={sum(p.numel() for p in context_adapter.parameters()) if context_adapter is not None else 0:,}, "
         f"critic={sum(p.numel() for p in value_head.parameters()):,}"
     )
 
@@ -562,6 +803,8 @@ def main() -> None:
         model=model,
         value_head=value_head,
         anchor_head=anchor_head,
+        anchor_context_adapter=anchor_context_adapter,
+        use_pretrained_value=args.use_pretrained_value,
         log_std=log_std,
         args=args,
         device=device,
@@ -582,12 +825,26 @@ def main() -> None:
             "source_checkpoint": str(args.hissd_checkpoint.resolve()),
             "environment_checkpoint": str(resolved_mappo),
             "curve_method": args.method_name,
-            "success_definition": "drone_goal_found_and_coverage",
+            "skill_structure": model.skill_structure,
+            "success_definition": (
+                "drone_goal_found_and_coverage_without_fatal_crash"
+            ),
             "success_min_coverage_ratio": args.success_min_coverage_ratio,
             "training_step_definition": (
                 "sum of world cycles from target training episodes; "
                 "evaluation cycles excluded"
             ),
+            "online_adaptation": {
+                "task_residual": True,
+                "task_context_adapter": context_adapter is not None,
+                "context_warmup_iterations": args.context_warmup_iterations,
+                "actor_lr": args.actor_lr,
+                "context_lr": args.context_lr,
+                "action_anchor_coeff": args.anchor_coeff,
+                "skill_anchor_coeff": args.skill_anchor_coeff,
+                "pretrained_value": args.use_pretrained_value,
+                "credit_assignment": args.credit_assignment,
+            },
         },
     )
     print(
@@ -624,6 +881,9 @@ def main() -> None:
                     model=model,
                     value_head=value_head,
                     anchor_head=anchor_head,
+                    anchor_context_adapter=anchor_context_adapter,
+                    use_pretrained_value=args.use_pretrained_value,
+                    credit_assignment=args.credit_assignment,
                     log_std=log_std,
                     action_scale=drone_action_scale(config),
                     reward_scale=args.reward_scale,
@@ -634,12 +894,29 @@ def main() -> None:
                 )
             finally:
                 env.close()
-            add_gae(episode, args.gamma, args.gae_lambda)
+            if args.credit_assignment == "agent":
+                add_per_drone_gae(episode, args.gamma, args.gae_lambda)
+            else:
+                add_gae(episode, args.gamma, args.gae_lambda)
             trajectories.extend(episode)
             episode_metrics.append(metrics)
             joint_env_steps += int(round(metrics["cycles"]))
+        adapt_context = (
+            context_adapter is not None
+            and iteration > args.context_warmup_iterations
+        )
+        if context_adapter is not None:
+            for parameter in context_adapter.parameters():
+                parameter.requires_grad_(adapt_context)
         update = ppo_update(
-            model, value_head, log_std, optimizer, trajectories, args, device
+            model,
+            value_head,
+            log_std,
+            optimizer,
+            trajectories,
+            args,
+            device,
+            adapt_context=adapt_context,
         )
         train = average_metrics(episode_metrics)
         print(
@@ -647,7 +924,8 @@ def main() -> None:
             f"success={train['success']:.3f} crash={train['fatal_crash']:.3f} "
             f"policy={update['policy_loss']:.4f} value={update['value_loss']:.4f} "
             f"kl={update['approx_kl']:.5f} clip={update['clip_fraction']:.3f} "
-            f"std={float(log_std.mean().detach()):.3f}"
+            f"std={float(log_std.mean().detach()):.3f} "
+            f"context={'on' if adapt_context else 'warmup'}"
         )
         save_checkpoint(
             args.output_dir / "hissd_drone_online_last.pt",
@@ -668,6 +946,8 @@ def main() -> None:
             model=model,
             value_head=value_head,
             anchor_head=anchor_head,
+            anchor_context_adapter=anchor_context_adapter,
+            use_pretrained_value=args.use_pretrained_value,
             log_std=log_std,
             args=args,
             device=device,

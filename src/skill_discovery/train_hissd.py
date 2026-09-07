@@ -91,6 +91,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hidden-dim", type=int, default=64)
     parser.add_argument("--transformer-heads", type=int, default=1)
     parser.add_argument(
+        "--skill-structure",
+        choices=("split", "shared", "common_only", "task_only"),
+        default="split",
+        help=(
+            "Use separate common/task encoders, one shared latent, or only "
+            "the common/task-specific branch."
+        ),
+    )
+    parser.add_argument(
         "--descriptor-weight",
         type=float,
         default=1.0,
@@ -218,6 +227,9 @@ def configure_ablation(args: argparse.Namespace) -> None:
         "no_task_contrast",
         "no_task_auxiliary",
     }
+    if args.skill_structure == "common_only":
+        args.descriptor_enabled = False
+        args.task_contrastive_enabled = False
     if not args.descriptor_enabled:
         args.descriptor_weight = 0.0
         args.descriptor_metric_weight = 0.0
@@ -228,10 +240,16 @@ def configure_ablation(args: argparse.Namespace) -> None:
     if not args.descriptor_enabled and not args.task_contrastive_enabled:
         args.task_variance_weight = 0.0
         args.task_action_variance_weight = 0.0
-    if args.ablation != "full" and args.output_dir == DEFAULT_OUTPUT_DIR:
-        args.output_dir = DEFAULT_OUTPUT_DIR.parent / (
-            f"{DEFAULT_OUTPUT_DIR.name}_{args.ablation}"
-        )
+    if args.output_dir == DEFAULT_OUTPUT_DIR:
+        suffixes = []
+        if args.ablation != "full":
+            suffixes.append(args.ablation)
+        if args.skill_structure != "split":
+            suffixes.append(args.skill_structure)
+        if suffixes:
+            args.output_dir = DEFAULT_OUTPUT_DIR.parent / (
+                f"{DEFAULT_OUTPUT_DIR.name}_{'_'.join(suffixes)}"
+            )
 
 
 def seed_everything(seed: int) -> None:
@@ -703,7 +721,11 @@ def controller_objective(
 ) -> tuple[torch.Tensor, dict[str, float]]:
     """Optimize official Eq. 11 with continuous action reconstruction."""
     features = model.encode_observations(batch["observations"])
-    task_features = model.encode_task_observations(batch["observations"])
+    task_features = (
+        model.encode_task_observations(batch["observations"])
+        if model.skill_structure in {"split", "task_only"}
+        else features
+    )
     common, task_skill, query = model.infer_skills(
         features, batch["valid_agents"], task_features
     )
@@ -857,9 +879,18 @@ def planner_objective(
             batch["next_observations"], target=True
         )
 
-    common = model.common_skill_encoder(features, batch["valid_agents"])
+    if model.skill_structure == "task_only":
+        with torch.no_grad():
+            task_features = model.encode_task_observations(batch["observations"])
+        planning_skill, _ = model.task_skill_encoder(
+            task_features, batch["valid_agents"]
+        )
+    else:
+        planning_skill = model.common_skill_encoder(
+            features, batch["valid_agents"]
+        )
     predicted_central, predicted_local = model.forward_predictor(
-        common, batch["valid_agents"].to(features.dtype)
+        planning_skill, batch["valid_agents"].to(features.dtype)
     )
     with torch.no_grad():
         current_value = model.total_value(
@@ -1085,6 +1116,7 @@ def build_model(
         normalize_task_context=False,
         task_running_statistics=True,
         direct_task_summary=False,
+        skill_structure=args.skill_structure,
     )
 
 
@@ -1097,7 +1129,11 @@ def verify_bc_initialization(
     """Verify zero skill residual leaves the validated BC action unchanged."""
     batch = prepare_batch(sample, device)
     features = model.encode_observations(batch["observations"])
-    task_features = model.encode_task_observations(batch["observations"])
+    task_features = (
+        model.encode_task_observations(batch["observations"])
+        if model.skill_structure in {"split", "task_only"}
+        else features
+    )
     common, task_skill, _ = model.infer_skills(
         features, batch["valid_agents"], task_features
     )
@@ -1129,6 +1165,7 @@ def save_checkpoint(
             ),
             "task_context_objective": "dual_path_realized_task_context_v18",
             "ablation": args.ablation,
+            "skill_structure": args.skill_structure,
             "descriptor_enabled": args.descriptor_enabled,
             "task_contrastive_enabled": args.task_contrastive_enabled,
             "task_descriptor_names": tuple(args.task_descriptor_names),
@@ -1293,6 +1330,20 @@ def main() -> None:
 
     model = build_model(first_train_sample, args, len(source_tasks))
     bc_info = model.initialize_from_bc(args.bc_checkpoint)
+    if model.skill_structure in {"shared", "common_only"}:
+        # These modules remain in the state dict for checkpoint compatibility,
+        # but the shared ablation deliberately supplies no gradient to them.
+        for module in (
+            model.task_observation_encoder,
+            model.task_skill_encoder,
+            model.target_task_skill_encoder,
+        ):
+            if module is not None:
+                for parameter in module.parameters():
+                    parameter.requires_grad_(False)
+    if model.skill_structure == "task_only":
+        for parameter in model.common_skill_encoder.parameters():
+            parameter.requires_grad_(False)
     model.to(device)
     sample_loader = create_dataloader(
         manifest_path=args.manifest,
@@ -1370,6 +1421,7 @@ def main() -> None:
     print(
         f"ablation={args.ablation}, descriptor={args.descriptor_enabled}, "
         f"task_contrastive={args.task_contrastive_enabled}, "
+        f"skill_structure={args.skill_structure}, "
         f"output_dir={args.output_dir}"
     )
     print(

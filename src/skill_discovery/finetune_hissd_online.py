@@ -312,7 +312,9 @@ def rollout_episode(
                 outputs, recurrent_state = model.inference_step(
                     observations, valid_mask, recurrent_state
                 )
-                task_skill = outputs["task_skills"][0]
+                # For common-only ablations the common latent is the sole
+                # policy/observer conditioning signal; other structures use task.
+                task_skill = outputs["conditioning_skills"][0]
                 action_logits = outputs["action_logits"][0]
                 direct_logits = model.action_decoder.task_action_residual_head(
                     task_skill

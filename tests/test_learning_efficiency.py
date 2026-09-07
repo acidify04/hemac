@@ -5,6 +5,7 @@ import pytest
 from src.skill_discovery.analyze_learning_efficiency import (
     append_curve_points,
     load_curve,
+    paired_randomization_statistics,
     reference_curve_budgets,
     run_metrics,
     static_baseline_points,
@@ -42,6 +43,19 @@ def test_run_metrics_interpolates_at_budget():
     assert metrics["final_success_rate"] == pytest.approx(0.7)
     assert metrics["first_threshold_step"] is None
     assert metrics["capped_threshold_step"] == 150
+    assert metrics["capped_threshold_fraction"] == pytest.approx(1.0)
+
+
+def test_paired_randomization_statistics_respects_metric_direction():
+    higher = paired_randomization_statistics([0.2, 0.3, 0.4])
+    lower = paired_randomization_statistics(
+        [-10.0, -20.0, -30.0], lower_is_better=True
+    )
+
+    assert higher["paired_effect_size_dz"] > 0.0
+    assert higher["permutation_p_method_a_better"] == pytest.approx(0.125)
+    assert lower["permutation_p_method_a_better"] == pytest.approx(0.125)
+    assert lower["better_direction"] == "lower"
 
 
 def test_append_curve_points_replaces_the_same_run_step(tmp_path):

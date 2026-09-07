@@ -192,7 +192,7 @@ def compute_hissd_actions(
     observations = _drone_observation_batch(env, drone_ids, action_scale, device)
     valid_mask = torch.ones(1, model.agent_count, dtype=torch.bool, device=device)
     outputs, next_state = model.inference_step(observations, valid_mask, state)
-    observer_task_skill = outputs["task_skills"].mean(dim=1)
+    observer_task_skill = outputs["conditioning_skills"].mean(dim=1)
     if skill_ablation is None:
         normalized_action_tensor = outputs["actions"]
     else:
@@ -402,12 +402,17 @@ def run_episode(
     )
     coverage_method = getattr(core_env, "current_coverage_ratio", None)
     coverage_ratio = float(coverage_method()) if callable(coverage_method) else 0.0
+    fatal_crash = bool(final_info.get("fatal_crash", core_env.collided))
     drone_task_success = classify_drone_skill_outcome(
         drone_goal_found,
         coverage_ratio,
         success_min_coverage_ratio,
+        fatal_crash=fatal_crash,
     ) == "success"
-    mission_success = bool(final_info.get("success", core_env.mission_success))
+    mission_success = (
+        bool(final_info.get("success", core_env.mission_success))
+        and not fatal_crash
+    )
     task_success = (
         drone_task_success if task_definition == "drone" else mission_success
     )
@@ -421,7 +426,7 @@ def run_episode(
         drone_task_success=drone_task_success,
         goal_found=bool(final_info.get("goal_found", core_env.found_goal)),
         drone_goal_found=drone_goal_found,
-        fatal_crash=bool(final_info.get("fatal_crash", core_env.collided)),
+        fatal_crash=fatal_crash,
         drone_crash=bool(final_info.get("drone_crash", core_env.drone_crash)),
         observer_crash=bool(final_info.get("observer_crash", core_env.observer_crash)),
         coverage_ratio=coverage_ratio,
@@ -469,6 +474,7 @@ def main() -> None:
     bc_policy = load_bc_policy(args.bc_checkpoint, device) if "bc" in controllers else None
     print(
         f"Loaded HiSSD checkpoint epoch={hissd_payload.get('epoch')} on {device}; "
+        f"skill_structure={hissd_model.skill_structure}; "
         f"controllers={','.join(controllers)}; "
         f"observer_residual={observer_residual_policy is not None}"
     )
@@ -551,11 +557,13 @@ def main() -> None:
                     "success_definition": (
                         "observer_goal_arrival"
                         if args.task_definition == "mission"
-                        else "drone_goal_found_and_coverage"
+                        else (
+                            "drone_goal_found_and_coverage_without_fatal_crash"
+                        )
                     ),
                     "drone_task_success_definition": (
                         "drone_goal_found and full_map_coverage_ratio >= "
-                        f"{args.success_min_coverage_ratio}"
+                        f"{args.success_min_coverage_ratio} and no fatal crash"
                     ),
                     "hissd_half_task_definition": (
                         "no_task_action + 0.5 * (full_hissd_action - no_task_action)"

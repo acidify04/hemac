@@ -38,6 +38,7 @@ from skill_discovery.train_hissd import (
     resolve_device,
     standardized_descriptor_loss,
     task_tail_mask,
+    value_objective,
 )
 from skill_discovery.visualize_hissd_skills import load_hissd_model
 
@@ -56,6 +57,7 @@ class FrozenTaskTeacher:
     task_observation_encoder: nn.Module | None
     task_skill_encoder: nn.Module
     action_decoder: nn.Module
+    skill_structure: str
 
 
 def parse_args() -> argparse.Namespace:
@@ -78,6 +80,22 @@ def parse_args() -> argparse.Namespace:
         help="Learning rate for the newly expanded source+target task classifier.",
     )
     parser.add_argument("--task-action-learning-rate", type=float, default=2e-4)
+    parser.add_argument("--value-learning-rate", type=float, default=1e-4)
+    parser.add_argument("--value-loss-weight", type=float, default=0.5)
+    parser.add_argument("--value-selection-weight", type=float, default=0.1)
+    parser.add_argument("--expectile", type=float, default=0.7)
+    parser.add_argument("--gamma", type=float, default=0.99)
+    parser.add_argument("--reward-scale", type=float, default=100.0)
+    parser.add_argument("--value-target-tau", type=float, default=0.005)
+    parser.add_argument(
+        "--adapt-shared-decoder",
+        action="store_true",
+        help=(
+            "Also update the shared observation/common/task fusion decoder. By "
+            "default adaptation changes only task-specific modules so target "
+            "imitation cannot overwrite the source controller."
+        ),
+    )
     parser.add_argument("--weight-decay", type=float, default=1e-5)
     parser.add_argument("--grad-clip", type=float, default=2.0)
     parser.add_argument("--source-distillation-weight", type=float, default=1.0)
@@ -164,6 +182,8 @@ def validate_args(args: argparse.Namespace) -> None:
         "task_learning_rate",
         "classifier_learning_rate",
         "task_action_learning_rate",
+        "value_learning_rate",
+        "reward_scale",
         "grad_clip",
         "task_tail_steps",
         "contrastive_temperature",
@@ -183,6 +203,8 @@ def validate_args(args: argparse.Namespace) -> None:
         "task_usage_weight",
         "task_usage_margin",
         "source_skill_distillation_weight",
+        "value_loss_weight",
+        "value_selection_weight",
         "warning_focus_weight",
         "observer_warning_focus_weight",
         "success_weight",
@@ -199,6 +221,12 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--crash-lookback-steps cannot be negative.")
     if args.epochs <= args.skill_warmup_epochs:
         raise ValueError("--epochs must exceed --skill-warmup-epochs.")
+    if not 0.0 < args.expectile < 1.0:
+        raise ValueError("--expectile must be in (0, 1).")
+    if not 0.0 < args.gamma <= 1.0:
+        raise ValueError("--gamma must be in (0, 1].")
+    if not 0.0 < args.value_target_tau <= 1.0:
+        raise ValueError("--value-target-tau must be in (0, 1].")
 
 
 def prepare_batch(raw_batch: dict[str, Any], device: torch.device) -> dict[str, Any]:
@@ -214,10 +242,30 @@ def prepare_batch(raw_batch: dict[str, Any], device: torch.device) -> dict[str, 
     )
     individual_rewards = all_individual_rewards[..., -drone_count:]
     observer_rewards = all_individual_rewards[..., :-drone_count]
+    terminated = raw_batch["terminated"].squeeze(-1).to(
+        device, non_blocking=True
+    )
+    truncated = raw_batch["truncated"].squeeze(-1).to(
+        device, non_blocking=True
+    )
     batch = {
         "observations": move_observations(raw_batch["drone"]["observations"], device),
+        "next_observations": move_observations(
+            raw_batch["drone"]["next_observations"], device
+        ),
         "actions": actions,
         "valid_agents": agent_mask & filled.unsqueeze(-1),
+        "valid_steps": filled,
+        "central_map": raw_batch["global_state"]["central_map"].to(
+            device, non_blocking=True
+        ),
+        "next_central_map": raw_batch["next_global_state"]["central_map"].to(
+            device, non_blocking=True
+        ),
+        "team_reward": raw_batch["drone_task_reward"].squeeze(-1).to(
+            device, non_blocking=True
+        ),
+        "done": terminated.bool() | truncated.bool(),
         "individual_rewards": individual_rewards,
         "observer_rewards": observer_rewards,
         "difficulty": raw_batch["difficulty"].to(device, non_blocking=True),
@@ -273,12 +321,24 @@ def current_actor_outputs(
     """Run frozen common features and trainable task-specific features."""
     with torch.no_grad():
         features = model.encode_observations(batch["observations"])
-        common = model.common_skill_encoder(features, batch["valid_agents"])
-    task_features = model.encode_task_observations(batch["observations"])
-    task, query = model.task_skill_encoder(
-        task_features, batch["valid_agents"]
-    )
-    prediction = model.action_decoder(features, common, task)
+        if model.skill_structure == "task_only":
+            common = features.new_zeros(
+                *features.shape[:-1], model.skill_dim
+            )
+        else:
+            common = model.common_skill_encoder(features, batch["valid_agents"])
+    if model.skill_structure == "shared":
+        task = common
+        query = common
+    elif model.skill_structure == "common_only":
+        task = torch.zeros_like(common)
+        query = torch.zeros_like(common)
+    else:
+        task_features = model.encode_task_observations(batch["observations"])
+        task, query = model.task_skill_encoder(
+            task_features, batch["valid_agents"]
+        )
+    prediction = model.decode_actions(features, common, task)
     return features, common, task, query, prediction
 
 
@@ -290,19 +350,41 @@ def teacher_actor_outputs(
     common: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Run the original v15 task pathway for action and skill anchors."""
-    if teacher.task_observation_encoder is None:
-        task_features = features
+    if teacher.skill_structure == "shared":
+        task = common
+        query = common
+    elif teacher.skill_structure == "common_only":
+        task = torch.zeros_like(common)
+        query = torch.zeros_like(common)
     else:
-        observations = batch["observations"]
-        task_features = teacher.task_observation_encoder(
-            observations["global_map"],
-            observations["local_map"],
-            observations["action_history"],
+        if teacher.task_observation_encoder is None:
+            task_features = features
+        else:
+            observations = batch["observations"]
+            task_features = teacher.task_observation_encoder(
+                observations["global_map"],
+                observations["local_map"],
+                observations["action_history"],
+            )
+        task, query = teacher.task_skill_encoder(
+            task_features, batch["valid_agents"]
         )
-    task, query = teacher.task_skill_encoder(
-        task_features, batch["valid_agents"]
+    teacher_common = torch.zeros_like(common) if (
+        teacher.skill_structure == "task_only"
+    ) else common
+    direct_skill = (
+        teacher_common
+        if teacher.skill_structure == "common_only"
+        else task
     )
-    action = teacher.action_decoder(features, common, task)
+    action = torch.tanh(
+        teacher.action_decoder.forward_logits(
+            features,
+            teacher_common,
+            task,
+            direct_residual_skills=direct_skill,
+        )
+    )
     return task, query, action
 
 
@@ -389,16 +471,17 @@ def actor_predictions(
     torch.Tensor,
     torch.Tensor,
     torch.Tensor,
+    torch.Tensor,
 ]:
     features, common, task, query, prediction = current_actor_outputs(model, batch)
     teacher_task, teacher_query, teacher_prediction = teacher_actor_outputs(
         teacher, batch, features, common
     )
     with torch.no_grad():
-        no_task_prediction = model.action_decoder(
+        no_task_prediction = model.decode_actions(
             features, common, torch.zeros_like(task)
         )
-        no_common_prediction = model.action_decoder(
+        no_common_prediction = model.decode_actions(
             features, torch.zeros_like(common), task
         )
     return (
@@ -408,6 +491,7 @@ def actor_predictions(
         no_common_prediction,
         task,
         query,
+        model.conditioning_skill(common, task),
         teacher_task,
         teacher_query,
     )
@@ -432,9 +516,7 @@ def task_representation_objective(
     args: argparse.Namespace,
 ) -> tuple[torch.Tensor, torch.Tensor, dict[str, float]]:
     """Learn continuous task dynamics and manifest-wide difficulty separation."""
-    sequence_prediction, sequence_valid = model.predict_task_descriptor_sequence(
-        query, batch["valid_agents"]
-    )
+    sequence_valid = batch["valid_agents"].bool().any(dim=2)
     supervision = (
         task_tail_mask(
             batch["valid_agents"],
@@ -444,18 +526,25 @@ def task_representation_objective(
         & sequence_valid
         & batch["task_descriptor_available"].unsqueeze(1)
     )
-    target = batch["task_descriptor"].unsqueeze(1).expand_as(
-        sequence_prediction
-    )
-    if supervision.any():
-        descriptor_loss = standardized_descriptor_loss(
-            sequence_prediction[supervision],
-            target[supervision],
-            args,
+    if model.task_descriptor_head is not None:
+        sequence_prediction, _ = model.predict_task_descriptor_sequence(
+            query, batch["valid_agents"]
         )
-        descriptor_mae = (
-            sequence_prediction[supervision] - target[supervision]
-        ).abs().mean()
+        target = batch["task_descriptor"].unsqueeze(1).expand_as(
+            sequence_prediction
+        )
+        if supervision.any():
+            descriptor_loss = standardized_descriptor_loss(
+                sequence_prediction[supervision],
+                target[supervision],
+                args,
+            )
+            descriptor_mae = (
+                sequence_prediction[supervision] - target[supervision]
+            ).abs().mean()
+        else:
+            descriptor_loss = query.sum() * 0.0
+            descriptor_mae = descriptor_loss.detach()
     else:
         descriptor_loss = query.sum() * 0.0
         descriptor_mae = descriptor_loss.detach()
@@ -551,6 +640,7 @@ def adaptation_objective(
         target_no_common,
         target_task,
         target_query,
+        target_conditioning_skill,
         _,
         _,
     ) = actor_predictions(model, teacher, target_batch)
@@ -582,6 +672,9 @@ def adaptation_objective(
             model, task_classifier, target_query, target_batch, args
         )
     )
+    target_value_loss, target_value_metrics = value_objective(
+        model, target_batch, args
+    )
 
     source_distillation = target_loss.new_zeros(())
     source_skill_distillation = target_loss.new_zeros(())
@@ -598,6 +691,7 @@ def adaptation_objective(
             _,
             source_task,
             source_query,
+            _,
             teacher_source_task,
             teacher_source_query,
         ) = actor_predictions(model, teacher, source_batch)
@@ -681,6 +775,7 @@ def adaptation_objective(
         + conservative_anchor
         + weighted_action_loss
         + (args.task_usage_weight * task_usage_loss if action_enabled else 0.0)
+        + args.value_loss_weight * target_value_loss
     )
     valid = target_batch["valid_agents"].unsqueeze(-1)
     task_effect = (target_prediction - target_no_task).abs()[valid.expand_as(
@@ -693,7 +788,7 @@ def adaptation_objective(
     if task_action_head is None:
         direct_task_effect = task_effect.new_zeros(())
     else:
-        direct_task_logits = task_action_head(target_task)
+        direct_task_logits = task_action_head(target_conditioning_skill)
         direct_task_effect = direct_task_logits.abs()[valid.expand_as(
             direct_task_logits
         )].mean()
@@ -728,6 +823,7 @@ def adaptation_objective(
             ((sample_weights > 0) & target_batch["valid_agents"]).float().sum()
             / target_batch["valid_agents"].float().sum().clamp_min(1.0)
         ),
+        **target_value_metrics,
     }
     return total, metrics
 
@@ -793,6 +889,7 @@ def run_train_epoch(
             error_if_nonfinite=True,
         )
         optimizer.step()
+        model.update_targets(args.value_target_tau)
         metrics["grad_norm"] = float(grad_norm)
         for name, value in metrics.items():
             accumulator[name] += value
@@ -979,7 +1076,11 @@ def save_checkpoint(
             "validation_metrics": validation_metrics,
             "target_task_classifier_state_dict": task_classifier.state_dict(),
             "adaptation": {
-                "method": "v22_explicit_task_action_residual",
+                "method": (
+                    "task_specific_adapter_with_shared_decoder_and_value"
+                    if args.adapt_shared_decoder
+                    else "conservative_task_specific_adapter_with_value"
+                ),
                 "source_checkpoint": str(args.checkpoint.expanduser().resolve()),
                 "training_tasks": list(args.target_difficulties),
                 "held_out_split": "target_test",
@@ -1029,6 +1130,15 @@ def main() -> None:
     seed_everything(args.seed)
     device = resolve_device(args.device)
     model, source_payload = load_hissd_model(args.checkpoint, device)
+    if model.skill_structure == "common_only":
+        # This control intentionally has no task representation to adapt.
+        args.descriptor_weight = 0.0
+        args.task_classification_weight = 0.0
+        args.query_contrastive_weight = 0.0
+        args.decoder_skill_contrastive_weight = 0.0
+        args.source_skill_distillation_weight = 0.0
+        args.task_usage_weight = 0.0
+        args.skill_warmup_epochs = 0
     source_hyperparameters = source_payload.get("hyperparameters", {})
     args.task_descriptor_scale = source_hyperparameters.get(
         "task_descriptor_scale",
@@ -1051,6 +1161,7 @@ def main() -> None:
         ),
         task_skill_encoder=copy.deepcopy(model.task_skill_encoder).to(device).eval(),
         action_decoder=copy.deepcopy(model.action_decoder).to(device).eval(),
+        skill_structure=model.skill_structure,
     )
     model.enable_task_action_residual()
     for module in (
@@ -1064,17 +1175,32 @@ def main() -> None:
     for parameter in model.parameters():
         parameter.requires_grad_(False)
     for parameter in model.action_decoder.parameters():
-        parameter.requires_grad_(True)
+        parameter.requires_grad_(args.adapt_shared_decoder)
+    task_action_head = model.action_decoder.task_action_residual_head
+    if task_action_head is not None:
+        for parameter in task_action_head.parameters():
+            parameter.requires_grad_(True)
     for parameter in model.action_decoder.base_action_head.parameters():
         parameter.requires_grad_(False)
     for module in (
         model.task_observation_encoder,
         model.task_skill_encoder,
         model.task_descriptor_head,
+        model.value_network,
+        model.central_state_encoder,
+        model.value_mixer,
     ):
         if module is not None:
             for parameter in module.parameters():
                 parameter.requires_grad_(True)
+    if model.skill_structure in {"shared", "common_only"}:
+        for module in (
+            model.task_observation_encoder,
+            model.task_skill_encoder,
+        ):
+            if module is not None:
+                for parameter in module.parameters():
+                    parameter.requires_grad_(False)
     task_classifier = nn.Linear(model.skill_dim, args.classifier_tasks).to(device)
     classifier_state = source_payload.get("target_task_classifier_state_dict")
     if classifier_state is not None:
@@ -1119,7 +1245,10 @@ def main() -> None:
         args, "source_val", include_labels=False, train=False, device=device
     )
     target_descriptor_dim = int(target_dataset[0]["task_descriptor"].numel())
-    if model.task_descriptor_dim != target_descriptor_dim:
+    if (
+        model.skill_structure != "common_only"
+        and model.task_descriptor_dim != target_descriptor_dim
+    ):
         raise ValueError(
             "Source checkpoint and target dataset use different task descriptor "
             f"dimensions: checkpoint={model.task_descriptor_dim}, "
@@ -1141,11 +1270,14 @@ def main() -> None:
         for difficulty in args.target_difficulties
     }
 
-    context_adapter = getattr(model.task_skill_encoder, "context_adapter", None)
+    context_adapter = (
+        getattr(model.task_skill_encoder, "context_adapter", None)
+        if model.skill_structure in {"split", "task_only"}
+        else None
+    )
     task_action_parameters = list(
         context_adapter.parameters() if context_adapter is not None else ()
     )
-    task_action_head = model.action_decoder.task_action_residual_head
     if task_action_head is not None:
         task_action_parameters.extend(task_action_head.parameters())
     task_action_parameter_ids = {
@@ -1166,11 +1298,31 @@ def main() -> None:
         and id(parameter) not in task_action_parameter_ids
     ]
     classifier_parameters = list(task_classifier.parameters())
+    value_parameter_ids = {
+        id(parameter)
+        for module in (
+            model.value_network,
+            model.central_state_encoder,
+            model.value_mixer,
+        )
+        for parameter in module.parameters()
+    }
+    value_parameters = [
+        parameter
+        for parameter in model.parameters()
+        if parameter.requires_grad and id(parameter) in value_parameter_ids
+    ]
+    task_parameters = [
+        parameter
+        for parameter in task_parameters
+        if id(parameter) not in value_parameter_ids
+    ]
     parameters = (
         action_parameters
         + task_action_parameters
         + task_parameters
         + classifier_parameters
+        + value_parameters
     )
     optimizer_groups = [
         {
@@ -1186,6 +1338,11 @@ def main() -> None:
         {
             "params": classifier_parameters,
             "lr": args.classifier_learning_rate,
+            "weight_decay": args.weight_decay,
+        },
+        {
+            "params": value_parameters,
+            "lr": args.value_learning_rate,
             "weight_decay": args.weight_decay,
         },
     ]
@@ -1229,10 +1386,12 @@ def main() -> None:
     )
     print(
         f"target_skill_learning=enabled, warmup_epochs={args.skill_warmup_epochs}, "
+        f"shared_decoder={'trainable' if args.adapt_shared_decoder else 'frozen'}, "
         f"decoder_lr={args.learning_rate:.2e}, "
         f"task_action_lr={args.task_action_learning_rate:.2e}, "
         f"representation_lr={args.task_learning_rate:.2e}, "
         f"classifier_lr={args.classifier_learning_rate:.2e}, "
+        f"value_lr={args.value_learning_rate:.2e}, "
         f"classifier_tasks={args.classifier_tasks}"
     )
 
@@ -1241,8 +1400,12 @@ def main() -> None:
     stale_epochs = 0
     for epoch in range(1, args.epochs + 1):
         action_enabled = epoch > args.skill_warmup_epochs
-        for parameter in model.action_decoder.parameters():
-            parameter.requires_grad_(action_enabled)
+        if args.adapt_shared_decoder:
+            for parameter in model.action_decoder.parameters():
+                parameter.requires_grad_(action_enabled)
+        elif task_action_head is not None:
+            for parameter in task_action_head.parameters():
+                parameter.requires_grad_(action_enabled)
         for parameter in model.action_decoder.base_action_head.parameters():
             parameter.requires_grad_(False)
         train_metrics = run_train_epoch(
@@ -1285,6 +1448,7 @@ def main() -> None:
                 - val_metrics["source_task_accuracy"]
             )
             + args.task_usage_weight * val_metrics["task_usage_loss"]
+            + args.value_selection_weight * val_metrics["value_loss"]
             + 0.0001
             * (
                 val_metrics["query_contrastive_loss"]
@@ -1323,6 +1487,7 @@ def main() -> None:
             f"skill_effect={val_metrics['task_action_effect']:.4f}/"
             f"{val_metrics['common_action_effect']:.4f} "
             f"direct_task={val_metrics['direct_task_logit_effect']:.4f} "
+            f"value={val_metrics['value_loss']:.5f} "
             f"task_gain={val_metrics['task_reconstruction_gain']:+.5f} "
             f"phase={'joint' if action_enabled else 'skill_warmup'}"
         )

@@ -168,6 +168,199 @@ def test_hissd_objectives_are_finite_and_shape_preserving() -> None:
     assert model.action_decoder.residual_head[-1].weight.grad is not None
 
 
+def test_shared_skill_structure_uses_one_trainable_latent() -> None:
+    """The no-split control must reuse common skill and bypass task encoders."""
+    model = HeMACHISSD(
+        7,
+        7,
+        7,
+        contrastive_from_action_skill=True,
+        task_context_pooling=True,
+        task_descriptor_dim=len(REALIZED_TASK_DESCRIPTOR_NAMES),
+        task_prior_count=3,
+        task_feature_deltas=True,
+        separate_task_observation_encoder=True,
+        learned_task_classifier=True,
+        task_spatial_statistics=True,
+        task_running_statistics=True,
+        skill_structure="shared",
+    )
+    batch = make_batch()
+    features = model.encode_observations(batch["observations"])
+    common, task_skill, contrastive = model.infer_skills(
+        features, batch["valid_agents"]
+    )
+
+    assert model.config()["skill_structure"] == "shared"
+    assert task_skill is common
+    assert contrastive is common
+
+    loss, _ = controller_objective(model, batch, objective_args())
+    loss.backward()
+
+    assert any(
+        parameter.grad is not None
+        for parameter in model.common_skill_encoder.parameters()
+    )
+    assert all(
+        parameter.grad is None
+        for parameter in model.task_skill_encoder.parameters()
+    )
+    assert all(
+        parameter.grad is None
+        for parameter in model.task_observation_encoder.parameters()
+    )
+
+
+def test_shared_skill_online_inference_reuses_common_skill() -> None:
+    """Sequence and recurrent inference must agree for the shared control."""
+    torch.manual_seed(13)
+    model = HeMACHISSD(
+        7,
+        7,
+        7,
+        task_descriptor_dim=len(REALIZED_TASK_DESCRIPTOR_NAMES),
+        task_prior_count=2,
+        separate_task_observation_encoder=True,
+        skill_structure="shared",
+    ).eval()
+    batch = make_batch()
+    observations = batch["observations"]
+    valid = batch["valid_agents"]
+
+    with torch.inference_mode():
+        features = model.encode_observations(observations)
+        common, task, _ = model.infer_skills(features, valid)
+        expected_actions = model.decode_actions(features, common, task)
+        state = model.initial_inference_state(batch_size=features.shape[0])
+        outputs_by_step = []
+        for time_index in range(features.shape[1]):
+            outputs, state = model.inference_step(
+                {
+                    name: value[:, time_index]
+                    for name, value in observations.items()
+                },
+                valid[:, time_index],
+                state,
+            )
+            torch.testing.assert_close(
+                outputs["task_skills"], outputs["common_skills"]
+            )
+            outputs_by_step.append(outputs["actions"])
+
+    torch.testing.assert_close(
+        torch.stack(outputs_by_step, dim=1), expected_actions, atol=5e-6, rtol=1e-5
+    )
+
+
+def test_common_only_routes_gradients_through_common_branch() -> None:
+    """Common-only training must zero and bypass every task-specific latent."""
+    model = HeMACHISSD(
+        7,
+        7,
+        7,
+        task_descriptor_dim=0,
+        task_prior_count=0,
+        separate_task_observation_encoder=True,
+        skill_structure="common_only",
+    )
+    batch = make_batch()
+    features = model.encode_observations(batch["observations"])
+    common, task, query = model.infer_skills(features, batch["valid_agents"])
+
+    assert torch.count_nonzero(common) > 0
+    assert torch.count_nonzero(task) == 0
+    assert torch.count_nonzero(query) == 0
+    assert model.conditioning_skill(common, task) is common
+
+    loss, _ = controller_objective(model, batch, objective_args())
+    loss.backward()
+
+    assert any(
+        parameter.grad is not None
+        for parameter in model.common_skill_encoder.parameters()
+    )
+    assert all(
+        parameter.grad is None
+        for parameter in model.task_skill_encoder.parameters()
+    )
+    assert all(
+        parameter.grad is None
+        for parameter in model.task_observation_encoder.parameters()
+    )
+
+
+def test_common_only_adaptation_residual_is_conditioned_on_common_skill() -> None:
+    """The common-only online residual must not receive the zero task slot."""
+    model = HeMACHISSD(7, 7, 7, skill_structure="common_only")
+    model.enable_task_action_residual()
+    features = torch.randn(2, 3, model.observation_encoder.output_dim)
+    common = torch.randn(2, 3, model.skill_dim, requires_grad=True)
+    task = torch.zeros_like(common)
+
+    logits = model.decode_action_logits(features, common, task)
+    logits.sum().backward()
+
+    residual_head = model.action_decoder.task_action_residual_head
+    assert residual_head is not None
+    assert residual_head[-1].weight.grad is not None
+    assert torch.count_nonzero(residual_head[-1].weight.grad) > 0
+    assert common.grad is not None
+
+
+def test_task_only_routes_controller_and_planner_through_task_branch() -> None:
+    """Task-only training must zero common skill and plan from task context."""
+    model = HeMACHISSD(
+        7,
+        7,
+        7,
+        contrastive_from_action_skill=True,
+        task_context_pooling=True,
+        task_descriptor_dim=len(REALIZED_TASK_DESCRIPTOR_NAMES),
+        task_prior_count=2,
+        task_feature_deltas=True,
+        separate_task_observation_encoder=True,
+        learned_task_classifier=True,
+        task_spatial_statistics=True,
+        task_running_statistics=True,
+        skill_structure="task_only",
+    )
+    batch = make_batch()
+    features = model.encode_observations(batch["observations"])
+    task_features = model.encode_task_observations(batch["observations"])
+    common, task, query = model.infer_skills(
+        features, batch["valid_agents"], task_features
+    )
+
+    assert torch.count_nonzero(common) == 0
+    assert torch.count_nonzero(task) > 0
+    assert torch.count_nonzero(query) > 0
+    assert model.conditioning_skill(common, task) is task
+
+    controller_loss, _ = controller_objective(model, batch, objective_args())
+    controller_loss.backward()
+    assert all(
+        parameter.grad is None
+        for parameter in model.common_skill_encoder.parameters()
+    )
+    assert any(
+        parameter.grad is not None
+        for parameter in model.task_skill_encoder.parameters()
+    )
+
+    model.zero_grad(set_to_none=True)
+    planner_loss, _ = planner_objective(model, batch, objective_args())
+    planner_loss.backward()
+    assert all(
+        parameter.grad is None
+        for parameter in model.common_skill_encoder.parameters()
+    )
+    assert any(
+        parameter.grad is not None
+        for parameter in model.task_skill_encoder.parameters()
+    )
+
+
 def test_same_task_batch_has_finite_controller_gradients() -> None:
     """A batch without task-distance variation must not corrupt the encoder."""
     model = HeMACHISSD(
