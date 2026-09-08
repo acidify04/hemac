@@ -159,6 +159,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--early-stopping-patience", type=int, default=8)
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    parser.add_argument(
+        "--dataset-cache-size",
+        type=int,
+        default=16,
+        help="Number of mmap-backed episode files cached per DataLoader worker.",
+    )
     parser.add_argument("--max-train-batches", type=int)
     parser.add_argument("--max-val-batches", type=int)
     return parser.parse_args()
@@ -170,6 +176,16 @@ def seed_everything(seed: int) -> None:
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+
+def configure_gpu_backend(device: torch.device) -> None:
+    """Enable fast kernels for fixed-shape target adaptation workloads."""
+    if device.type != "cuda":
+        return
+    torch.set_float32_matmul_precision("high")
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
 
 
 def validate_args(args: argparse.Namespace) -> None:
@@ -219,6 +235,8 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--skill-warmup-epochs cannot be negative.")
     if args.crash_lookback_steps < 0:
         raise ValueError("--crash-lookback-steps cannot be negative.")
+    if args.dataset_cache_size <= 0:
+        raise ValueError("--dataset-cache-size must be positive.")
     if args.epochs <= args.skill_warmup_epochs:
         raise ValueError("--epochs must exceed --skill-warmup-epochs.")
     if not 0.0 < args.expectile < 1.0:
@@ -1051,6 +1069,7 @@ def build_loader(
         seed=args.seed + (0 if split == "target_train" else 1),
         pin_memory=device.type == "cuda",
         drop_last_batch=train,
+        cache_size=args.dataset_cache_size,
     )
 
 
@@ -1129,6 +1148,7 @@ def main() -> None:
     args.classifier_tasks = max(args.all_difficulties)
     seed_everything(args.seed)
     device = resolve_device(args.device)
+    configure_gpu_backend(device)
     model, source_payload = load_hissd_model(args.checkpoint, device)
     if model.skill_structure == "common_only":
         # This control intentionally has no task representation to adapt.

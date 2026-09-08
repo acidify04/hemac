@@ -77,6 +77,12 @@ def parse_args() -> argparse.Namespace:
         help="Window stride; use the full context by default without overlap.",
     )
     parser.add_argument("--num-workers", type=int, default=2)
+    parser.add_argument(
+        "--dataset-cache-size",
+        type=int,
+        default=16,
+        help="Number of mmap-backed episode files cached per DataLoader worker.",
+    )
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument(
         "--task-learning-rate-multiplier",
@@ -268,6 +274,16 @@ def resolve_device(requested: str) -> torch.device:
     if requested == "auto":
         requested = "cuda" if torch.cuda.is_available() else "cpu"
     return torch.device(requested)
+
+
+def configure_gpu_backend(device: torch.device) -> None:
+    """Enable fast kernels for the fixed-size CNN and transformer workloads."""
+    if device.type != "cuda":
+        return
+    torch.set_float32_matmul_precision("high")
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
 
 
 def move_observations(
@@ -1239,6 +1255,8 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--early-stopping-patience cannot be negative.")
     if args.task_warmup_epochs < 0:
         raise ValueError("--task-warmup-epochs cannot be negative.")
+    if args.dataset_cache_size <= 0:
+        raise ValueError("--dataset-cache-size must be positive.")
     if args.hidden_dim % args.transformer_heads != 0:
         raise ValueError("hidden-dim must be divisible by transformer-heads.")
 
@@ -1249,6 +1267,7 @@ def main() -> None:
     validate_args(args)
     seed_everything(args.seed)
     device = resolve_device(args.device)
+    configure_gpu_backend(device)
     pin_memory = device.type == "cuda"
     train_dataset, train_loader = create_dataloader(
         manifest_path=args.manifest,
@@ -1265,6 +1284,7 @@ def main() -> None:
         task_balanced_batches=True,
         seed=args.seed,
         pin_memory=pin_memory,
+        cache_size=args.dataset_cache_size,
     )
     val_dataset, val_loader = create_dataloader(
         manifest_path=args.manifest,
@@ -1282,6 +1302,7 @@ def main() -> None:
         seed=args.seed,
         pin_memory=pin_memory,
         drop_last_batch=False,
+        cache_size=args.dataset_cache_size,
     )
     source_tasks = sorted(
         {int(entry["difficulty"]) for entry in train_dataset.entries}

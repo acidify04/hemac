@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
 import os
 import shlex
@@ -77,6 +78,36 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--sequence-length", type=int, default=128)
     parser.add_argument("--num-workers", type=int, default=2)
+    parser.add_argument(
+        "--dataset-cache-size",
+        type=int,
+        default=16,
+        help="Number of mmap-backed episode files cached by each DataLoader worker.",
+    )
+    parser.add_argument(
+        "--parallel-train-jobs",
+        type=int,
+        default=1,
+        help="Concurrent source learners. Keep at 1 on GPUs with limited VRAM.",
+    )
+    parser.add_argument(
+        "--parallel-adapt-jobs",
+        type=int,
+        default=1,
+        help="Concurrent adaptation learners. Keep at 1 on GPUs with limited VRAM.",
+    )
+    parser.add_argument(
+        "--parallel-online-jobs",
+        type=int,
+        default=2,
+        help="Concurrent CPU-heavy online PPO experiments.",
+    )
+    parser.add_argument(
+        "--torch-cpu-threads",
+        type=int,
+        default=2,
+        help="CPU threads available to PyTorch inside each child process.",
+    )
     parser.add_argument("--iterations", type=int, default=40)
     parser.add_argument("--episodes-per-iteration", type=int, default=8)
     parser.add_argument("--eval-every", type=int, default=5)
@@ -107,6 +138,11 @@ def validate_args(args: argparse.Namespace) -> None:
         "episodes_per_iteration",
         "eval_every",
         "eval_episodes",
+        "dataset_cache_size",
+        "parallel_train_jobs",
+        "parallel_adapt_jobs",
+        "parallel_online_jobs",
+        "torch_cpu_threads",
     )
     for name in positive:
         if getattr(args, name) <= 0:
@@ -195,6 +231,8 @@ def train_command(args: argparse.Namespace, structure: str, seed: int) -> list[s
         str(args.sequence_length),
         "--num-workers",
         str(args.num_workers),
+        "--dataset-cache-size",
+        str(args.dataset_cache_size),
         "--seed",
         str(seed),
         "--device",
@@ -225,6 +263,8 @@ def adapt_command(args: argparse.Namespace, structure: str, seed: int) -> list[s
         str(args.sequence_length),
         "--num-workers",
         str(args.num_workers),
+        "--dataset-cache-size",
+        str(args.dataset_cache_size),
         "--seed",
         str(seed),
         "--device",
@@ -286,13 +326,55 @@ def analyze_command(args: argparse.Namespace, curves: list[Path]) -> list[str]:
     return command
 
 
-def execute(command: list[str], *, dry_run: bool) -> None:
-    print(f"$ {shlex.join(command)}", flush=True)
+def execute(command: list[str], *, label: str, dry_run: bool, cpu_threads: int) -> None:
+    print(f"[START {label}] $ {shlex.join(command)}", flush=True)
     if dry_run:
         return
     environment = os.environ.copy()
     environment.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+    environment.setdefault("PYTHONUNBUFFERED", "1")
+    environment["OMP_NUM_THREADS"] = str(cpu_threads)
+    environment["MKL_NUM_THREADS"] = str(cpu_threads)
     subprocess.run(command, cwd=PROJECT_ROOT, env=environment, check=True)
+    print(f"[DONE  {label}]", flush=True)
+
+
+def execute_many(
+    jobs: list[tuple[str, list[str]]],
+    *,
+    max_workers: int,
+    dry_run: bool,
+    cpu_threads: int,
+) -> None:
+    """Run independent experiments concurrently with bounded resource use."""
+    if not jobs:
+        return
+    if dry_run or max_workers == 1:
+        for label, command in jobs:
+            execute(
+                command,
+                label=label,
+                dry_run=dry_run,
+                cpu_threads=cpu_threads,
+            )
+        return
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {
+            pool.submit(
+                execute,
+                command,
+                label=label,
+                dry_run=False,
+                cpu_threads=cpu_threads,
+            ): label
+            for label, command in jobs
+        }
+        for future in concurrent.futures.as_completed(futures):
+            label = futures[future]
+            try:
+                future.result()
+            except Exception as error:
+                raise RuntimeError(f"Parallel job failed: {label}") from error
 
 
 def require_file(path: Path, stage: str) -> None:
@@ -308,15 +390,28 @@ def main() -> None:
     args.output_root = args.output_root.expanduser().resolve()
 
     if "train" in args.stages:
+        jobs = []
         for structure in args.structures:
             for seed in args.seeds:
                 expected = checkpoint_path(args, structure, seed, "source")
                 if expected.is_file() and not args.force:
                     print(f"SKIP source checkpoint: {expected}")
                     continue
-                execute(train_command(args, structure, seed), dry_run=args.dry_run)
+                jobs.append(
+                    (
+                        f"train:{structure}:seed{seed}",
+                        train_command(args, structure, seed),
+                    )
+                )
+        execute_many(
+            jobs,
+            max_workers=args.parallel_train_jobs,
+            dry_run=args.dry_run,
+            cpu_threads=args.torch_cpu_threads,
+        )
 
     if "adapt" in args.stages:
+        jobs = []
         for structure in args.structures:
             for seed in args.seeds:
                 source = checkpoint_path(args, structure, seed, "source")
@@ -326,7 +421,18 @@ def main() -> None:
                 if expected.is_file() and not args.force:
                     print(f"SKIP adapted checkpoint: {expected}")
                     continue
-                execute(adapt_command(args, structure, seed), dry_run=args.dry_run)
+                jobs.append(
+                    (
+                        f"adapt:{structure}:seed{seed}",
+                        adapt_command(args, structure, seed),
+                    )
+                )
+        execute_many(
+            jobs,
+            max_workers=args.parallel_adapt_jobs,
+            dry_run=args.dry_run,
+            cpu_threads=args.torch_cpu_threads,
+        )
 
     curves = [
         curve_path(args, structure, variant, difficulty, seed)
@@ -336,6 +442,7 @@ def main() -> None:
         for seed in args.seeds
     ]
     if "online" in args.stages:
+        jobs = []
         for structure in args.structures:
             for variant in args.variants:
                 for difficulty in args.difficulties:
@@ -353,12 +460,20 @@ def main() -> None:
                         ):
                             print(f"SKIP complete curve: {curve}")
                             continue
-                        execute(
-                            online_command(
-                                args, structure, variant, difficulty, seed
-                            ),
-                            dry_run=args.dry_run,
+                        jobs.append(
+                            (
+                                f"online:{structure}:{variant}:d{difficulty}:seed{seed}",
+                                online_command(
+                                    args, structure, variant, difficulty, seed
+                                ),
+                            )
                         )
+        execute_many(
+            jobs,
+            max_workers=args.parallel_online_jobs,
+            dry_run=args.dry_run,
+            cpu_threads=args.torch_cpu_threads,
+        )
 
     if "analyze" in args.stages:
         if not args.dry_run:
@@ -368,7 +483,12 @@ def main() -> None:
                     f"Cannot analyze before {len(missing)} curves are generated; "
                     f"first missing path: {missing[0]}"
                 )
-        execute(analyze_command(args, curves), dry_run=args.dry_run)
+        execute(
+            analyze_command(args, curves),
+            label="analyze",
+            dry_run=args.dry_run,
+            cpu_threads=args.torch_cpu_threads,
+        )
 
 
 if __name__ == "__main__":

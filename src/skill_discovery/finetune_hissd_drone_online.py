@@ -171,6 +171,16 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--method-name cannot be empty.")
 
 
+def configure_gpu_backend(device: torch.device) -> None:
+    """Use fast CUDA kernels for repeated fixed-shape policy inference."""
+    if device.type != "cuda":
+        return
+    torch.set_float32_matmul_precision("high")
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+
+
 def load_checkpoint_env_config(path: Path) -> tuple[Path, dict[str, Any]]:
     """Read only RLlib's environment configuration without starting Ray."""
     checkpoint = resolve_algorithm_checkpoint(path)
@@ -727,6 +737,7 @@ def main() -> None:
     validate_args(args)
     seed_everything(args.seed)
     device = resolve_device(args.device)
+    configure_gpu_backend(device)
     model, source_payload = load_hissd_model(args.hissd_checkpoint, device)
     model.enable_task_action_residual()
     for parameter in model.parameters():
