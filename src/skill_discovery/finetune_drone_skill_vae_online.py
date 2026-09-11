@@ -1,0 +1,849 @@
+"""Fine-tune a homogeneous drone skill-VAE actor with parameter-shared PPO.
+
+The offline CNN/temporal encoder remains fixed. PPO adapts the posterior mean
+and skill-conditioned action residual, while a training-only central critic
+uses the world map for CTDE credit assignment.
+"""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import math
+import random
+import sys
+from collections import defaultdict
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import torch
+import torch.nn.functional as F
+from torch import nn
+from torch.distributions import Normal
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_SRC = PROJECT_ROOT / "src"
+if str(PROJECT_SRC) not in sys.path:
+    sys.path.insert(0, str(PROJECT_SRC))
+
+from hemac import HeMAC_v0
+from hemac.curriculum_config import OBSTACLE_CURRICULUM_LEVELS
+from skill_discovery.analyze_learning_efficiency import append_curve_points
+from skill_discovery.collect_offline_data import (
+    _local_reward_after_step,
+    agent_found_goal,
+    build_global_central_map,
+    get_core_env,
+)
+from skill_discovery.drone_skill_vae import load_drone_skill_vae
+from skill_discovery.drone_task import classify_drone_skill_outcome
+from skill_discovery.evaluate_drone_bc import drone_action_scale
+from skill_discovery.finetune_hissd_drone_online import (
+    add_per_drone_gae,
+    build_env_config,
+    configure_gpu_backend,
+    evaluation_score,
+    load_checkpoint_env_config,
+    per_drone_squashed_log_prob,
+)
+from skill_discovery.finetune_hissd_online import (
+    OnlineValueHead,
+    average_metrics,
+    drone_observation_batch,
+)
+from skill_discovery.hissd_models import CentralStateEncoder
+
+
+DEFAULT_VAE_CHECKPOINT = (
+    PROJECT_ROOT
+    / "src/skill_discovery/checkpoints/drone_skill_vae/"
+    "drone_skill_vae_best.pt"
+)
+DEFAULT_MAPPO_CHECKPOINT = (
+    PROJECT_ROOT / "src/train/drone_mappo_coverage60_checkpoints/checkpoint_07800"
+)
+DEFAULT_OUTPUT_DIR = (
+    PROJECT_ROOT / "src/skill_discovery/checkpoints/drone_skill_vae_online"
+)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--vae-checkpoint", type=Path, default=DEFAULT_VAE_CHECKPOINT)
+    parser.add_argument("--mappo-checkpoint", type=Path, default=DEFAULT_MAPPO_CHECKPOINT)
+    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument(
+        "--difficulty",
+        type=int,
+        choices=range(1, len(OBSTACLE_CURRICULUM_LEVELS) + 1),
+        required=True,
+    )
+    parser.add_argument("--success-min-coverage-ratio", type=float, default=0.6)
+    parser.add_argument("--iterations", type=int, default=40)
+    parser.add_argument("--episodes-per-iteration", type=int, default=8)
+    parser.add_argument("--eval-every", type=int, default=5)
+    parser.add_argument("--eval-episodes", type=int, default=100)
+    parser.add_argument("--ppo-epochs", type=int, default=4)
+    parser.add_argument("--minibatch-size", type=int, default=256)
+    parser.add_argument("--actor-lr", type=float, default=1e-4)
+    parser.add_argument("--skill-lr", type=float, default=2e-5)
+    parser.add_argument("--critic-lr", type=float, default=3e-4)
+    parser.add_argument("--log-std-lr", type=float, default=2e-5)
+    parser.add_argument("--log-std-init", type=float, default=-2.0)
+    parser.add_argument("--log-std-min", type=float, default=-3.0)
+    parser.add_argument("--log-std-max", type=float, default=-0.7)
+    parser.add_argument("--gamma", type=float, default=0.99)
+    parser.add_argument("--gae-lambda", type=float, default=0.95)
+    parser.add_argument("--clip-ratio", type=float, default=0.15)
+    parser.add_argument("--value-coeff", type=float, default=0.5)
+    parser.add_argument("--entropy-coeff", type=float, default=0.002)
+    parser.add_argument("--anchor-coeff", type=float, default=0.02)
+    parser.add_argument("--skill-anchor-coeff", type=float, default=0.05)
+    parser.add_argument("--skill-warmup-iterations", type=int, default=5)
+    parser.add_argument(
+        "--skill-mode",
+        choices=("full", "no_skill"),
+        default="full",
+        help=(
+            "full uses the recurrent VAE latent and residual; no_skill removes "
+            "both while retaining the same BC actor, critic, and PPO update."
+        ),
+    )
+    parser.add_argument(
+        "--train-base-action-head",
+        action="store_true",
+        help=(
+            "Also adapt the BC action head. Required by no_skill and recommended "
+            "for a controlled full/no-skill comparison."
+        ),
+    )
+    parser.add_argument("--reward-scale", type=float, default=100.0)
+    parser.add_argument("--max-grad-norm", type=float, default=1.0)
+    parser.add_argument("--seed", type=int, default=2026)
+    parser.add_argument("--method-name", default="drone_skill_vae_online")
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    parser.add_argument("--learning-curve-output", type=Path)
+    return parser.parse_args()
+
+
+def validate_args(args: argparse.Namespace) -> None:
+    for name in (
+        "iterations",
+        "episodes_per_iteration",
+        "eval_every",
+        "eval_episodes",
+        "ppo_epochs",
+        "minibatch_size",
+        "actor_lr",
+        "skill_lr",
+        "critic_lr",
+        "log_std_lr",
+        "gamma",
+        "gae_lambda",
+        "clip_ratio",
+        "reward_scale",
+        "max_grad_norm",
+    ):
+        if getattr(args, name) <= 0:
+            raise ValueError(f"--{name.replace('_', '-')} must be positive.")
+    if not 0.0 < args.success_min_coverage_ratio <= 1.0:
+        raise ValueError("--success-min-coverage-ratio must be in (0, 1].")
+    if args.log_std_min >= args.log_std_max:
+        raise ValueError("--log-std-min must be lower than --log-std-max.")
+    if args.anchor_coeff < 0 or args.skill_anchor_coeff < 0:
+        raise ValueError("Anchor coefficients cannot be negative.")
+    if args.skill_warmup_iterations < 0:
+        raise ValueError("--skill-warmup-iterations cannot be negative.")
+    if args.skill_mode == "no_skill" and not args.train_base_action_head:
+        raise ValueError(
+            "--skill-mode no_skill requires --train-base-action-head so the "
+            "control actor can learn rather than only adapting exploration noise."
+        )
+
+
+def seed_everything(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+def resolve_device(name: str) -> torch.device:
+    if name == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("CUDA was requested but is unavailable.")
+    if name == "auto":
+        name = "cuda" if torch.cuda.is_available() else "cpu"
+    return torch.device(name)
+
+
+def rollout_episode(
+    *,
+    env,
+    model,
+    central_encoder: CentralStateEncoder,
+    value_head: OnlineValueHead,
+    anchor_base_head: nn.Module,
+    anchor_mu: nn.Module,
+    anchor_skill_head: nn.Module,
+    log_std: torch.Tensor,
+    action_scale: float,
+    reward_scale: float,
+    success_min_coverage_ratio: float,
+    seed: int,
+    device: torch.device,
+    stochastic: bool,
+    skill_mode: str,
+) -> tuple[list[dict[str, Any]], dict[str, float]]:
+    env.reset(seed=seed)
+    core_env = get_core_env(env)
+    drone_ids = list(env.possible_agents)
+    if not drone_ids or any(not name.startswith("drone_") for name in drone_ids):
+        raise ValueError("The skill-VAE online runner requires a drone-only env.")
+    last_agent_id = drone_ids[-1]
+    state = model.initial_inference_state(len(drone_ids), device=device)
+    transitions: list[dict[str, Any]] = []
+    cached_actions: dict[str, np.ndarray] = {}
+    cycle_rewards: np.ndarray | None = None
+    cycle_mask: np.ndarray | None = None
+    shared_success_reward = 0.0
+    cycle_count = 0
+
+    for agent_id in env.agent_iter():
+        _, _, termination, truncation, _ = env.last()
+        if termination or truncation:
+            env.step(None)
+            continue
+
+        if not cached_actions:
+            observations = drone_observation_batch(env, drone_ids, action_scale, device)
+            with torch.no_grad():
+                outputs, state = model.inference_step(observations, state)
+                features = outputs["observation_features"][0]
+                contexts = outputs["skill_context"][0]
+                if skill_mode == "full":
+                    skills = outputs["skills"][0]
+                    logits = outputs["action_logits"][0]
+                    anchor_skills = anchor_mu(contexts)
+                    anchor_residual = torch.tanh(anchor_skill_head(anchor_skills))
+                    anchor_logits = (
+                        anchor_base_head(features)
+                        + model.residual_logit_scale * anchor_residual
+                    )
+                else:
+                    skills = torch.zeros_like(outputs["skills"][0])
+                    logits = model.base_action_head(features)
+                    anchor_skills = torch.zeros_like(skills)
+                    anchor_logits = anchor_base_head(features)
+                central_map = torch.from_numpy(
+                    build_global_central_map(core_env)
+                ).unsqueeze(0).to(device)
+                central = central_encoder(central_map)[0]
+                critic_features = torch.cat(
+                    (
+                        features,
+                        skills,
+                        central.unsqueeze(0).expand(len(drone_ids), -1),
+                    ),
+                    dim=-1,
+                )
+                value = value_head(critic_features)
+                distribution = Normal(logits, log_std.exp())
+                raw_action = distribution.sample() if stochastic else logits
+                normalized_action = torch.tanh(raw_action)
+                old_log_prob = per_drone_squashed_log_prob(distribution, raw_action)
+
+            for index, drone_id in enumerate(drone_ids):
+                action_space = env.action_space(drone_id)
+                action = normalized_action[index].cpu().numpy() * action_scale
+                cached_actions[drone_id] = np.ascontiguousarray(
+                    np.clip(action, action_space.low, action_space.high),
+                    dtype=np.float32,
+                )
+            if stochastic:
+                transitions.append(
+                    {
+                        "observation_features": features.cpu(),
+                        "skill_context": contexts.cpu(),
+                        "anchor_skill": anchor_skills.cpu(),
+                        "anchor_logits": anchor_logits.cpu(),
+                        "central_map": central_map[0].cpu(),
+                        "raw_action": raw_action.cpu(),
+                        "old_log_prob": old_log_prob.cpu(),
+                        "value": value.cpu(),
+                    }
+                )
+            cycle_rewards = np.zeros(len(drone_ids), dtype=np.float32)
+            cycle_mask = np.zeros(len(drone_ids), dtype=np.bool_)
+            shared_success_reward = 0.0
+
+        drone_index = drone_ids.index(agent_id)
+        cycle_mask[drone_index] = True
+        env.step(cached_actions[agent_id])
+        for reward_index, reward_agent_id in enumerate(drone_ids):
+            cycle_rewards[reward_index] += _local_reward_after_step(
+                core_env, reward_agent_id
+            )
+        shared_success_reward = max(shared_success_reward, float(core_env.global_reward))
+        cycle_finished = (
+            agent_id == last_agent_id
+            or bool(core_env.terminate)
+            or bool(core_env.truncate)
+        )
+        if not cycle_finished:
+            continue
+        if stochastic:
+            transitions[-1]["agent_mask"] = torch.from_numpy(cycle_mask.copy())
+            transitions[-1]["reward"] = torch.from_numpy(
+                (cycle_rewards + shared_success_reward) / reward_scale
+            )
+        cycle_count += 1
+        cached_actions = {}
+        cycle_rewards = None
+        cycle_mask = None
+
+    goal_found = any(agent_found_goal(core_env, drone_id) for drone_id in drone_ids)
+    coverage = float(core_env.current_coverage_ratio())
+    fatal_crash = bool(core_env.collided)
+    success = (
+        classify_drone_skill_outcome(
+            goal_found,
+            coverage + 1e-6,
+            success_min_coverage_ratio,
+            fatal_crash=fatal_crash,
+        )
+        == "success"
+    )
+    return transitions, {
+        "success": float(success),
+        "goal_found": float(goal_found),
+        "fatal_crash": float(fatal_crash),
+        "drone_crash": float(bool(core_env.drone_crash)),
+        "observer_crash": 0.0,
+        "coverage": coverage,
+        "cycles": float(cycle_count),
+    }
+
+
+def ppo_update(
+    model,
+    central_encoder: CentralStateEncoder,
+    value_head: OnlineValueHead,
+    log_std: nn.Parameter,
+    optimizer: torch.optim.Optimizer,
+    transitions: list[dict[str, Any]],
+    args: argparse.Namespace,
+    device: torch.device,
+    *,
+    adapt_skill: bool,
+    skill_mode: str,
+) -> dict[str, float]:
+    if not transitions:
+        raise RuntimeError("No PPO transitions were collected.")
+    names = (
+        "observation_features",
+        "skill_context",
+        "anchor_skill",
+        "anchor_logits",
+        "central_map",
+        "raw_action",
+        "old_log_prob",
+        "agent_mask",
+    )
+    data = {
+        name: torch.stack([transition[name] for transition in transitions]).to(device)
+        for name in names
+    }
+    advantages = torch.stack(
+        [torch.as_tensor(item["advantage"]) for item in transitions]
+    ).to(device)
+    returns = torch.stack(
+        [torch.as_tensor(item["return"]) for item in transitions]
+    ).to(device)
+    mask = data["agent_mask"].bool()
+    valid_advantages = advantages[mask]
+    advantages = torch.where(
+        mask,
+        (advantages - valid_advantages.mean())
+        / valid_advantages.std(unbiased=False).clamp_min(1e-6),
+        0.0,
+    )
+    count = len(transitions)
+    totals: dict[str, float] = defaultdict(float)
+    updates = 0
+    for _ in range(args.ppo_epochs):
+        permutation = torch.randperm(count, device=device)
+        for start in range(0, count, args.minibatch_size):
+            indices = permutation[start : start + args.minibatch_size]
+            contexts = data["skill_context"][indices]
+            if skill_mode == "no_skill":
+                skills = torch.zeros_like(data["anchor_skill"][indices])
+            elif adapt_skill:
+                skills = model.posterior_mu(contexts)
+            else:
+                skills = data["anchor_skill"][indices]
+            features = data["observation_features"][indices]
+            if skill_mode == "full":
+                logits = model.decode_logits(features, skills)
+            else:
+                logits = model.base_action_head(features)
+            distribution = Normal(logits, log_std.exp())
+            log_prob = per_drone_squashed_log_prob(
+                distribution, data["raw_action"][indices]
+            )
+            ratio = torch.exp(log_prob - data["old_log_prob"][indices])
+            advantage = advantages[indices]
+            unclipped = ratio * advantage
+            clipped = ratio.clamp(
+                1.0 - args.clip_ratio, 1.0 + args.clip_ratio
+            ) * advantage
+            minibatch_mask = mask[indices]
+            policy_loss = -torch.minimum(unclipped, clipped)[minibatch_mask].mean()
+
+            central = central_encoder(data["central_map"][indices])
+            critic_features = torch.cat(
+                (
+                    features,
+                    skills,
+                    central.unsqueeze(1).expand(-1, features.shape[1], -1),
+                ),
+                dim=-1,
+            )
+            values = value_head(critic_features)
+            value_loss = F.mse_loss(
+                values[minibatch_mask], returns[indices][minibatch_mask]
+            )
+            entropy = distribution.entropy().sum(dim=-1)[minibatch_mask].mean()
+            action_mask = minibatch_mask.unsqueeze(-1).expand_as(logits)
+            anchor_loss = (
+                torch.tanh(logits) - torch.tanh(data["anchor_logits"][indices])
+            ).square()[action_mask].mean()
+            skill_mask = minibatch_mask.unsqueeze(-1).expand_as(skills)
+            skill_anchor_loss = (
+                skills - data["anchor_skill"][indices]
+            ).square()[skill_mask].mean()
+            loss = (
+                policy_loss
+                + args.value_coeff * value_loss
+                - args.entropy_coeff * entropy
+                + args.anchor_coeff * anchor_loss
+                + args.skill_anchor_coeff * skill_anchor_loss
+            )
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+            trainable = [
+                *model.skill_action_head.parameters(),
+                *central_encoder.parameters(),
+                *value_head.parameters(),
+                log_std,
+            ]
+            if args.train_base_action_head:
+                trainable.extend(model.base_action_head.parameters())
+            if adapt_skill:
+                trainable.extend(model.posterior_mu.parameters())
+            grad_norm = nn.utils.clip_grad_norm_(trainable, args.max_grad_norm)
+            optimizer.step()
+            with torch.no_grad():
+                log_std.clamp_(args.log_std_min, args.log_std_max)
+            totals["policy_loss"] += float(policy_loss.detach())
+            totals["value_loss"] += float(value_loss.detach())
+            totals["entropy"] += float(entropy.detach())
+            totals["anchor_loss"] += float(anchor_loss.detach())
+            totals["skill_anchor_loss"] += float(skill_anchor_loss.detach())
+            totals["approx_kl"] += float(
+                (data["old_log_prob"][indices] - log_prob)[minibatch_mask]
+                .mean()
+                .detach()
+            )
+            totals["clip_fraction"] += float(
+                ((ratio - 1.0).abs() > args.clip_ratio)[minibatch_mask]
+                .float()
+                .mean()
+                .detach()
+            )
+            totals["grad_norm"] += float(grad_norm)
+            updates += 1
+    return {name: value / max(updates, 1) for name, value in totals.items()}
+
+
+def evaluate_policy(
+    *,
+    checkpoint_env_config: dict[str, Any],
+    model,
+    central_encoder: CentralStateEncoder,
+    value_head: OnlineValueHead,
+    anchor_base_head: nn.Module,
+    anchor_mu: nn.Module,
+    anchor_skill_head: nn.Module,
+    log_std: torch.Tensor,
+    args: argparse.Namespace,
+    device: torch.device,
+) -> dict[str, float]:
+    config = build_env_config(
+        checkpoint_env_config,
+        args.difficulty,
+        args.success_min_coverage_ratio,
+    )
+    results = []
+    for episode_index in range(args.eval_episodes):
+        env = HeMAC_v0.env(**config)
+        try:
+            _, metrics = rollout_episode(
+                env=env,
+                model=model,
+                central_encoder=central_encoder,
+                value_head=value_head,
+                anchor_base_head=anchor_base_head,
+                anchor_mu=anchor_mu,
+                anchor_skill_head=anchor_skill_head,
+                log_std=log_std,
+                action_scale=drone_action_scale(config),
+                reward_scale=args.reward_scale,
+                success_min_coverage_ratio=args.success_min_coverage_ratio,
+                seed=args.seed + args.difficulty * 1_000_000 + episode_index,
+                device=device,
+                stochastic=False,
+                skill_mode=args.skill_mode,
+            )
+        finally:
+            env.close()
+        results.append(metrics)
+    return average_metrics(results)
+
+
+def curve_point(
+    args: argparse.Namespace,
+    metrics: dict[str, float],
+    joint_env_steps: int,
+    iteration: int,
+) -> dict[str, Any]:
+    return {
+        "method": args.method_name,
+        "seed": args.seed,
+        "difficulty": args.difficulty,
+        "joint_env_steps": joint_env_steps,
+        "iteration": iteration,
+        "success_rate": metrics["success"],
+        "goal_found_rate": metrics["goal_found"],
+        "fatal_crash_rate": metrics["fatal_crash"],
+        "drone_crash_rate": metrics["drone_crash"],
+        "observer_crash_rate": 0.0,
+        "mean_coverage_ratio": metrics["coverage"],
+        "mean_cycles": metrics["cycles"],
+    }
+
+
+def save_checkpoint(
+    path: Path,
+    model,
+    source_payload: dict[str, Any],
+    central_encoder: CentralStateEncoder,
+    value_head: OnlineValueHead,
+    log_std: nn.Parameter,
+    optimizer: torch.optim.Optimizer,
+    *,
+    iteration: int,
+    joint_env_steps: int,
+    metrics: dict[str, float],
+    args: argparse.Namespace,
+) -> None:
+    payload = dict(source_payload)
+    payload.update(
+        {
+            "model_config": model.config(),
+            "model_state_dict": model.state_dict(),
+            "online_central_encoder_config": {
+                "channels": central_encoder.channels,
+                "map_size": central_encoder.map_size,
+                "hidden_dim": central_encoder.hidden_dim,
+            },
+            "online_central_encoder_state_dict": central_encoder.state_dict(),
+            "online_value_state_dict": value_head.state_dict(),
+            "online_drone_log_std": log_std.detach().cpu(),
+            "online_optimizer_state_dict": optimizer.state_dict(),
+            "online_finetuning": {
+                "method": "homogeneous_skill_vae_parameter_sharing_ppo",
+                "skill_mode": args.skill_mode,
+                "difficulty": args.difficulty,
+                "iteration": iteration,
+                "joint_env_steps": joint_env_steps,
+                "metrics": metrics,
+                "hyperparameters": vars(args),
+            },
+        }
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(payload, path)
+
+
+def main() -> None:
+    args = parse_args()
+    validate_args(args)
+    seed_everything(args.seed)
+    device = resolve_device(args.device)
+    configure_gpu_backend(device)
+    model, source_payload = load_drone_skill_vae(args.vae_checkpoint, device)
+    for parameter in model.parameters():
+        parameter.requires_grad_(False)
+    for parameter in model.skill_action_head.parameters():
+        parameter.requires_grad_(True)
+    for parameter in model.base_action_head.parameters():
+        parameter.requires_grad_(args.train_base_action_head)
+    for parameter in model.posterior_mu.parameters():
+        parameter.requires_grad_(False)
+    model.eval()
+    anchor_base_head = copy.deepcopy(model.base_action_head).to(device).eval()
+    anchor_mu = copy.deepcopy(model.posterior_mu).to(device).eval()
+    anchor_skill_head = copy.deepcopy(model.skill_action_head).to(device).eval()
+    for module in (anchor_base_head, anchor_mu, anchor_skill_head):
+        for parameter in module.parameters():
+            parameter.requires_grad_(False)
+
+    resolved_mappo, checkpoint_env_config = load_checkpoint_env_config(
+        args.mappo_checkpoint
+    )
+    config = build_env_config(
+        checkpoint_env_config,
+        args.difficulty,
+        args.success_min_coverage_ratio,
+    )
+    probe_env = HeMAC_v0.env(**config)
+    try:
+        probe_env.reset(seed=args.seed)
+        central_shape = build_global_central_map(get_core_env(probe_env)).shape
+    finally:
+        probe_env.close()
+    central_encoder = CentralStateEncoder(
+        central_shape[0], tuple(central_shape[-2:]), hidden_dim=64
+    ).to(device)
+    critic_input_dim = model.observation_dim + model.latent_dim + 64
+    value_head = OnlineValueHead(critic_input_dim).to(device)
+    log_std = nn.Parameter(
+        torch.full((model.action_dim,), args.log_std_init, device=device)
+    )
+    optimizer = torch.optim.AdamW(
+        [
+            {"params": model.base_action_head.parameters(), "lr": args.actor_lr},
+            {"params": model.skill_action_head.parameters(), "lr": args.actor_lr},
+            {"params": model.posterior_mu.parameters(), "lr": args.skill_lr},
+            {"params": central_encoder.parameters(), "lr": args.critic_lr},
+            {"params": value_head.parameters(), "lr": args.critic_lr},
+            {"params": [log_std], "lr": args.log_std_lr},
+        ],
+        weight_decay=1e-5,
+    )
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    curve_path = (
+        args.learning_curve_output.expanduser().resolve()
+        if args.learning_curve_output is not None
+        else args.output_dir / f"learning_curve_seed_{args.seed}.json"
+    )
+    print(
+        f"Drone skill-VAE PPO difficulty={args.difficulty}, seed={args.seed}, "
+        f"skill_mode={args.skill_mode}, train_base={args.train_base_action_head}, "
+        f"checkpoint={args.vae_checkpoint}, env_checkpoint={resolved_mappo}"
+    )
+    baseline = evaluate_policy(
+        checkpoint_env_config=checkpoint_env_config,
+        model=model,
+        central_encoder=central_encoder,
+        value_head=value_head,
+        anchor_base_head=anchor_base_head,
+        anchor_mu=anchor_mu,
+        anchor_skill_head=anchor_skill_head,
+        log_std=log_std,
+        args=args,
+        device=device,
+    )
+    joint_env_steps = 0
+    append_curve_points(
+        curve_path,
+        [curve_point(args, baseline, 0, 0)],
+        metadata={
+            "evaluation_episodes": args.eval_episodes,
+            "source_checkpoint": str(args.vae_checkpoint.resolve()),
+            "environment_checkpoint": str(resolved_mappo),
+            "curve_method": args.method_name,
+            "skill_model": "single_latent_homogeneous_drone_vae",
+            "skill_mode": args.skill_mode,
+            "train_base_action_head": args.train_base_action_head,
+            "success_definition": (
+                "drone_goal_found_and_coverage_without_fatal_crash"
+            ),
+            "success_min_coverage_ratio": args.success_min_coverage_ratio,
+            "training_step_definition": (
+                "sum of world cycles from target training episodes; "
+                "evaluation cycles excluded"
+            ),
+        },
+    )
+    best_score = evaluation_score(baseline)
+    best_state = {
+        "model": copy.deepcopy(model.state_dict()),
+        "central": copy.deepcopy(central_encoder.state_dict()),
+        "value": copy.deepcopy(value_head.state_dict()),
+        "log_std": log_std.detach().clone(),
+        "optimizer": copy.deepcopy(optimizer.state_dict()),
+    }
+    print(
+        f"BASELINE success={baseline['success']:.3f} "
+        f"goal={baseline['goal_found']:.3f} crash={baseline['fatal_crash']:.3f} "
+        f"coverage={baseline['coverage']:.3f}"
+    )
+    save_checkpoint(
+        args.output_dir / "drone_skill_vae_online_best.pt",
+        model,
+        source_payload,
+        central_encoder,
+        value_head,
+        log_std,
+        optimizer,
+        iteration=0,
+        joint_env_steps=0,
+        metrics=baseline,
+        args=args,
+    )
+
+    for iteration in range(1, args.iterations + 1):
+        trajectories: list[dict[str, Any]] = []
+        episode_metrics = []
+        for episode_index in range(args.episodes_per_iteration):
+            env = HeMAC_v0.env(**config)
+            try:
+                episode, metrics = rollout_episode(
+                    env=env,
+                    model=model,
+                    central_encoder=central_encoder,
+                    value_head=value_head,
+                    anchor_base_head=anchor_base_head,
+                    anchor_mu=anchor_mu,
+                    anchor_skill_head=anchor_skill_head,
+                    log_std=log_std,
+                    action_scale=drone_action_scale(config),
+                    reward_scale=args.reward_scale,
+                    success_min_coverage_ratio=args.success_min_coverage_ratio,
+                    seed=args.seed + iteration * 10_000 + episode_index,
+                    device=device,
+                    stochastic=True,
+                    skill_mode=args.skill_mode,
+                )
+            finally:
+                env.close()
+            add_per_drone_gae(episode, args.gamma, args.gae_lambda)
+            trajectories.extend(episode)
+            episode_metrics.append(metrics)
+            joint_env_steps += int(round(metrics["cycles"]))
+        adapt_skill = (
+            args.skill_mode == "full"
+            and iteration > args.skill_warmup_iterations
+        )
+        for parameter in model.posterior_mu.parameters():
+            parameter.requires_grad_(adapt_skill)
+        update = ppo_update(
+            model,
+            central_encoder,
+            value_head,
+            log_std,
+            optimizer,
+            trajectories,
+            args,
+            device,
+            adapt_skill=adapt_skill,
+            skill_mode=args.skill_mode,
+        )
+        train = average_metrics(episode_metrics)
+        print(
+            f"iter={iteration:03d}/{args.iterations} steps={joint_env_steps} "
+            f"success={train['success']:.3f} crash={train['fatal_crash']:.3f} "
+            f"policy={update['policy_loss']:.4f} value={update['value_loss']:.4f} "
+            f"kl={update['approx_kl']:.5f} clip={update['clip_fraction']:.3f} "
+            f"skill_mode={args.skill_mode} "
+            f"skill_update={'on' if adapt_skill else 'off'}"
+        )
+        save_checkpoint(
+            args.output_dir / "drone_skill_vae_online_last.pt",
+            model,
+            source_payload,
+            central_encoder,
+            value_head,
+            log_std,
+            optimizer,
+            iteration=iteration,
+            joint_env_steps=joint_env_steps,
+            metrics={**train, **update},
+            args=args,
+        )
+        if iteration % args.eval_every != 0:
+            continue
+        evaluation = evaluate_policy(
+            checkpoint_env_config=checkpoint_env_config,
+            model=model,
+            central_encoder=central_encoder,
+            value_head=value_head,
+            anchor_base_head=anchor_base_head,
+            anchor_mu=anchor_mu,
+            anchor_skill_head=anchor_skill_head,
+            log_std=log_std,
+            args=args,
+            device=device,
+        )
+        append_curve_points(
+            curve_path,
+            [curve_point(args, evaluation, joint_env_steps, iteration)],
+        )
+        score = evaluation_score(evaluation)
+        print(
+            f"EVAL success={evaluation['success']:.3f} "
+            f"goal={evaluation['goal_found']:.3f} "
+            f"crash={evaluation['fatal_crash']:.3f} "
+            f"coverage={evaluation['coverage']:.3f} score={score:.4f}"
+        )
+        if score > best_score:
+            best_score = score
+            best_state = {
+                "model": copy.deepcopy(model.state_dict()),
+                "central": copy.deepcopy(central_encoder.state_dict()),
+                "value": copy.deepcopy(value_head.state_dict()),
+                "log_std": log_std.detach().clone(),
+                "optimizer": copy.deepcopy(optimizer.state_dict()),
+            }
+            save_checkpoint(
+                args.output_dir / "drone_skill_vae_online_best.pt",
+                model,
+                source_payload,
+                central_encoder,
+                value_head,
+                log_std,
+                optimizer,
+                iteration=iteration,
+                joint_env_steps=joint_env_steps,
+                metrics=evaluation,
+                args=args,
+            )
+
+    model.load_state_dict(best_state["model"])
+    central_encoder.load_state_dict(best_state["central"])
+    value_head.load_state_dict(best_state["value"])
+    with torch.no_grad():
+        log_std.copy_(best_state["log_std"])
+    optimizer.load_state_dict(best_state["optimizer"])
+    save_checkpoint(
+        args.output_dir / "drone_skill_vae_online_final.pt",
+        model,
+        source_payload,
+        central_encoder,
+        value_head,
+        log_std,
+        optimizer,
+        iteration=args.iterations,
+        joint_env_steps=joint_env_steps,
+        metrics={"best_score": best_score},
+        args=args,
+    )
+    print(f"Saved learning curve: {curve_path}")
+
+
+if __name__ == "__main__":
+    main()

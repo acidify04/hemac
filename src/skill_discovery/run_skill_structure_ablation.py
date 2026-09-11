@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import torch
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TRAIN_SCRIPT = PROJECT_ROOT / "src/skill_discovery/train_hissd.py"
@@ -175,6 +177,27 @@ def checkpoint_path(
     return adapted_dir(args, structure, seed) / name
 
 
+def progress_checkpoint_path(
+    args: argparse.Namespace, structure: str, seed: int, variant: str
+) -> Path:
+    """Return the last-epoch checkpoint used to detect or resume partial jobs."""
+    if variant == "source":
+        return source_dir(args, structure, seed) / "hissd_last.pt"
+    return adapted_dir(args, structure, seed) / "hissd_adapted_last.pt"
+
+
+def checkpoint_epoch(path: Path) -> int:
+    """Read a checkpoint epoch, treating missing or invalid files as incomplete."""
+    if not path.is_file():
+        return 0
+    try:
+        payload = torch.load(path, map_location="cpu", weights_only=False)
+        return int(payload.get("epoch", 0))
+    except Exception as error:
+        print(f"WARNING: cannot inspect checkpoint {path}: {error}", flush=True)
+        return 0
+
+
 def online_dir(
     args: argparse.Namespace,
     structure: str,
@@ -207,8 +230,13 @@ def curve_is_complete(path: Path, expected_iteration: int) -> bool:
     ) >= expected_iteration
 
 
-def train_command(args: argparse.Namespace, structure: str, seed: int) -> list[str]:
-    return [
+def train_command(
+    args: argparse.Namespace,
+    structure: str,
+    seed: int,
+    resume_checkpoint: Path | None = None,
+) -> list[str]:
+    command = [
         sys.executable,
         str(TRAIN_SCRIPT),
         "--manifest",
@@ -239,10 +267,18 @@ def train_command(args: argparse.Namespace, structure: str, seed: int) -> list[s
         args.device,
         "--no-tensorboard",
     ]
+    if resume_checkpoint is not None:
+        command.extend(("--resume-checkpoint", str(resume_checkpoint)))
+    return command
 
 
-def adapt_command(args: argparse.Namespace, structure: str, seed: int) -> list[str]:
-    return [
+def adapt_command(
+    args: argparse.Namespace,
+    structure: str,
+    seed: int,
+    resume_checkpoint: Path | None = None,
+) -> list[str]:
+    command = [
         sys.executable,
         str(ADAPT_SCRIPT),
         "--checkpoint",
@@ -270,6 +306,9 @@ def adapt_command(args: argparse.Namespace, structure: str, seed: int) -> list[s
         "--device",
         args.device,
     ]
+    if resume_checkpoint is not None:
+        command.extend(("--resume-checkpoint", str(resume_checkpoint)))
+    return command
 
 
 def online_command(
@@ -326,7 +365,14 @@ def analyze_command(args: argparse.Namespace, curves: list[Path]) -> list[str]:
     return command
 
 
-def execute(command: list[str], *, label: str, dry_run: bool, cpu_threads: int) -> None:
+def execute(
+    command: list[str],
+    *,
+    label: str,
+    dry_run: bool,
+    cpu_threads: int,
+    log_dir: Path,
+) -> None:
     print(f"[START {label}] $ {shlex.join(command)}", flush=True)
     if dry_run:
         return
@@ -335,7 +381,26 @@ def execute(command: list[str], *, label: str, dry_run: bool, cpu_threads: int) 
     environment.setdefault("PYTHONUNBUFFERED", "1")
     environment["OMP_NUM_THREADS"] = str(cpu_threads)
     environment["MKL_NUM_THREADS"] = str(cpu_threads)
-    subprocess.run(command, cwd=PROJECT_ROOT, env=environment, check=True)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"{label.replace(':', '_')}.log"
+    with log_path.open("w", encoding="utf-8") as log_file:
+        process = subprocess.Popen(
+            command,
+            cwd=PROJECT_ROOT,
+            env=environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        assert process.stdout is not None
+        for line in process.stdout:
+            log_file.write(line)
+            log_file.flush()
+            print(f"[{label}] {line}", end="", flush=True)
+        return_code = process.wait()
+    if return_code != 0:
+        raise subprocess.CalledProcessError(return_code, command)
     print(f"[DONE  {label}]", flush=True)
 
 
@@ -345,6 +410,7 @@ def execute_many(
     max_workers: int,
     dry_run: bool,
     cpu_threads: int,
+    log_dir: Path,
 ) -> None:
     """Run independent experiments concurrently with bounded resource use."""
     if not jobs:
@@ -356,6 +422,7 @@ def execute_many(
                 label=label,
                 dry_run=dry_run,
                 cpu_threads=cpu_threads,
+                log_dir=log_dir,
             )
         return
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
@@ -366,6 +433,7 @@ def execute_many(
                 label=label,
                 dry_run=False,
                 cpu_threads=cpu_threads,
+                log_dir=log_dir,
             ): label
             for label, command in jobs
         }
@@ -393,14 +461,30 @@ def main() -> None:
         jobs = []
         for structure in args.structures:
             for seed in args.seeds:
-                expected = checkpoint_path(args, structure, seed, "source")
-                if expected.is_file() and not args.force:
-                    print(f"SKIP source checkpoint: {expected}")
+                progress = progress_checkpoint_path(
+                    args, structure, seed, "source"
+                )
+                completed_epoch = checkpoint_epoch(progress)
+                if completed_epoch >= args.source_epochs and not args.force:
+                    print(
+                        f"SKIP complete source checkpoint (epoch "
+                        f"{completed_epoch}/{args.source_epochs}): {progress}"
+                    )
                     continue
+                resume = (
+                    progress
+                    if completed_epoch > 0 and not args.force
+                    else None
+                )
+                if resume is not None:
+                    print(
+                        f"RESUME partial source checkpoint (epoch "
+                        f"{completed_epoch}/{args.source_epochs}): {resume}"
+                    )
                 jobs.append(
                     (
                         f"train:{structure}:seed{seed}",
-                        train_command(args, structure, seed),
+                        train_command(args, structure, seed, resume),
                     )
                 )
         execute_many(
@@ -408,6 +492,7 @@ def main() -> None:
             max_workers=args.parallel_train_jobs,
             dry_run=args.dry_run,
             cpu_threads=args.torch_cpu_threads,
+            log_dir=args.output_root / "logs",
         )
 
     if "adapt" in args.stages:
@@ -417,14 +502,30 @@ def main() -> None:
                 source = checkpoint_path(args, structure, seed, "source")
                 if not args.dry_run:
                     require_file(source, "adapt")
-                expected = checkpoint_path(args, structure, seed, "adapted")
-                if expected.is_file() and not args.force:
-                    print(f"SKIP adapted checkpoint: {expected}")
+                progress = progress_checkpoint_path(
+                    args, structure, seed, "adapted"
+                )
+                completed_epoch = checkpoint_epoch(progress)
+                if completed_epoch >= args.adapt_epochs and not args.force:
+                    print(
+                        f"SKIP complete adapted checkpoint (epoch "
+                        f"{completed_epoch}/{args.adapt_epochs}): {progress}"
+                    )
                     continue
+                resume = (
+                    progress
+                    if completed_epoch > 0 and not args.force
+                    else None
+                )
+                if resume is not None:
+                    print(
+                        f"RESUME partial adapted checkpoint (epoch "
+                        f"{completed_epoch}/{args.adapt_epochs}): {resume}"
+                    )
                 jobs.append(
                     (
                         f"adapt:{structure}:seed{seed}",
-                        adapt_command(args, structure, seed),
+                        adapt_command(args, structure, seed, resume),
                     )
                 )
         execute_many(
@@ -432,6 +533,7 @@ def main() -> None:
             max_workers=args.parallel_adapt_jobs,
             dry_run=args.dry_run,
             cpu_threads=args.torch_cpu_threads,
+            log_dir=args.output_root / "logs",
         )
 
     curves = [
@@ -473,6 +575,7 @@ def main() -> None:
             max_workers=args.parallel_online_jobs,
             dry_run=args.dry_run,
             cpu_threads=args.torch_cpu_threads,
+            log_dir=args.output_root / "logs",
         )
 
     if "analyze" in args.stages:
@@ -488,6 +591,7 @@ def main() -> None:
             label="analyze",
             dry_run=args.dry_run,
             cpu_threads=args.torch_cpu_threads,
+            log_dir=args.output_root / "logs",
         )
 
 

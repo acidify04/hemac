@@ -13,6 +13,7 @@ import math
 import random
 import sys
 from collections import defaultdict
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +54,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data-root", type=Path)
     parser.add_argument("--bc-checkpoint", type=Path, default=DEFAULT_BC_CHECKPOINT)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument(
+        "--resume-checkpoint",
+        type=Path,
+        help="Resume an interrupted source run from its hissd_last.pt checkpoint.",
+    )
     parser.add_argument(
         "--ablation",
         choices=ABLATION_CHOICES,
@@ -284,6 +290,23 @@ def configure_gpu_backend(device: torch.device) -> None:
     torch.backends.cudnn.benchmark = True
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
+
+
+@contextmanager
+def strict_planner_math(device: torch.device):
+    """Avoid TF32 gradient overflow in the task-only planner backward pass."""
+    if device.type != "cuda":
+        yield
+        return
+    old_matmul_tf32 = torch.backends.cuda.matmul.allow_tf32
+    old_cudnn_tf32 = torch.backends.cudnn.allow_tf32
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    try:
+        yield
+    finally:
+        torch.backends.cuda.matmul.allow_tf32 = old_matmul_tf32
+        torch.backends.cudnn.allow_tf32 = old_cudnn_tf32
 
 
 def move_observations(
@@ -973,6 +996,8 @@ def optimize(
     model: HeMACHISSD,
     optimizer: torch.optim.Optimizer,
     grad_clip: float,
+    *,
+    skip_nonfinite: bool = False,
 ) -> float:
     """Apply one of the three sequential official HiSSD updates."""
     if not torch.isfinite(loss):
@@ -982,8 +1007,15 @@ def optimize(
     grad_norm = nn.utils.clip_grad_norm_(
         (parameter for parameter in model.parameters() if parameter.requires_grad),
         grad_clip,
-        error_if_nonfinite=True,
+        error_if_nonfinite=False,
     )
+    if not torch.isfinite(grad_norm):
+        optimizer.zero_grad(set_to_none=True)
+        if skip_nonfinite:
+            return float("nan")
+        raise RuntimeError(
+            "Non-finite gradient norm encountered during HiSSD optimization."
+        )
     optimizer.step()
     return float(grad_norm)
 
@@ -1044,9 +1076,22 @@ def run_train_epoch(
                 value_loss, model, optimizer, args.grad_clip
             )
 
-            planner_loss, planner_metrics = planner_objective(model, batch, args)
-            planner_metrics["planner_grad_norm"] = optimize(
-                planner_loss, model, optimizer, args.grad_clip
+            with strict_planner_math(device):
+                planner_loss, planner_metrics = planner_objective(
+                    model, batch, args
+                )
+                planner_grad_norm = optimize(
+                    planner_loss,
+                    model,
+                    optimizer,
+                    args.grad_clip,
+                    skip_nonfinite=True,
+                )
+            planner_metrics["planner_update_skipped"] = float(
+                not math.isfinite(planner_grad_norm)
+            )
+            planner_metrics["planner_grad_norm"] = (
+                planner_grad_norm if math.isfinite(planner_grad_norm) else 0.0
             )
             model.update_targets(args.target_tau)
 
@@ -1089,6 +1134,31 @@ def run_validation(
         accumulate_metrics(accumulator, planner_metrics)
         batch_count += 1
     return average_metrics(accumulator, batch_count)
+
+
+def validation_losses(
+    metrics: dict[str, float], args: argparse.Namespace
+) -> tuple[float, float]:
+    """Rebuild checkpoint-selection losses from persisted validation metrics."""
+    task_loss = (
+        args.descriptor_weight * metrics["descriptor_loss"]
+        + args.descriptor_metric_weight * metrics["descriptor_metric_loss"]
+        + args.task_variance_weight * metrics["task_variance_loss"]
+        + args.task_contrastive_weight * metrics["task_contrastive_loss"]
+        + args.task_action_descriptor_weight
+        * metrics["task_action_descriptor_loss"]
+        + args.task_action_variance_weight
+        * metrics["task_action_variance_loss"]
+        + args.task_action_contrastive_weight
+        * metrics["task_action_contrastive_loss"]
+    )
+    combined_loss = (
+        metrics["action_mse"]
+        + task_loss
+        + metrics["value_loss"]
+        + metrics["planner_loss"]
+    )
+    return float(combined_loss), float(task_loss)
 
 
 def build_model(
@@ -1366,28 +1436,48 @@ def main() -> None:
         for parameter in model.common_skill_encoder.parameters():
             parameter.requires_grad_(False)
     model.to(device)
-    sample_loader = create_dataloader(
-        manifest_path=args.manifest,
-        split="source_train",
-        data_root=args.data_root,
-        sequence_length=min(args.sequence_length, 4),
-        batch_size=1,
-        num_workers=0,
-        normalize_actions=True,
-        include_observer=False,
-        include_labels=False,
-        balanced_sampling=False,
-        seed=args.seed,
-        pin_memory=False,
-        drop_last_batch=False,
-    )[1]
-    initialization_error = verify_bc_initialization(
-        model, next(iter(sample_loader)), device
-    )
-    if initialization_error > 1e-6:
-        raise RuntimeError(
-            f"HiSSD decoder does not preserve BC actions: {initialization_error}"
+    resume_payload = None
+    resume_epoch = 0
+    if args.resume_checkpoint is not None:
+        resume_path = args.resume_checkpoint.expanduser().resolve()
+        resume_payload = torch.load(
+            resume_path, map_location=device, weights_only=False
         )
+        resume_structure = resume_payload.get(
+            "skill_structure",
+            resume_payload.get("model_config", {}).get("skill_structure"),
+        )
+        if resume_structure != args.skill_structure:
+            raise ValueError(
+                "Resume checkpoint skill structure does not match this run: "
+                f"checkpoint={resume_structure}, requested={args.skill_structure}."
+            )
+        model.load_state_dict(resume_payload["model_state_dict"])
+        resume_epoch = int(resume_payload.get("epoch", 0))
+        initialization_error = float("nan")
+    else:
+        sample_loader = create_dataloader(
+            manifest_path=args.manifest,
+            split="source_train",
+            data_root=args.data_root,
+            sequence_length=min(args.sequence_length, 4),
+            batch_size=1,
+            num_workers=0,
+            normalize_actions=True,
+            include_observer=False,
+            include_labels=False,
+            balanced_sampling=False,
+            seed=args.seed,
+            pin_memory=False,
+            drop_last_batch=False,
+        )[1]
+        initialization_error = verify_bc_initialization(
+            model, next(iter(sample_loader)), device
+        )
+        if initialization_error > 1e-6:
+            raise RuntimeError(
+                f"HiSSD decoder does not preserve BC actions: {initialization_error}"
+            )
 
     task_parameters = [
         parameter
@@ -1433,6 +1523,12 @@ def main() -> None:
             },
         ],
     )
+    if resume_payload is not None:
+        optimizer.load_state_dict(resume_payload["optimizer_state_dict"])
+        # Recreate the task-balanced sampler position without loading episode data.
+        for _ in range(resume_epoch):
+            for _ in train_loader.batch_sampler:
+                pass
     args.output_dir.mkdir(parents=True, exist_ok=True)
     print(
         f"device={device}, train_windows={len(train_dataset)}, "
@@ -1456,10 +1552,16 @@ def main() -> None:
         f"task_action_gradient={not args.detach_task_skill_for_action}"
     )
     print(f"model_config={json.dumps(model.config())}")
-    print(
-        f"BC initialization epoch={bc_info.get('epoch')}, "
-        f"max_action_difference={initialization_error:.3e}"
-    )
+    if resume_payload is None:
+        print(
+            f"BC initialization epoch={bc_info.get('epoch')}, "
+            f"max_action_difference={initialization_error:.3e}"
+        )
+    else:
+        print(
+            f"Resuming source training at epoch {resume_epoch + 1}/{args.epochs} "
+            f"from {args.resume_checkpoint}"
+        )
 
     writer = create_writer(args)
     best_validation_loss = math.inf
@@ -1475,8 +1577,35 @@ def main() -> None:
         if task_auxiliary_enabled
         else "combined validation loss"
     )
+    if resume_payload is not None:
+        best_path = args.output_dir / "hissd_best.pt"
+        if best_path.is_file():
+            best_payload = torch.load(
+                best_path, map_location="cpu", weights_only=False
+            )
+            best_validation_loss, _ = validation_losses(
+                best_payload["validation_metrics"], args
+            )
+            best_validation_epoch = int(best_payload.get("epoch", 0))
+        best_task_path = args.output_dir / "hissd_best_task.pt"
+        if best_task_path.is_file():
+            best_task_payload = torch.load(
+                best_task_path, map_location="cpu", weights_only=False
+            )
+            combined_loss, task_loss = validation_losses(
+                best_task_payload["validation_metrics"], args
+            )
+            best_task_validation_loss = (
+                task_loss if task_auxiliary_enabled else combined_loss
+            )
+            best_task_validation_epoch = int(
+                best_task_payload.get("epoch", 0)
+            )
+            epochs_without_task_improvement = max(
+                0, resume_epoch - best_task_validation_epoch
+            )
     try:
-        for epoch in range(1, args.epochs + 1):
+        for epoch in range(resume_epoch + 1, args.epochs + 1):
             task_only = task_auxiliary_enabled and epoch <= args.task_warmup_epochs
             train_metrics = run_train_epoch(
                 model,
@@ -1487,38 +1616,8 @@ def main() -> None:
                 task_only=task_only,
             )
             validation_metrics = run_validation(model, val_loader, device, args)
-            validation_loss = (
-                validation_metrics["action_mse"]
-                + args.descriptor_weight * validation_metrics["descriptor_loss"]
-                + args.descriptor_metric_weight
-                * validation_metrics["descriptor_metric_loss"]
-                + args.task_variance_weight
-                * validation_metrics["task_variance_loss"]
-                + args.task_contrastive_weight
-                * validation_metrics["task_contrastive_loss"]
-                + args.task_action_descriptor_weight
-                * validation_metrics["task_action_descriptor_loss"]
-                + args.task_action_variance_weight
-                * validation_metrics["task_action_variance_loss"]
-                + args.task_action_contrastive_weight
-                * validation_metrics["task_action_contrastive_loss"]
-                + validation_metrics["value_loss"]
-                + validation_metrics["planner_loss"]
-            )
-            task_validation_loss = (
-                args.descriptor_weight * validation_metrics["descriptor_loss"]
-                + args.descriptor_metric_weight
-                * validation_metrics["descriptor_metric_loss"]
-                + args.task_variance_weight
-                * validation_metrics["task_variance_loss"]
-                + args.task_contrastive_weight
-                * validation_metrics["task_contrastive_loss"]
-                + args.task_action_descriptor_weight
-                * validation_metrics["task_action_descriptor_loss"]
-                + args.task_action_variance_weight
-                * validation_metrics["task_action_variance_loss"]
-                + args.task_action_contrastive_weight
-                * validation_metrics["task_action_contrastive_loss"]
+            validation_loss, task_validation_loss = validation_losses(
+                validation_metrics, args
             )
             early_stopping_loss = (
                 task_validation_loss
@@ -1573,6 +1672,8 @@ def main() -> None:
                 f"{validation_metrics['value_loss']:.5f} "
                 f"planner={train_metrics['planner_loss']:.5f}/"
                 f"{validation_metrics['planner_loss']:.5f} "
+                f"planner_skips="
+                f"{train_metrics.get('planner_update_skipped', 0.0):.3f} "
                 f"c_std={validation_metrics['common_skill_std']:.4f} "
                 f"z_std={validation_metrics['task_skill_std']:.4f}"
             )

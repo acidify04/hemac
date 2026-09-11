@@ -66,6 +66,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST_PATH)
     parser.add_argument("--data-root", type=Path)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument(
+        "--resume-checkpoint",
+        type=Path,
+        help=(
+            "Resume interrupted target adaptation from an "
+            "hissd_adapted_last.pt checkpoint."
+        ),
+    )
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--batch-size", type=int, default=6)
     parser.add_argument("--sequence-length", type=int, default=128)
@@ -1045,6 +1053,31 @@ def run_source_validation(
     return float(squared_error / valid_count.clamp_min(1.0))
 
 
+def adaptation_selection_loss(
+    metrics: dict[str, float], args: argparse.Namespace
+) -> float:
+    """Compute the target checkpoint-selection objective from saved metrics."""
+    difficulty_success_mse = sum(
+        metrics[f"difficulty_{difficulty}/safe_success_mse"]
+        for difficulty in args.target_difficulties
+    ) / len(args.target_difficulties)
+    return float(
+        difficulty_success_mse
+        + args.target_anchor_weight * metrics["target_anchor_mse"]
+        + args.source_distillation_weight * metrics["source_validation_mse"]
+        + 0.02 * metrics["target_descriptor_mae"]
+        + 0.005
+        * (2.0 - metrics["target_task_accuracy"] - metrics["source_task_accuracy"])
+        + args.task_usage_weight * metrics["task_usage_loss"]
+        + args.value_selection_weight * metrics["value_loss"]
+        + 0.0001
+        * (
+            metrics["query_contrastive_loss"]
+            + metrics["decoder_contrastive_loss"]
+        )
+    )
+
+
 def build_loader(
     args: argparse.Namespace,
     split: str,
@@ -1252,6 +1285,33 @@ def main() -> None:
             f"{source_rows} source-task rows; target rows remain trainable."
         )
 
+    resume_payload = None
+    resume_epoch = 0
+    if args.resume_checkpoint is not None:
+        resume_path = args.resume_checkpoint.expanduser().resolve()
+        resume_payload = torch.load(
+            resume_path, map_location=device, weights_only=False
+        )
+        resume_structure = resume_payload.get(
+            "skill_structure",
+            resume_payload.get("model_config", {}).get("skill_structure"),
+        )
+        if resume_structure != model.skill_structure:
+            raise ValueError(
+                "Adaptation resume checkpoint has a different skill structure: "
+                f"checkpoint={resume_structure}, source={model.skill_structure}."
+            )
+        model.load_state_dict(resume_payload["model_state_dict"])
+        classifier_state = resume_payload.get(
+            "target_task_classifier_state_dict"
+        )
+        if classifier_state is None:
+            raise KeyError(
+                "Adaptation resume checkpoint has no task classifier state."
+            )
+        task_classifier.load_state_dict(classifier_state)
+        resume_epoch = int(resume_payload.get("epoch", 0))
+
     target_dataset, target_loader = build_loader(
         args, "target_train", include_labels=True, train=True, device=device
     )
@@ -1377,6 +1437,8 @@ def main() -> None:
     optimizer = torch.optim.AdamW(
         optimizer_groups
     )
+    if resume_payload is not None:
+        optimizer.load_state_dict(resume_payload["optimizer_state_dict"])
     args.output_dir.mkdir(parents=True, exist_ok=True)
     print(
         f"Adaptation source={args.checkpoint}, output={args.output_dir}, "
@@ -1414,11 +1476,27 @@ def main() -> None:
         f"value_lr={args.value_learning_rate:.2e}, "
         f"classifier_tasks={args.classifier_tasks}"
     )
+    if resume_payload is not None:
+        print(
+            f"Resuming target adaptation at epoch {resume_epoch + 1}/"
+            f"{args.epochs} from {args.resume_checkpoint}"
+        )
 
     best_loss = math.inf
     best_epoch = 0
     stale_epochs = 0
-    for epoch in range(1, args.epochs + 1):
+    if resume_payload is not None:
+        best_path = args.output_dir / "hissd_adapted_best.pt"
+        if best_path.is_file():
+            best_payload = torch.load(
+                best_path, map_location="cpu", weights_only=False
+            )
+            best_loss = adaptation_selection_loss(
+                best_payload["validation_metrics"], args
+            )
+            best_epoch = int(best_payload.get("epoch", 0))
+            stale_epochs = max(0, resume_epoch - best_epoch)
+    for epoch in range(resume_epoch + 1, args.epochs + 1):
         action_enabled = epoch > args.skill_warmup_epochs
         if args.adapt_shared_decoder:
             for parameter in model.action_decoder.parameters():
@@ -1451,30 +1529,7 @@ def main() -> None:
         val_metrics["source_validation_mse"] = run_source_validation(
             model, teacher, source_val_loader, device, args
         )
-        difficulty_success_mse = sum(
-            val_metrics[f"difficulty_{difficulty}/safe_success_mse"]
-            for difficulty in args.target_difficulties
-        ) / len(args.target_difficulties)
-        selection_loss = (
-            difficulty_success_mse
-            + args.target_anchor_weight * val_metrics["target_anchor_mse"]
-            + args.source_distillation_weight
-            * val_metrics["source_validation_mse"]
-            + 0.02 * val_metrics["target_descriptor_mae"]
-            + 0.005
-            * (
-                2.0
-                - val_metrics["target_task_accuracy"]
-                - val_metrics["source_task_accuracy"]
-            )
-            + args.task_usage_weight * val_metrics["task_usage_loss"]
-            + args.value_selection_weight * val_metrics["value_loss"]
-            + 0.0001
-            * (
-                val_metrics["query_contrastive_loss"]
-                + val_metrics["decoder_contrastive_loss"]
-            )
-        )
+        selection_loss = adaptation_selection_loss(val_metrics, args)
         success_by_task = "/".join(
             f"{val_metrics[f'difficulty_{difficulty}/success_mse']:.5f}"
             for difficulty in args.target_difficulties
