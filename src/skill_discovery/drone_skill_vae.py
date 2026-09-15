@@ -33,6 +33,8 @@ class DroneSkillVAE(nn.Module):
         latent_dim: int = 8,
         decoder_hidden_dim: int = 64,
         residual_logit_scale: float = 0.2,
+        skill_duration: int = 8,
+        decoder_observation_conditioned: bool = True,
         activation: str = "relu",
     ) -> None:
         super().__init__()
@@ -41,8 +43,14 @@ class DroneSkillVAE(nn.Module):
         self.latent_dim = int(latent_dim)
         self.decoder_hidden_dim = int(decoder_hidden_dim)
         self.residual_logit_scale = float(residual_logit_scale)
+        self.skill_duration = int(skill_duration)
+        self.decoder_observation_conditioned = bool(
+            decoder_observation_conditioned
+        )
         if self.residual_logit_scale <= 0.0:
             raise ValueError("residual_logit_scale must be positive.")
+        if self.skill_duration <= 0:
+            raise ValueError("skill_duration must be positive.")
 
         self.observation_encoder = DroneObservationEncoder(
             global_map_channels,
@@ -64,8 +72,11 @@ class DroneSkillVAE(nn.Module):
             self.temporal_hidden_dim, self.latent_dim
         )
         self.base_action_head = nn.Linear(feature_dim, self.action_dim)
+        skill_decoder_input_dim = self.latent_dim
+        if self.decoder_observation_conditioned:
+            skill_decoder_input_dim += feature_dim
         self.skill_action_head = nn.Sequential(
-            nn.Linear(self.latent_dim, self.decoder_hidden_dim),
+            nn.Linear(skill_decoder_input_dim, self.decoder_hidden_dim),
             nn.SiLU(),
             nn.LayerNorm(self.decoder_hidden_dim),
             nn.Linear(self.decoder_hidden_dim, self.action_dim, bias=False),
@@ -98,6 +109,10 @@ class DroneSkillVAE(nn.Module):
             "latent_dim": self.latent_dim,
             "decoder_hidden_dim": self.decoder_hidden_dim,
             "residual_logit_scale": self.residual_logit_scale,
+            "skill_duration": self.skill_duration,
+            "decoder_observation_conditioned": (
+                self.decoder_observation_conditioned
+            ),
             "activation": encoder["activation"],
         }
 
@@ -156,15 +171,59 @@ class DroneSkillVAE(nn.Module):
             return mu
         return mu + torch.exp(0.5 * logvar) * torch.randn_like(mu)
 
+    def hold_skill_sequence(
+        self,
+        values: torch.Tensor,
+        offsets: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Hold each selected `[B,T,A,D]` value for `skill_duration` steps."""
+        if values.ndim != 4:
+            raise ValueError(f"Expected [B,T,A,D], got {tuple(values.shape)}.")
+        batch_size, time_steps, agent_count, value_dim = values.shape
+        if offsets is None:
+            offsets = torch.zeros(
+                batch_size, dtype=torch.long, device=values.device
+            )
+        offsets = offsets.to(device=values.device, dtype=torch.long).reshape(-1)
+        if offsets.numel() != batch_size:
+            raise ValueError(
+                f"Expected {batch_size} skill offsets, got {offsets.numel()}."
+            )
+
+        relative_steps = torch.arange(time_steps, device=values.device).view(1, -1)
+        phase = (offsets.view(-1, 1) + relative_steps) % self.skill_duration
+        selection_indices = (relative_steps - phase).clamp_min(0)
+        gather_indices = selection_indices.view(batch_size, time_steps, 1, 1)
+        gather_indices = gather_indices.expand(-1, -1, agent_count, value_dim)
+        held = torch.gather(values, dim=1, index=gather_indices)
+        decision_mask = phase.eq(0)
+        # A cropped window may begin in the middle of a skill. With no preceding
+        # recurrent state available, its first value is the best causal choice.
+        decision_mask[:, 0] = True
+        return held, decision_mask
+
+    def skill_residual(
+        self,
+        features: torch.Tensor,
+        skills: torch.Tensor,
+        *,
+        head: nn.Module | None = None,
+    ) -> torch.Tensor:
+        """Decode a bounded residual while retaining current obstacle context."""
+        if features.shape[:-1] != skills.shape[:-1]:
+            raise ValueError("Observation features and skills must align.")
+        decoder_input = skills
+        if self.decoder_observation_conditioned:
+            decoder_input = torch.cat((features, skills), dim=-1)
+        decoder = self.skill_action_head if head is None else head
+        return torch.tanh(decoder(decoder_input))
+
     def decode_logits(
         self, features: torch.Tensor, skills: torch.Tensor
     ) -> torch.Tensor:
         if features.shape[:-1] != skills.shape[:-1]:
             raise ValueError("Observation features and skills must align.")
-        # The frozen BC path already models observation-conditioned behavior.
-        # Keeping observations out of this residual prevents a second actor
-        # from bypassing and ignoring the latent skill.
-        residual = torch.tanh(self.skill_action_head(skills))
+        residual = self.skill_residual(features, skills)
         return self.base_action_head(features) + self.residual_logit_scale * residual
 
     def decode_actions(
@@ -187,16 +246,27 @@ class DroneSkillVAE(nn.Module):
         observations: dict[str, torch.Tensor],
         *,
         sample_latent: bool = True,
+        skill_offsets: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         features = self.encode_observations(observations)
         contexts, _ = self.encode_sequence(features)
-        mu, logvar = self.posterior(contexts)
-        skills = self.reparameterize(mu, logvar, sample=sample_latent)
+        candidate_mu, candidate_logvar = self.posterior(contexts)
+        candidate_skills = self.reparameterize(
+            candidate_mu, candidate_logvar, sample=sample_latent
+        )
+        mu, decision_mask = self.hold_skill_sequence(
+            candidate_mu, skill_offsets
+        )
+        logvar, _ = self.hold_skill_sequence(candidate_logvar, skill_offsets)
+        skills, _ = self.hold_skill_sequence(candidate_skills, skill_offsets)
         return {
             "observation_features": features,
             "skill_context": contexts,
             "skill_mu": mu,
             "skill_logvar": logvar,
+            "candidate_skill_mu": candidate_mu,
+            "candidate_skill_logvar": candidate_logvar,
+            "skill_decision_mask": decision_mask,
             "skills": skills,
             "action_logits": self.decode_logits(features, skills),
             "actions": self.decode_actions(features, skills),
@@ -208,41 +278,89 @@ class DroneSkillVAE(nn.Module):
         *,
         device: torch.device,
         dtype: torch.dtype | None = None,
-    ) -> torch.Tensor:
+    ) -> dict[str, torch.Tensor | int]:
         if dtype is None:
             dtype = next(self.parameters()).dtype
-        return torch.zeros(
-            1,
-            int(agent_count),
-            self.temporal_hidden_dim,
-            device=device,
-            dtype=dtype,
-        )
+        agent_count = int(agent_count)
+        return {
+            "recurrent": torch.zeros(
+                1,
+                agent_count,
+                self.temporal_hidden_dim,
+                device=device,
+                dtype=dtype,
+            ),
+            "active_skill": torch.zeros(
+                1,
+                agent_count,
+                self.latent_dim,
+                device=device,
+                dtype=dtype,
+            ),
+            "active_logvar": torch.zeros(
+                1,
+                agent_count,
+                self.latent_dim,
+                device=device,
+                dtype=dtype,
+            ),
+            "selection_context": torch.zeros(
+                1,
+                agent_count,
+                self.temporal_hidden_dim,
+                device=device,
+                dtype=dtype,
+            ),
+            "steps_remaining": 0,
+        }
 
     def inference_step(
         self,
         observations: dict[str, torch.Tensor],
-        state: torch.Tensor,
-    ) -> tuple[dict[str, torch.Tensor], torch.Tensor]:
-        """Run deterministic posterior-mean inference for one world cycle."""
+        state: dict[str, torch.Tensor | int],
+    ) -> tuple[dict[str, torch.Tensor | bool | int], dict[str, torch.Tensor | int]]:
+        """Run one cycle, selecting a new skill only after the current one expires."""
         features = self.encode_observations(observations)
         if features.ndim != 3 or features.shape[0] != 1:
             raise ValueError(
                 "Online observations must have shape [1,A,...], got "
                 f"features={tuple(features.shape)}."
             )
-        contexts, next_state = self.encode_sequence(
-            features.unsqueeze(1), state
+        contexts, next_recurrent = self.encode_sequence(
+            features.unsqueeze(1), state["recurrent"]
         )
         contexts = contexts[:, 0]
-        mu, logvar = self.posterior(contexts)
+        candidate_mu, candidate_logvar = self.posterior(contexts)
+        switched = int(state["steps_remaining"]) <= 0
+        if switched:
+            skills = candidate_mu
+            logvar = candidate_logvar
+            selection_context = contexts
+            steps_remaining = self.skill_duration
+        else:
+            skills = state["active_skill"]
+            logvar = state["active_logvar"]
+            selection_context = state["selection_context"]
+            steps_remaining = int(state["steps_remaining"])
+        next_state: dict[str, torch.Tensor | int] = {
+            "recurrent": next_recurrent,
+            "active_skill": skills,
+            "active_logvar": logvar,
+            "selection_context": selection_context,
+            "steps_remaining": steps_remaining - 1,
+        }
         return {
             "observation_features": features,
-            "skill_context": contexts,
-            "skill_mu": mu,
+            "skill_context": selection_context,
+            "recurrent_context": contexts,
+            "skill_mu": skills,
             "skill_logvar": logvar,
-            "skills": mu,
-            "action_logits": self.decode_logits(features, mu),
+            "candidate_skill_mu": candidate_mu,
+            "candidate_skill_logvar": candidate_logvar,
+            "skills": skills,
+            "skill_switched": switched,
+            "skill_steps_remaining": steps_remaining - 1,
+            "action_logits": self.decode_logits(features, skills),
         }, next_state
 
     def initialize_from_bc(self, checkpoint: str | Path) -> dict[str, Any]:
@@ -277,11 +395,16 @@ def load_drone_skill_vae(
     payload = torch.load(path, map_location="cpu", weights_only=False)
     if payload.get("model_type") != "homogeneous_drone_skill_vae":
         raise ValueError(f"Not a homogeneous drone skill-VAE checkpoint: {path}")
-    if int(payload.get("format_version", 0)) < 4:
+    format_version = int(payload.get("format_version", 0))
+    if format_version < 4:
         raise ValueError(
             "This checkpoint predates the anti-collapse skill dynamics model. "
             "Retrain it with train_drone_skill_vae.py."
         )
-    model = DroneSkillVAE(**payload["model_config"])
+    model_config = dict(payload["model_config"])
+    if format_version < 5:
+        model_config.setdefault("skill_duration", 1)
+        model_config.setdefault("decoder_observation_conditioned", False)
+    model = DroneSkillVAE(**model_config)
     model.load_state_dict(payload["model_state_dict"])
     return model.to(device), payload

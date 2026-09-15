@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import copy
 import math
+import os
 import random
 import sys
 from collections import defaultdict
@@ -103,6 +104,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skill-anchor-coeff", type=float, default=0.05)
     parser.add_argument("--skill-warmup-iterations", type=int, default=5)
     parser.add_argument(
+        "--full-base-freeze-iterations",
+        type=int,
+        default=0,
+        help=(
+            "Keep the BC base head fixed for the first N full-skill PPO "
+            "iterations so target adaptation cannot immediately bypass z."
+        ),
+    )
+    parser.add_argument(
         "--skill-mode",
         choices=("full", "no_skill"),
         default="full",
@@ -124,6 +134,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--method-name", default="drone_skill_vae_online")
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    parser.add_argument(
+        "--deterministic",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use reproducible CUDA kernels and disable TF32/benchmark selection.",
+    )
     parser.add_argument("--learning-curve-output", type=Path)
     return parser.parse_args()
 
@@ -154,8 +170,8 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--log-std-min must be lower than --log-std-max.")
     if args.anchor_coeff < 0 or args.skill_anchor_coeff < 0:
         raise ValueError("Anchor coefficients cannot be negative.")
-    if args.skill_warmup_iterations < 0:
-        raise ValueError("--skill-warmup-iterations cannot be negative.")
+    if args.skill_warmup_iterations < 0 or args.full_base_freeze_iterations < 0:
+        raise ValueError("Skill/base warm-up iteration counts cannot be negative.")
     if args.skill_mode == "no_skill" and not args.train_base_action_head:
         raise ValueError(
             "--skill-mode no_skill requires --train-base-action-head so the "
@@ -177,6 +193,21 @@ def resolve_device(name: str) -> torch.device:
     if name == "auto":
         name = "cuda" if torch.cuda.is_available() else "cpu"
     return torch.device(name)
+
+
+def configure_backend(device: torch.device, deterministic: bool) -> None:
+    if not deterministic:
+        configure_gpu_backend(device)
+        return
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+    torch.use_deterministic_algorithms(True)
+    if device.type != "cuda":
+        return
+    torch.set_float32_matmul_precision("highest")
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
 
 
 def rollout_episode(
@@ -210,6 +241,10 @@ def rollout_episode(
     cycle_mask: np.ndarray | None = None
     shared_success_reward = 0.0
     cycle_count = 0
+    episode_return = 0.0
+    skill_action_delta_sum = torch.zeros((), device=device)
+    skill_latent_std_sum = torch.zeros((), device=device)
+    skill_switch_count = 0
 
     for agent_id in env.agent_iter():
         _, _, termination, truncation, _ = env.last()
@@ -227,16 +262,29 @@ def rollout_episode(
                     skills = outputs["skills"][0]
                     logits = outputs["action_logits"][0]
                     anchor_skills = anchor_mu(contexts)
-                    anchor_residual = torch.tanh(anchor_skill_head(anchor_skills))
+                    anchor_residual = model.skill_residual(
+                        features,
+                        anchor_skills,
+                        head=anchor_skill_head,
+                    )
                     anchor_logits = (
                         anchor_base_head(features)
                         + model.residual_logit_scale * anchor_residual
                     )
+                    skill_switch_count += int(outputs["skill_switched"])
                 else:
                     skills = torch.zeros_like(outputs["skills"][0])
                     logits = model.base_action_head(features)
                     anchor_skills = torch.zeros_like(skills)
                     anchor_logits = anchor_base_head(features)
+                base_actions = torch.tanh(model.base_action_head(features))
+                policy_actions = torch.tanh(logits)
+                skill_action_delta_sum += (
+                    policy_actions - base_actions
+                ).abs().mean()
+                skill_latent_std_sum += skills.std(
+                    dim=0, unbiased=False
+                ).mean()
                 central_map = torch.from_numpy(
                     build_global_central_map(core_env)
                 ).unsqueeze(0).to(device)
@@ -299,6 +347,10 @@ def rollout_episode(
             transitions[-1]["reward"] = torch.from_numpy(
                 (cycle_rewards + shared_success_reward) / reward_scale
             )
+        if np.any(cycle_mask):
+            episode_return += (
+                float(cycle_rewards[cycle_mask].mean()) + shared_success_reward
+            )
         cycle_count += 1
         cached_actions = {}
         cycle_rewards = None
@@ -324,6 +376,14 @@ def rollout_episode(
         "observer_crash": 0.0,
         "coverage": coverage,
         "cycles": float(cycle_count),
+        "episode_return": float(episode_return),
+        "skill_action_delta": float(
+            (skill_action_delta_sum / max(cycle_count, 1)).cpu()
+        ),
+        "skill_latent_std": float(
+            (skill_latent_std_sum / max(cycle_count, 1)).cpu()
+        ),
+        "skill_switch_rate": float(skill_switch_count / max(cycle_count, 1)),
     }
 
 
@@ -532,6 +592,10 @@ def curve_point(
         "observer_crash_rate": 0.0,
         "mean_coverage_ratio": metrics["coverage"],
         "mean_cycles": metrics["cycles"],
+        "mean_episode_return": metrics["episode_return"],
+        "mean_skill_action_delta": metrics["skill_action_delta"],
+        "mean_skill_latent_std": metrics["skill_latent_std"],
+        "mean_skill_switch_rate": metrics["skill_switch_rate"],
     }
 
 
@@ -581,16 +645,21 @@ def save_checkpoint(
 def main() -> None:
     args = parse_args()
     validate_args(args)
+    if args.deterministic:
+        os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
     seed_everything(args.seed)
     device = resolve_device(args.device)
-    configure_gpu_backend(device)
+    configure_backend(device, args.deterministic)
     model, source_payload = load_drone_skill_vae(args.vae_checkpoint, device)
     for parameter in model.parameters():
         parameter.requires_grad_(False)
     for parameter in model.skill_action_head.parameters():
         parameter.requires_grad_(True)
+    initial_base_trainable = args.train_base_action_head and not (
+        args.skill_mode == "full" and args.full_base_freeze_iterations > 0
+    )
     for parameter in model.base_action_head.parameters():
-        parameter.requires_grad_(args.train_base_action_head)
+        parameter.requires_grad_(initial_base_trainable)
     for parameter in model.posterior_mu.parameters():
         parameter.requires_grad_(False)
     model.eval()
@@ -643,6 +712,8 @@ def main() -> None:
     print(
         f"Drone skill-VAE PPO difficulty={args.difficulty}, seed={args.seed}, "
         f"skill_mode={args.skill_mode}, train_base={args.train_base_action_head}, "
+        f"base_freeze={args.full_base_freeze_iterations}, "
+        f"deterministic={args.deterministic}, "
         f"checkpoint={args.vae_checkpoint}, env_checkpoint={resolved_mappo}"
     )
     baseline = evaluate_policy(
@@ -668,7 +739,13 @@ def main() -> None:
             "curve_method": args.method_name,
             "skill_model": "single_latent_homogeneous_drone_vae",
             "skill_mode": args.skill_mode,
+            "skill_duration": model.skill_duration,
+            "decoder_observation_conditioned": (
+                model.decoder_observation_conditioned
+            ),
             "train_base_action_head": args.train_base_action_head,
+            "full_base_freeze_iterations": args.full_base_freeze_iterations,
+            "deterministic": args.deterministic,
             "success_definition": (
                 "drone_goal_found_and_coverage_without_fatal_crash"
             ),
@@ -676,6 +753,10 @@ def main() -> None:
             "training_step_definition": (
                 "sum of world cycles from target training episodes; "
                 "evaluation cycles excluded"
+            ),
+            "evaluation_reward_definition": (
+                "unscaled episode sum over world cycles of mean active-drone "
+                "local reward plus one shared success reward"
             ),
         },
     )
@@ -690,7 +771,9 @@ def main() -> None:
     print(
         f"BASELINE success={baseline['success']:.3f} "
         f"goal={baseline['goal_found']:.3f} crash={baseline['fatal_crash']:.3f} "
-        f"coverage={baseline['coverage']:.3f}"
+        f"coverage={baseline['coverage']:.3f} return={baseline['episode_return']:.2f} "
+        f"skill_delta={baseline['skill_action_delta']:.4f} "
+        f"skill_switch={baseline['skill_switch_rate']:.3f}"
     )
     save_checkpoint(
         args.output_dir / "drone_skill_vae_online_best.pt",
@@ -707,6 +790,12 @@ def main() -> None:
     )
 
     for iteration in range(1, args.iterations + 1):
+        base_trainable = args.train_base_action_head and not (
+            args.skill_mode == "full"
+            and iteration <= args.full_base_freeze_iterations
+        )
+        for parameter in model.base_action_head.parameters():
+            parameter.requires_grad_(base_trainable)
         trajectories: list[dict[str, Any]] = []
         episode_metrics = []
         for episode_index in range(args.episodes_per_iteration):
@@ -757,10 +846,14 @@ def main() -> None:
         print(
             f"iter={iteration:03d}/{args.iterations} steps={joint_env_steps} "
             f"success={train['success']:.3f} crash={train['fatal_crash']:.3f} "
+            f"return={train['episode_return']:.2f} "
+            f"skill_delta={train['skill_action_delta']:.4f} "
+            f"skill_switch={train['skill_switch_rate']:.3f} "
             f"policy={update['policy_loss']:.4f} value={update['value_loss']:.4f} "
             f"kl={update['approx_kl']:.5f} clip={update['clip_fraction']:.3f} "
             f"skill_mode={args.skill_mode} "
-            f"skill_update={'on' if adapt_skill else 'off'}"
+            f"skill_update={'on' if adapt_skill else 'off'} "
+            f"base_update={'on' if base_trainable else 'off'}"
         )
         save_checkpoint(
             args.output_dir / "drone_skill_vae_online_last.pt",
@@ -798,7 +891,9 @@ def main() -> None:
             f"EVAL success={evaluation['success']:.3f} "
             f"goal={evaluation['goal_found']:.3f} "
             f"crash={evaluation['fatal_crash']:.3f} "
-            f"coverage={evaluation['coverage']:.3f} score={score:.4f}"
+            f"coverage={evaluation['coverage']:.3f} "
+            f"return={evaluation['episode_return']:.2f} "
+            f"skill_delta={evaluation['skill_action_delta']:.4f} score={score:.4f}"
         )
         if score > best_score:
             best_score = score

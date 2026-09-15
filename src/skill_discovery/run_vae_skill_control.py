@@ -1,9 +1,9 @@
-"""Run a paired full-latent versus no-skill PPO control experiment.
+"""Run paired skill-transfer versus no-skill PPO experiments.
 
 Both conditions use the same offline checkpoint, BC action head, centralized
-critic architecture, optimizer settings, rollout budget, and seeds.  The only
-method switch is whether the recurrent VAE latent and its action residual are
-available to the actor and critic.
+critic architecture, rollout budget, and seeds. By default the full condition
+uses a short skill-first base-head freeze; set --full-base-freeze-iterations 0
+to recover the strict architecture-only full/no-skill control.
 """
 
 from __future__ import annotations
@@ -25,9 +25,10 @@ ONLINE_SCRIPT = (
 ANALYZE_SCRIPT = (
     PROJECT_ROOT / "src/skill_discovery/analyze_learning_efficiency.py"
 )
+PLOT_SCRIPT = PROJECT_ROOT / "src/skill_discovery/plot_skill_control_curves.py"
 DEFAULT_VAE_CHECKPOINT = (
     PROJECT_ROOT
-    / "src/skill_discovery/checkpoints/drone_skill_vae_regularized/"
+    / "src/skill_discovery/checkpoints/drone_skill_vae_chunked_k8/"
     "drone_skill_vae_best.pt"
 )
 DEFAULT_MAPPO_CHECKPOINT = (
@@ -36,7 +37,7 @@ DEFAULT_MAPPO_CHECKPOINT = (
 DEFAULT_OUTPUT_ROOT = (
     PROJECT_ROOT
     / "src/skill_discovery/outputs/learning_efficiency/drone_d12_t34/"
-    "vae_skill_control"
+    "vae_chunked_skill_control"
 )
 MODES = ("full", "no_skill")
 
@@ -66,19 +67,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ppo-epochs", type=int, default=4)
     parser.add_argument("--minibatch-size", type=int, default=256)
     parser.add_argument("--actor-lr", type=float, default=1e-4)
-    parser.add_argument("--skill-lr", type=float, default=2e-5)
+    parser.add_argument("--skill-lr", type=float, default=1e-4)
     parser.add_argument("--critic-lr", type=float, default=3e-4)
     parser.add_argument("--log-std-lr", type=float, default=2e-5)
     parser.add_argument("--clip-ratio", type=float, default=0.15)
     parser.add_argument("--entropy-coeff", type=float, default=0.002)
-    parser.add_argument("--anchor-coeff", type=float, default=0.02)
-    parser.add_argument("--skill-anchor-coeff", type=float, default=0.05)
-    parser.add_argument("--skill-warmup-iterations", type=int, default=5)
+    parser.add_argument("--anchor-coeff", type=float, default=0.01)
+    parser.add_argument("--skill-anchor-coeff", type=float, default=0.01)
+    parser.add_argument("--skill-warmup-iterations", type=int, default=0)
+    parser.add_argument("--full-base-freeze-iterations", type=int, default=10)
     parser.add_argument("--parallel-jobs", type=int, default=1)
     parser.add_argument("--torch-cpu-threads", type=int, default=2)
     parser.add_argument("--thresholds", nargs="+", default=("3=0.6", "4=0.5"))
     parser.add_argument("--budget", type=int)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    parser.add_argument(
+        "--deterministic",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -106,8 +113,8 @@ def validate_args(args: argparse.Namespace) -> None:
             raise ValueError(f"--{name.replace('_', '-')} must be positive.")
     if args.anchor_coeff < 0 or args.skill_anchor_coeff < 0:
         raise ValueError("Anchor coefficients cannot be negative.")
-    if args.skill_warmup_iterations < 0:
-        raise ValueError("--skill-warmup-iterations cannot be negative.")
+    if args.skill_warmup_iterations < 0 or args.full_base_freeze_iterations < 0:
+        raise ValueError("Skill/base warm-up iteration counts cannot be negative.")
     if args.budget is not None and args.budget <= 0:
         raise ValueError("--budget must be positive.")
     for name in ("modes", "seeds", "difficulties"):
@@ -147,6 +154,9 @@ def online_command(
     args: argparse.Namespace, mode: str, difficulty: int, seed: int
 ) -> list[str]:
     output_dir = experiment_dir(args, mode, difficulty, seed)
+    method_name = f"vae_{mode}_controlled"
+    if mode == "full" and args.full_base_freeze_iterations > 0:
+        method_name = "vae_full_skill_first"
     return [
         sys.executable,
         str(ONLINE_SCRIPT),
@@ -159,7 +169,7 @@ def online_command(
         "--learning-curve-output",
         str(curve_path(args, mode, difficulty, seed)),
         "--method-name",
-        f"vae_{mode}_controlled",
+        method_name,
         "--skill-mode",
         mode,
         "--train-base-action-head",
@@ -195,10 +205,13 @@ def online_command(
         str(args.skill_anchor_coeff),
         "--skill-warmup-iterations",
         str(args.skill_warmup_iterations),
+        "--full-base-freeze-iterations",
+        str(args.full_base_freeze_iterations),
         "--seed",
         str(seed),
         "--device",
         args.device,
+        "--deterministic" if args.deterministic else "--no-deterministic",
     ]
 
 
@@ -218,6 +231,17 @@ def analyze_command(args: argparse.Namespace, curves: list[Path]) -> list[str]:
     return command
 
 
+def plot_command(args: argparse.Namespace, curves: list[Path]) -> list[str]:
+    return [
+        sys.executable,
+        str(PLOT_SCRIPT),
+        "--curves",
+        *(str(path) for path in curves),
+        "--output",
+        str(args.output_root / "success_reward_curves.png"),
+    ]
+
+
 def run_command(
     command: list[str], *, label: str, dry_run: bool, cpu_threads: int, log_dir: Path
 ) -> None:
@@ -228,6 +252,7 @@ def run_command(
     environment.setdefault("PYTHONDONTWRITEBYTECODE", "1")
     environment.setdefault("PYTHONUNBUFFERED", "1")
     environment.setdefault("MPLCONFIGDIR", "/tmp/hemac_matplotlib_cache")
+    environment["PYTHONHASHSEED"] = "0"
     environment["OMP_NUM_THREADS"] = str(cpu_threads)
     environment["MKL_NUM_THREADS"] = str(cpu_threads)
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -349,6 +374,13 @@ def main() -> None:
         run_command(
             analyze_command(args, curves),
             label="analyze",
+            dry_run=args.dry_run,
+            cpu_threads=args.torch_cpu_threads,
+            log_dir=args.output_root / "logs",
+        )
+        run_command(
+            plot_command(args, curves),
+            label="plot-success-reward",
             dry_run=args.dry_run,
             cpu_threads=args.torch_cpu_threads,
             log_dir=args.output_root / "logs",

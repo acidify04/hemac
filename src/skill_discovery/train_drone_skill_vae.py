@@ -58,6 +58,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--temporal-hidden-dim", type=int, default=96)
     parser.add_argument("--decoder-hidden-dim", type=int, default=64)
     parser.add_argument("--residual-logit-scale", type=float, default=0.2)
+    parser.add_argument("--skill-duration", type=int, default=8)
+    parser.add_argument(
+        "--decoder-observation-conditioned",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
     parser.add_argument("--kl-beta", type=float, default=0.002)
     parser.add_argument("--kl-warmup-epochs", type=int, default=20)
     parser.add_argument("--kl-free-bits", type=float, default=0.005)
@@ -106,6 +112,7 @@ def validate_args(args: argparse.Namespace) -> None:
         "temporal_hidden_dim",
         "decoder_hidden_dim",
         "residual_logit_scale",
+        "skill_duration",
         "grad_clip",
     ):
         if getattr(args, name) <= 0:
@@ -173,6 +180,8 @@ def build_model(sample: dict[str, Any], args: argparse.Namespace) -> DroneSkillV
         latent_dim=args.latent_dim,
         decoder_hidden_dim=args.decoder_hidden_dim,
         residual_logit_scale=args.residual_logit_scale,
+        skill_duration=args.skill_duration,
+        decoder_observation_conditioned=args.decoder_observation_conditioned,
     )
 
 
@@ -217,7 +226,11 @@ def objective(
     next_observations = batch["drone"]["next_observations"]
     target_actions = batch["drone"]["actions"]
     mask = valid_agent_mask(batch)
-    outputs = model(observations, sample_latent=sample_latent)
+    outputs = model(
+        observations,
+        sample_latent=sample_latent,
+        skill_offsets=batch.get("window_start"),
+    )
 
     reconstruction = masked_mse(outputs["actions"], target_actions, mask)
     base_actions = torch.tanh(
@@ -228,7 +241,8 @@ def objective(
     mu = outputs["skill_mu"]
     logvar = outputs["skill_logvar"]
     kl_by_dimension = -0.5 * (1.0 + logvar - mu.square() - logvar.exp())
-    valid_kl = kl_by_dimension[mask]
+    decision_mask = mask & outputs["skill_decision_mask"].unsqueeze(-1)
+    valid_kl = kl_by_dimension[decision_mask]
     raw_kl = valid_kl.sum(dim=-1).mean()
     free_bits_kl = valid_kl.mean(dim=0).clamp_min(args.kl_free_bits).sum()
 
@@ -257,10 +271,12 @@ def objective(
     usage = F.relu(args.usage_margin - sensitivity_by_agent[mask]).mean()
     action_anchor = masked_mse(mean_actions, base_actions, mask)
 
-    consecutive = mask[:, 1:] & mask[:, :-1]
-    if consecutive.any():
+    skill_changes = (
+        decision_mask[:, 1:] & mask[:, :-1] & mask[:, 1:]
+    )
+    if skill_changes.any():
         skill_delta = (mu[:, 1:] - mu[:, :-1]).square().mean(dim=-1)
-        smoothness = skill_delta[consecutive].mean()
+        smoothness = skill_delta[skill_changes].mean()
     else:
         smoothness = reconstruction.new_zeros(())
 
@@ -272,7 +288,7 @@ def objective(
         + args.action_anchor_weight * action_anchor
         + args.smoothness_weight * smoothness
     )
-    valid_mu = mu[mask]
+    valid_mu = mu[decision_mask]
     latent_std_by_dimension = valid_mu.std(dim=0, unbiased=False)
     latent_variance_loss = F.relu(
         args.latent_std_target - latent_std_by_dimension
@@ -307,6 +323,12 @@ def objective(
             torch.exp(0.5 * logvar[mask]).mean().detach()
         ),
         "active_units": float((latent_variance > 1e-2).sum().detach()),
+        "skill_decision_fraction": float(
+            (
+                decision_mask.sum(dtype=torch.float32)
+                / mask.sum(dtype=torch.float32).clamp_min(1.0)
+            ).detach()
+        ),
         "beta": float(beta),
     }
     return loss, metrics
@@ -380,7 +402,7 @@ def save_checkpoint(
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
         {
-            "format_version": 4,
+            "format_version": 5,
             "model_type": "homogeneous_drone_skill_vae",
             "model_config": model.config(),
             "model_state_dict": model.state_dict(),
@@ -399,7 +421,8 @@ def save_checkpoint(
                 "decorrelation": "posterior_mean_off_diagonal_covariance",
                 "dynamics_inputs": "observation_feature_and_skill_without_action",
                 "smoothness": "consecutive_posterior_mean_mse",
-                "decoder": "frozen_bc_action_plus_skill_only_residual",
+                "decoder": "frozen_bc_action_plus_observation_skill_residual",
+                "skill_schedule": "episode_aligned_fixed_duration",
             },
             "hyperparameters": vars(args),
         },
@@ -468,6 +491,12 @@ def main() -> None:
             map_location="cpu",
             weights_only=False,
         )
+        if int(payload.get("format_version", 0)) < 5:
+            raise ValueError(
+                "Cannot resume a pre-chunked skill-VAE checkpoint. Start a new "
+                "run so the observation-conditioned decoder is trained from "
+                "its BC initialization."
+            )
         model.load_state_dict(payload["model_state_dict"])
         optimizer.load_state_dict(payload["optimizer_state_dict"])
         optimizer_to_device(optimizer, device)
@@ -525,6 +554,7 @@ def main() -> None:
                 f"anchor={validation_metrics['action_anchor']:.5f} "
                 f"z_std={validation_metrics['latent_std']:.4f} "
                 f"z_var={validation_metrics['latent_variance_loss']:.4f} "
+                f"select_rate={validation_metrics['skill_decision_fraction']:.3f} "
                 f"active={validation_metrics['active_units']:.1f}/{args.latent_dim}"
             )
             if writer is not None:
