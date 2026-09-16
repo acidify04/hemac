@@ -62,20 +62,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
     parser.add_argument("--iterations", type=int, default=40)
     parser.add_argument("--episodes-per-iteration", type=int, default=8)
+    parser.add_argument("--train-batch-joint-steps", type=int, default=8000)
     parser.add_argument("--eval-every", type=int, default=5)
+    parser.add_argument("--joint-step-budget", type=int)
+    parser.add_argument("--eval-every-joint-steps", type=int)
     parser.add_argument("--eval-episodes", type=int, default=100)
-    parser.add_argument("--ppo-epochs", type=int, default=4)
-    parser.add_argument("--minibatch-size", type=int, default=256)
-    parser.add_argument("--actor-lr", type=float, default=1e-4)
+    parser.add_argument("--eval-seed-base", type=int)
+    parser.add_argument("--test-seed-base", type=int)
+    parser.add_argument("--test-episodes", type=int, default=0)
+    parser.add_argument("--ppo-epochs", type=int, default=5)
+    parser.add_argument("--minibatch-size", type=int, default=1024)
+    parser.add_argument("--actor-lr", type=float, default=3e-4)
     parser.add_argument("--skill-lr", type=float, default=1e-4)
     parser.add_argument("--critic-lr", type=float, default=3e-4)
     parser.add_argument("--log-std-lr", type=float, default=2e-5)
-    parser.add_argument("--clip-ratio", type=float, default=0.15)
-    parser.add_argument("--entropy-coeff", type=float, default=0.002)
-    parser.add_argument("--anchor-coeff", type=float, default=0.01)
-    parser.add_argument("--skill-anchor-coeff", type=float, default=0.01)
+    parser.add_argument("--clip-ratio", type=float, default=0.2)
+    parser.add_argument("--entropy-coeff", type=float, default=0.01)
+    parser.add_argument("--anchor-coeff", type=float, default=0.001)
+    parser.add_argument("--skill-anchor-coeff", type=float, default=0.001)
     parser.add_argument("--skill-warmup-iterations", type=int, default=0)
     parser.add_argument("--full-base-freeze-iterations", type=int, default=10)
+    parser.add_argument("--full-base-freeze-joint-steps", type=int, default=50_000)
     parser.add_argument("--parallel-jobs", type=int, default=1)
     parser.add_argument("--torch-cpu-threads", type=int, default=2)
     parser.add_argument("--thresholds", nargs="+", default=("3=0.6", "4=0.5"))
@@ -113,10 +120,53 @@ def validate_args(args: argparse.Namespace) -> None:
             raise ValueError(f"--{name.replace('_', '-')} must be positive.")
     if args.anchor_coeff < 0 or args.skill_anchor_coeff < 0:
         raise ValueError("Anchor coefficients cannot be negative.")
-    if args.skill_warmup_iterations < 0 or args.full_base_freeze_iterations < 0:
+    if args.train_batch_joint_steps < 0:
+        raise ValueError("--train-batch-joint-steps cannot be negative.")
+    if (
+        args.skill_warmup_iterations < 0
+        or args.full_base_freeze_iterations < 0
+        or args.full_base_freeze_joint_steps < 0
+    ):
         raise ValueError("Skill/base warm-up iteration counts cannot be negative.")
     if args.budget is not None and args.budget <= 0:
         raise ValueError("--budget must be positive.")
+    step_options = (
+        args.joint_step_budget is not None,
+        args.eval_every_joint_steps is not None,
+    )
+    if any(step_options) and not all(step_options):
+        raise ValueError(
+            "--joint-step-budget and --eval-every-joint-steps must be used together."
+        )
+    if args.joint_step_budget is not None:
+        if args.joint_step_budget <= 0 or args.eval_every_joint_steps <= 0:
+            raise ValueError(
+                "Joint-step budget and evaluation interval must be positive."
+            )
+        if args.eval_every_joint_steps > args.joint_step_budget:
+            raise ValueError(
+                "--eval-every-joint-steps cannot exceed --joint-step-budget."
+            )
+        if args.budget is not None and args.budget != args.joint_step_budget:
+            raise ValueError(
+                "--budget must match --joint-step-budget when both are provided."
+            )
+    if (args.test_seed_base is None) != (args.test_episodes == 0):
+        raise ValueError(
+            "--test-seed-base and a positive --test-episodes must be used together."
+        )
+    for name in ("eval_seed_base", "test_seed_base"):
+        value = getattr(args, name)
+        if value is not None and value < 0:
+            raise ValueError(f"--{name.replace('_', '-')} cannot be negative.")
+    if args.test_episodes < 0:
+        raise ValueError("--test-episodes cannot be negative.")
+    if (
+        args.eval_seed_base is not None
+        and args.test_seed_base is not None
+        and args.eval_seed_base == args.test_seed_base
+    ):
+        raise ValueError("Validation and test seed bases must be different.")
     for name in ("modes", "seeds", "difficulties"):
         values = getattr(args, name)
         if len(values) != len(set(values)):
@@ -137,16 +187,25 @@ def curve_path(
     )
 
 
-def curve_is_complete(path: Path, expected_iteration: int) -> bool:
+def curve_is_complete(
+    path: Path,
+    expected_iteration: int,
+    expected_joint_steps: int | None = None,
+) -> bool:
     if not path.is_file():
         return False
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return False
+    points = payload.get("points", ())
+    if expected_joint_steps is not None:
+        return max(
+            (int(point.get("joint_env_steps", -1)) for point in points),
+            default=-1,
+        ) >= expected_joint_steps
     return max(
-        (int(point.get("iteration", -1)) for point in payload.get("points", ())),
-        default=-1,
+        (int(point.get("iteration", -1)) for point in points), default=-1
     ) >= expected_iteration
 
 
@@ -155,9 +214,12 @@ def online_command(
 ) -> list[str]:
     output_dir = experiment_dir(args, mode, difficulty, seed)
     method_name = f"vae_{mode}_controlled"
-    if mode == "full" and args.full_base_freeze_iterations > 0:
+    if mode == "full" and (
+        args.full_base_freeze_iterations > 0
+        or args.full_base_freeze_joint_steps > 0
+    ):
         method_name = "vae_full_skill_first"
-    return [
+    command = [
         sys.executable,
         str(ONLINE_SCRIPT),
         "--vae-checkpoint",
@@ -179,6 +241,8 @@ def online_command(
         str(args.iterations),
         "--episodes-per-iteration",
         str(args.episodes_per_iteration),
+        "--train-batch-joint-steps",
+        str(args.train_batch_joint_steps),
         "--eval-every",
         str(args.eval_every),
         "--eval-episodes",
@@ -207,12 +271,25 @@ def online_command(
         str(args.skill_warmup_iterations),
         "--full-base-freeze-iterations",
         str(args.full_base_freeze_iterations),
+        "--full-base-freeze-joint-steps",
+        str(args.full_base_freeze_joint_steps),
         "--seed",
         str(seed),
         "--device",
         args.device,
         "--deterministic" if args.deterministic else "--no-deterministic",
     ]
+    if args.joint_step_budget is not None:
+        command.extend(("--joint-step-budget", str(args.joint_step_budget)))
+        command.extend(
+            ("--eval-every-joint-steps", str(args.eval_every_joint_steps))
+        )
+    if args.eval_seed_base is not None:
+        command.extend(("--eval-seed-base", str(args.eval_seed_base)))
+    if args.test_seed_base is not None:
+        command.extend(("--test-seed-base", str(args.test_seed_base)))
+        command.extend(("--test-episodes", str(args.test_episodes)))
+    return command
 
 
 def analyze_command(args: argparse.Namespace, curves: list[Path]) -> list[str]:
@@ -225,8 +302,11 @@ def analyze_command(args: argparse.Namespace, curves: list[Path]) -> list[str]:
     ]
     for threshold in args.thresholds:
         command.extend(("--threshold", threshold))
-    if args.budget is not None:
-        command.extend(("--budget", str(args.budget)))
+    analysis_budget = (
+        args.joint_step_budget if args.joint_step_budget is not None else args.budget
+    )
+    if analysis_budget is not None:
+        command.extend(("--budget", str(analysis_budget)))
     command.extend(("--output", str(args.output_root / "comparison.json")))
     return command
 
@@ -338,7 +418,9 @@ def main() -> None:
             for difficulty in args.difficulties:
                 for seed in args.seeds:
                     curve = curve_path(args, mode, difficulty, seed)
-                    if curve_is_complete(curve, args.iterations) and not args.force:
+                    if curve_is_complete(
+                        curve, args.iterations, args.joint_step_budget
+                    ) and not args.force:
                         print(f"SKIP complete curve: {curve}", flush=True)
                         continue
                     if curve.is_file() and not args.dry_run:
@@ -364,7 +446,9 @@ def main() -> None:
             incomplete = [
                 path
                 for path in curves
-                if not curve_is_complete(path, args.iterations)
+                if not curve_is_complete(
+                    path, args.iterations, args.joint_step_budget
+                )
             ]
             if incomplete:
                 formatted = "\n".join(f"  - {path}" for path in incomplete)

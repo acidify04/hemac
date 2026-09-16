@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import json
 import math
 import os
 import random
@@ -39,7 +40,6 @@ from skill_discovery.collect_offline_data import (
     get_core_env,
 )
 from skill_discovery.drone_skill_vae import load_drone_skill_vae
-from skill_discovery.drone_task import classify_drone_skill_outcome
 from skill_discovery.evaluate_drone_bc import drone_action_scale
 from skill_discovery.finetune_hissd_drone_online import (
     add_per_drone_gae,
@@ -84,25 +84,69 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--success-min-coverage-ratio", type=float, default=0.6)
     parser.add_argument("--iterations", type=int, default=40)
     parser.add_argument("--episodes-per-iteration", type=int, default=8)
+    parser.add_argument(
+        "--train-batch-joint-steps",
+        type=int,
+        default=8000,
+        help=(
+            "Collect at least this many joint environment cycles before each "
+            "PPO update. Set to 0 to use --episodes-per-iteration instead."
+        ),
+    )
     parser.add_argument("--eval-every", type=int, default=5)
+    parser.add_argument(
+        "--joint-step-budget",
+        type=int,
+        help=(
+            "Stop after this many target joint environment cycles. When set, "
+            "this takes precedence over --iterations."
+        ),
+    )
+    parser.add_argument(
+        "--eval-every-joint-steps",
+        type=int,
+        help=(
+            "Evaluate whenever this many target joint cycles have elapsed. "
+            "Must be used together with --joint-step-budget."
+        ),
+    )
     parser.add_argument("--eval-episodes", type=int, default=100)
-    parser.add_argument("--ppo-epochs", type=int, default=4)
-    parser.add_argument("--minibatch-size", type=int, default=256)
-    parser.add_argument("--actor-lr", type=float, default=1e-4)
-    parser.add_argument("--skill-lr", type=float, default=2e-5)
+    parser.add_argument(
+        "--eval-seed-base",
+        type=int,
+        help=(
+            "Seed base for the fixed validation environments. If omitted, the "
+            "training seed is used for backward compatibility."
+        ),
+    )
+    parser.add_argument(
+        "--test-seed-base",
+        type=int,
+        help="Independent seed base for one held-out final test evaluation.",
+    )
+    parser.add_argument(
+        "--test-episodes",
+        type=int,
+        default=0,
+        help="Held-out episodes evaluated once after selecting the best checkpoint.",
+    )
+    parser.add_argument("--ppo-epochs", type=int, default=5)
+    parser.add_argument("--minibatch-size", type=int, default=1024)
+    parser.add_argument("--actor-lr", type=float, default=3e-4)
+    parser.add_argument("--skill-lr", type=float, default=1e-4)
     parser.add_argument("--critic-lr", type=float, default=3e-4)
     parser.add_argument("--log-std-lr", type=float, default=2e-5)
     parser.add_argument("--log-std-init", type=float, default=-2.0)
     parser.add_argument("--log-std-min", type=float, default=-3.0)
     parser.add_argument("--log-std-max", type=float, default=-0.7)
-    parser.add_argument("--gamma", type=float, default=0.99)
+    parser.add_argument("--gamma", type=float, default=0.995)
     parser.add_argument("--gae-lambda", type=float, default=0.95)
-    parser.add_argument("--clip-ratio", type=float, default=0.15)
+    parser.add_argument("--clip-ratio", type=float, default=0.2)
     parser.add_argument("--value-coeff", type=float, default=0.5)
-    parser.add_argument("--entropy-coeff", type=float, default=0.002)
-    parser.add_argument("--anchor-coeff", type=float, default=0.02)
-    parser.add_argument("--skill-anchor-coeff", type=float, default=0.05)
-    parser.add_argument("--skill-warmup-iterations", type=int, default=5)
+    parser.add_argument("--entropy-coeff", type=float, default=0.01)
+    parser.add_argument("--anchor-coeff", type=float, default=0.001)
+    parser.add_argument("--skill-anchor-coeff", type=float, default=0.001)
+    parser.add_argument("--skill-warmup-iterations", type=int, default=0)
     parser.add_argument(
         "--full-base-freeze-iterations",
         type=int,
@@ -110,6 +154,15 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Keep the BC base head fixed for the first N full-skill PPO "
             "iterations so target adaptation cannot immediately bypass z."
+        ),
+    )
+    parser.add_argument(
+        "--full-base-freeze-joint-steps",
+        type=int,
+        default=50_000,
+        help=(
+            "Keep the BC base head fixed for this many initial target cycles "
+            "in full-skill mode. This is ignored by no_skill."
         ),
     )
     parser.add_argument(
@@ -164,14 +217,53 @@ def validate_args(args: argparse.Namespace) -> None:
     ):
         if getattr(args, name) <= 0:
             raise ValueError(f"--{name.replace('_', '-')} must be positive.")
+    if args.train_batch_joint_steps < 0:
+        raise ValueError("--train-batch-joint-steps cannot be negative.")
     if not 0.0 < args.success_min_coverage_ratio <= 1.0:
         raise ValueError("--success-min-coverage-ratio must be in (0, 1].")
     if args.log_std_min >= args.log_std_max:
         raise ValueError("--log-std-min must be lower than --log-std-max.")
     if args.anchor_coeff < 0 or args.skill_anchor_coeff < 0:
         raise ValueError("Anchor coefficients cannot be negative.")
-    if args.skill_warmup_iterations < 0 or args.full_base_freeze_iterations < 0:
+    if (
+        args.skill_warmup_iterations < 0
+        or args.full_base_freeze_iterations < 0
+        or args.full_base_freeze_joint_steps < 0
+    ):
         raise ValueError("Skill/base warm-up iteration counts cannot be negative.")
+    step_options = (
+        args.joint_step_budget is not None,
+        args.eval_every_joint_steps is not None,
+    )
+    if any(step_options) and not all(step_options):
+        raise ValueError(
+            "--joint-step-budget and --eval-every-joint-steps must be used together."
+        )
+    if args.joint_step_budget is not None:
+        if args.joint_step_budget <= 0 or args.eval_every_joint_steps <= 0:
+            raise ValueError(
+                "Joint-step budget and evaluation interval must be positive."
+            )
+        if args.eval_every_joint_steps > args.joint_step_budget:
+            raise ValueError(
+                "--eval-every-joint-steps cannot exceed --joint-step-budget."
+            )
+    for name in ("eval_seed_base", "test_seed_base"):
+        value = getattr(args, name)
+        if value is not None and value < 0:
+            raise ValueError(f"--{name.replace('_', '-')} cannot be negative.")
+    if args.test_episodes < 0:
+        raise ValueError("--test-episodes cannot be negative.")
+    if (args.test_seed_base is None) != (args.test_episodes == 0):
+        raise ValueError(
+            "--test-seed-base and a positive --test-episodes must be used together."
+        )
+    if (
+        args.eval_seed_base is not None
+        and args.test_seed_base is not None
+        and args.eval_seed_base == args.test_seed_base
+    ):
+        raise ValueError("Validation and test seed bases must be different.")
     if args.skill_mode == "no_skill" and not args.train_base_action_head:
         raise ValueError(
             "--skill-mode no_skill requires --train-base-action-head so the "
@@ -222,7 +314,6 @@ def rollout_episode(
     log_std: torch.Tensor,
     action_scale: float,
     reward_scale: float,
-    success_min_coverage_ratio: float,
     seed: int,
     device: torch.device,
     stochastic: bool,
@@ -358,16 +449,11 @@ def rollout_episode(
 
     goal_found = any(agent_found_goal(core_env, drone_id) for drone_id in drone_ids)
     coverage = float(core_env.current_coverage_ratio())
+    reward_coverage = float(core_env.current_drone_reward_coverage_ratio())
     fatal_crash = bool(core_env.collided)
-    success = (
-        classify_drone_skill_outcome(
-            goal_found,
-            coverage + 1e-6,
-            success_min_coverage_ratio,
-            fatal_crash=fatal_crash,
-        )
-        == "success"
-    )
+    # The environment excludes base sectors from drone-only success coverage.
+    # Use its terminal decision rather than reclassifying with full-map coverage.
+    success = bool(core_env.mission_success)
     return transitions, {
         "success": float(success),
         "goal_found": float(goal_found),
@@ -375,6 +461,7 @@ def rollout_episode(
         "drone_crash": float(bool(core_env.drone_crash)),
         "observer_crash": 0.0,
         "coverage": coverage,
+        "reward_coverage": reward_coverage,
         "cycles": float(cycle_count),
         "episode_return": float(episode_return),
         "skill_action_delta": float(
@@ -540,6 +627,8 @@ def evaluate_policy(
     log_std: torch.Tensor,
     args: argparse.Namespace,
     device: torch.device,
+    episode_count: int | None = None,
+    seed_base: int | None = None,
 ) -> dict[str, float]:
     config = build_env_config(
         checkpoint_env_config,
@@ -547,7 +636,9 @@ def evaluate_policy(
         args.success_min_coverage_ratio,
     )
     results = []
-    for episode_index in range(args.eval_episodes):
+    episode_count = args.eval_episodes if episode_count is None else episode_count
+    seed_base = args.seed if seed_base is None else seed_base
+    for episode_index in range(episode_count):
         env = HeMAC_v0.env(**config)
         try:
             _, metrics = rollout_episode(
@@ -561,8 +652,7 @@ def evaluate_policy(
                 log_std=log_std,
                 action_scale=drone_action_scale(config),
                 reward_scale=args.reward_scale,
-                success_min_coverage_ratio=args.success_min_coverage_ratio,
-                seed=args.seed + args.difficulty * 1_000_000 + episode_index,
+                seed=seed_base + args.difficulty * 1_000_000 + episode_index,
                 device=device,
                 stochastic=False,
                 skill_mode=args.skill_mode,
@@ -578,8 +668,9 @@ def curve_point(
     metrics: dict[str, float],
     joint_env_steps: int,
     iteration: int,
+    scheduled_joint_env_steps: int | None = None,
 ) -> dict[str, Any]:
-    return {
+    point = {
         "method": args.method_name,
         "seed": args.seed,
         "difficulty": args.difficulty,
@@ -591,12 +682,16 @@ def curve_point(
         "drone_crash_rate": metrics["drone_crash"],
         "observer_crash_rate": 0.0,
         "mean_coverage_ratio": metrics["coverage"],
+        "mean_drone_reward_coverage_ratio": metrics["reward_coverage"],
         "mean_cycles": metrics["cycles"],
         "mean_episode_return": metrics["episode_return"],
         "mean_skill_action_delta": metrics["skill_action_delta"],
         "mean_skill_latent_std": metrics["skill_latent_std"],
         "mean_skill_switch_rate": metrics["skill_switch_rate"],
     }
+    if scheduled_joint_env_steps is not None:
+        point["scheduled_joint_env_steps"] = scheduled_joint_env_steps
+    return point
 
 
 def save_checkpoint(
@@ -712,7 +807,11 @@ def main() -> None:
     print(
         f"Drone skill-VAE PPO difficulty={args.difficulty}, seed={args.seed}, "
         f"skill_mode={args.skill_mode}, train_base={args.train_base_action_head}, "
-        f"base_freeze={args.full_base_freeze_iterations}, "
+        f"base_freeze_iterations={args.full_base_freeze_iterations}, "
+        f"base_freeze_steps={args.full_base_freeze_joint_steps}, "
+        f"train_batch_steps={args.train_batch_joint_steps}, "
+        f"joint_step_budget={args.joint_step_budget}, "
+        f"eval_step_interval={args.eval_every_joint_steps}, "
         f"deterministic={args.deterministic}, "
         f"checkpoint={args.vae_checkpoint}, env_checkpoint={resolved_mappo}"
     )
@@ -727,6 +826,7 @@ def main() -> None:
         log_std=log_std,
         args=args,
         device=device,
+        seed_base=args.eval_seed_base,
     )
     joint_env_steps = 0
     append_curve_points(
@@ -734,6 +834,13 @@ def main() -> None:
         [curve_point(args, baseline, 0, 0)],
         metadata={
             "evaluation_episodes": args.eval_episodes,
+            "validation_seed_base": (
+                args.seed if args.eval_seed_base is None else args.eval_seed_base
+            ),
+            "test_seed_base": args.test_seed_base,
+            "test_episodes": args.test_episodes,
+            "requested_joint_step_budget": args.joint_step_budget,
+            "evaluation_joint_step_interval": args.eval_every_joint_steps,
             "source_checkpoint": str(args.vae_checkpoint.resolve()),
             "environment_checkpoint": str(resolved_mappo),
             "curve_method": args.method_name,
@@ -745,9 +852,12 @@ def main() -> None:
             ),
             "train_base_action_head": args.train_base_action_head,
             "full_base_freeze_iterations": args.full_base_freeze_iterations,
+            "full_base_freeze_joint_steps": args.full_base_freeze_joint_steps,
+            "train_batch_joint_steps": args.train_batch_joint_steps,
             "deterministic": args.deterministic,
-            "success_definition": (
-                "drone_goal_found_and_coverage_without_fatal_crash"
+            "success_definition": "environment_mission_success",
+            "success_coverage_definition": (
+                "drone_reward_coverage_excluding_base_sectors"
             ),
             "success_min_coverage_ratio": args.success_min_coverage_ratio,
             "training_step_definition": (
@@ -771,7 +881,9 @@ def main() -> None:
     print(
         f"BASELINE success={baseline['success']:.3f} "
         f"goal={baseline['goal_found']:.3f} crash={baseline['fatal_crash']:.3f} "
-        f"coverage={baseline['coverage']:.3f} return={baseline['episode_return']:.2f} "
+        f"coverage={baseline['coverage']:.3f} "
+        f"reward_coverage={baseline['reward_coverage']:.3f} "
+        f"return={baseline['episode_return']:.2f} "
         f"skill_delta={baseline['skill_action_delta']:.4f} "
         f"skill_switch={baseline['skill_switch_rate']:.3f}"
     )
@@ -789,16 +901,29 @@ def main() -> None:
         args=args,
     )
 
-    for iteration in range(1, args.iterations + 1):
-        base_trainable = args.train_base_action_head and not (
-            args.skill_mode == "full"
-            and iteration <= args.full_base_freeze_iterations
+    iteration = 0
+    next_eval_step = args.eval_every_joint_steps
+    while (
+        joint_env_steps < args.joint_step_budget
+        if args.joint_step_budget is not None
+        else iteration < args.iterations
+    ):
+        iteration += 1
+        base_is_frozen = args.skill_mode == "full" and (
+            iteration <= args.full_base_freeze_iterations
+            or joint_env_steps < args.full_base_freeze_joint_steps
         )
+        base_trainable = args.train_base_action_head and not base_is_frozen
         for parameter in model.base_action_head.parameters():
             parameter.requires_grad_(base_trainable)
         trajectories: list[dict[str, Any]] = []
         episode_metrics = []
-        for episode_index in range(args.episodes_per_iteration):
+        collection_stop_step = None
+        if args.joint_step_budget is not None:
+            collection_stop_step = min(args.joint_step_budget, next_eval_step)
+        batch_start_steps = joint_env_steps
+        episode_index = 0
+        while True:
             env = HeMAC_v0.env(**config)
             try:
                 episode, metrics = rollout_episode(
@@ -812,7 +937,6 @@ def main() -> None:
                     log_std=log_std,
                     action_scale=drone_action_scale(config),
                     reward_scale=args.reward_scale,
-                    success_min_coverage_ratio=args.success_min_coverage_ratio,
                     seed=args.seed + iteration * 10_000 + episode_index,
                     device=device,
                     stochastic=True,
@@ -824,6 +948,20 @@ def main() -> None:
             trajectories.extend(episode)
             episode_metrics.append(metrics)
             joint_env_steps += int(round(metrics["cycles"]))
+            episode_index += 1
+            if (
+                collection_stop_step is not None
+                and joint_env_steps >= collection_stop_step
+            ):
+                break
+            if args.train_batch_joint_steps > 0:
+                if (
+                    joint_env_steps - batch_start_steps
+                    >= args.train_batch_joint_steps
+                ):
+                    break
+            elif episode_index >= args.episodes_per_iteration:
+                break
         adapt_skill = (
             args.skill_mode == "full"
             and iteration > args.skill_warmup_iterations
@@ -843,9 +981,15 @@ def main() -> None:
             skill_mode=args.skill_mode,
         )
         train = average_metrics(episode_metrics)
+        progress_target = (
+            f"steps_target={args.joint_step_budget}"
+            if args.joint_step_budget is not None
+            else f"iterations_target={args.iterations}"
+        )
         print(
-            f"iter={iteration:03d}/{args.iterations} steps={joint_env_steps} "
+            f"iter={iteration:03d} steps={joint_env_steps} {progress_target} "
             f"success={train['success']:.3f} crash={train['fatal_crash']:.3f} "
+            f"episodes={len(episode_metrics)} "
             f"return={train['episode_return']:.2f} "
             f"skill_delta={train['skill_action_delta']:.4f} "
             f"skill_switch={train['skill_switch_rate']:.3f} "
@@ -868,7 +1012,13 @@ def main() -> None:
             metrics={**train, **update},
             args=args,
         )
-        if iteration % args.eval_every != 0:
+        if args.joint_step_budget is not None:
+            should_evaluate = joint_env_steps >= next_eval_step
+            scheduled_eval_step = min(next_eval_step, args.joint_step_budget)
+        else:
+            should_evaluate = iteration % args.eval_every == 0
+            scheduled_eval_step = None
+        if not should_evaluate:
             continue
         evaluation = evaluate_policy(
             checkpoint_env_config=checkpoint_env_config,
@@ -881,17 +1031,30 @@ def main() -> None:
             log_std=log_std,
             args=args,
             device=device,
+            seed_base=args.eval_seed_base,
         )
         append_curve_points(
             curve_path,
-            [curve_point(args, evaluation, joint_env_steps, iteration)],
+            [
+                curve_point(
+                    args,
+                    evaluation,
+                    joint_env_steps,
+                    iteration,
+                    scheduled_joint_env_steps=scheduled_eval_step,
+                )
+            ],
         )
+        if args.joint_step_budget is not None:
+            while next_eval_step <= joint_env_steps:
+                next_eval_step += args.eval_every_joint_steps
         score = evaluation_score(evaluation)
         print(
             f"EVAL success={evaluation['success']:.3f} "
             f"goal={evaluation['goal_found']:.3f} "
             f"crash={evaluation['fatal_crash']:.3f} "
             f"coverage={evaluation['coverage']:.3f} "
+            f"reward_coverage={evaluation['reward_coverage']:.3f} "
             f"return={evaluation['episode_return']:.2f} "
             f"skill_delta={evaluation['skill_action_delta']:.4f} score={score:.4f}"
         )
@@ -932,11 +1095,49 @@ def main() -> None:
         value_head,
         log_std,
         optimizer,
-        iteration=args.iterations,
+        iteration=iteration,
         joint_env_steps=joint_env_steps,
         metrics={"best_score": best_score},
         args=args,
     )
+    if args.test_seed_base is not None:
+        test_metrics = evaluate_policy(
+            checkpoint_env_config=checkpoint_env_config,
+            model=model,
+            central_encoder=central_encoder,
+            value_head=value_head,
+            anchor_base_head=anchor_base_head,
+            anchor_mu=anchor_mu,
+            anchor_skill_head=anchor_skill_head,
+            log_std=log_std,
+            args=args,
+            device=device,
+            episode_count=args.test_episodes,
+            seed_base=args.test_seed_base,
+        )
+        test_payload = {
+            "method": args.method_name,
+            "training_seed": args.seed,
+            "difficulty": args.difficulty,
+            "test_seed_base": args.test_seed_base,
+            "test_episodes": args.test_episodes,
+            "selected_validation_score": best_score,
+            "training_joint_env_steps": joint_env_steps,
+            "metrics": test_metrics,
+        }
+        test_path = args.output_dir / "final_test_metrics.json"
+        temporary = test_path.with_suffix(test_path.suffix + ".tmp")
+        temporary.write_text(
+            json.dumps(test_payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(test_path)
+        print(
+            f"FINAL TEST success={test_metrics['success']:.3f} "
+            f"goal={test_metrics['goal_found']:.3f} "
+            f"crash={test_metrics['fatal_crash']:.3f} "
+            f"return={test_metrics['episode_return']:.2f} path={test_path}"
+        )
     print(f"Saved learning curve: {curve_path}")
 
 

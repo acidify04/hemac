@@ -37,7 +37,8 @@ python src/skill_discovery/run_vae_skill_control.py \
   --output-root src/skill_discovery/outputs/learning_efficiency/drone_d12_t34/vae_chunked_k8_control \
   --seeds 2061 2062 2063 2064 2065 2066 2067 2068 2069 2070 \
   --difficulties 3 4 \
-  --full-base-freeze-iterations 0 \
+  --train-batch-joint-steps 8000 \
+  --full-base-freeze-joint-steps 50000 \
   --device cuda
 ```
 
@@ -46,9 +47,42 @@ metric. For an 8-cycle skill it should remain close to `1/8 = 0.125`; short
 final windows can make it slightly larger.
 
 The second command automatically writes paired AUC statistics and
-success/reward learning-curve plots. Use a separate output root with
-`--full-base-freeze-iterations 10` to evaluate the skill-first transfer
-schedule without mixing it into the strict architecture control.
+success/reward learning-curve plots. Each PPO update now uses approximately
+8,000 joint cycles, matching the batch scale used by the MAPPO trainer. In
+full-skill mode, the BC base action head stays fixed for the first 50,000
+target cycles so PPO initially adapts the skill path rather than bypassing it.
+The no-skill control always updates its base head immediately.
+
+For the confirmatory 500k-step protocol, use fixed validation/test seeds and
+step-based evaluation rather than iteration-based evaluation:
+
+```bash
+python src/skill_discovery/run_vae_skill_control.py \
+  --vae-checkpoint src/skill_discovery/checkpoints/drone_skill_vae_chunked_k8/drone_skill_vae_best.pt \
+  --output-root src/skill_discovery/outputs/learning_efficiency/drone_d12_t34/vae_chunked_k8_500k \
+  --seeds 2061 2062 2063 2064 2065 2066 2067 2068 2069 2070 \
+  --difficulties 3 4 \
+  --joint-step-budget 500000 \
+  --eval-every-joint-steps 25000 \
+  --eval-episodes 200 \
+  --eval-seed-base 100000000 \
+  --test-seed-base 200000000 \
+  --test-episodes 200 \
+  --train-batch-joint-steps 8000 \
+  --full-base-freeze-joint-steps 50000 \
+  --parallel-jobs 1 \
+  --device cuda
+```
+
+The resulting `success_auc` is already divided by the common step budget and
+is therefore the primary normalized success AUC. Held-out test results are
+written to each run directory as `final_test_metrics.json` and never enter
+checkpoint selection or AUC computation.
+
+Online success is read directly from the environment's `mission_success`
+flag. `mean_coverage_ratio` remains full-search-area coverage, while
+`mean_drone_reward_coverage_ratio` is the base-excluded coverage used by the
+drone-only 60% success condition.
 
 ## Data pipeline
 
