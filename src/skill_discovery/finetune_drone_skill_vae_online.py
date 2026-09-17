@@ -1,8 +1,8 @@
-"""Fine-tune a homogeneous drone skill-VAE actor with parameter-shared PPO.
+"""Adapt a homogeneous drone skill-VAE policy with parameter-shared PPO.
 
-The offline CNN/temporal encoder remains fixed. PPO adapts the posterior mean
-and skill-conditioned action residual, while a training-only central critic
-uses the world map for CTDE credit assignment.
+The default mode freezes the offline skill policy and learns a target residual
+actor, while a training-only central critic uses the world map for CTDE credit
+assignment. The earlier joint head fine-tuning remains available as an option.
 """
 
 from __future__ import annotations
@@ -175,11 +175,21 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--ppo-actor-mode",
+        choices=("skill_support", "joint_finetune"),
+        default="skill_support",
+        help=(
+            "skill_support freezes the offline policy and trains a matched PPO "
+            "residual; joint_finetune retains the earlier end-to-end head update."
+        ),
+    )
+    parser.add_argument("--online-residual-scale", type=float, default=0.25)
+    parser.add_argument(
         "--train-base-action-head",
         action="store_true",
         help=(
-            "Also adapt the BC action head. Required by no_skill and recommended "
-            "for a controlled full/no-skill comparison."
+            "Also adapt the BC action head in joint_finetune mode. The matched "
+            "skill_support control uses its separate residual actor instead."
         ),
     )
     parser.add_argument("--reward-scale", type=float, default=100.0)
@@ -223,6 +233,7 @@ def validate_args(args: argparse.Namespace) -> None:
         "clip_ratio",
         "reward_scale",
         "shared_terminal_crash_penalty",
+        "online_residual_scale",
         "max_grad_norm",
     ):
         if getattr(args, name) <= 0:
@@ -274,7 +285,11 @@ def validate_args(args: argparse.Namespace) -> None:
         and args.eval_seed_base == args.test_seed_base
     ):
         raise ValueError("Validation and test seed bases must be different.")
-    if args.skill_mode == "no_skill" and not args.train_base_action_head:
+    if (
+        args.ppo_actor_mode == "joint_finetune"
+        and args.skill_mode == "no_skill"
+        and not args.train_base_action_head
+    ):
         raise ValueError(
             "--skill-mode no_skill requires --train-base-action-head so the "
             "control actor can learn rather than only adapting exploration noise."
@@ -309,6 +324,33 @@ def apply_shared_terminal_crash_penalty(
     return np.minimum(cycle_rewards, -abs(float(penalty)))
 
 
+class OnlineResidualPolicy(nn.Module):
+    """Small target PPO actor placed on top of a frozen offline action prior."""
+
+    def __init__(
+        self,
+        observation_dim: int,
+        skill_dim: int,
+        action_dim: int,
+        hidden_dim: int = 64,
+    ) -> None:
+        super().__init__()
+        self.network = nn.Sequential(
+            nn.Linear(observation_dim + skill_dim, hidden_dim),
+            nn.SiLU(),
+            nn.LayerNorm(hidden_dim),
+            nn.Linear(hidden_dim, action_dim),
+        )
+        nn.init.zeros_(self.network[-1].weight)
+        nn.init.zeros_(self.network[-1].bias)
+
+    def forward(
+        self, observation_features: torch.Tensor, skills: torch.Tensor
+    ) -> torch.Tensor:
+        inputs = torch.cat((observation_features, skills), dim=-1)
+        return torch.tanh(self.network(inputs))
+
+
 def configure_backend(device: torch.device, deterministic: bool) -> None:
     if not deterministic:
         configure_gpu_backend(device)
@@ -328,6 +370,7 @@ def rollout_episode(
     *,
     env,
     model,
+    online_residual_policy: OnlineResidualPolicy,
     central_encoder: CentralStateEncoder,
     value_head: OnlineValueHead,
     anchor_base_head: nn.Module,
@@ -341,6 +384,8 @@ def rollout_episode(
     device: torch.device,
     stochastic: bool,
     skill_mode: str,
+    ppo_actor_mode: str,
+    online_residual_scale: float,
 ) -> tuple[list[dict[str, Any]], dict[str, float]]:
     env.reset(seed=seed)
     core_env = get_core_env(env)
@@ -374,7 +419,7 @@ def rollout_episode(
                 contexts = outputs["skill_context"][0]
                 if skill_mode == "full":
                     skills = outputs["skills"][0]
-                    logits = outputs["action_logits"][0]
+                    offline_logits = outputs["action_logits"][0]
                     anchor_skills = anchor_mu(contexts)
                     anchor_residual = model.skill_residual(
                         features,
@@ -388,9 +433,16 @@ def rollout_episode(
                     skill_switch_count += int(outputs["skill_switched"])
                 else:
                     skills = torch.zeros_like(outputs["skills"][0])
-                    logits = model.base_action_head(features)
+                    offline_logits = model.base_action_head(features)
                     anchor_skills = torch.zeros_like(skills)
                     anchor_logits = anchor_base_head(features)
+                if ppo_actor_mode == "skill_support":
+                    logits = offline_logits + online_residual_scale * (
+                        online_residual_policy(features, skills)
+                    )
+                    anchor_logits = offline_logits
+                else:
+                    logits = offline_logits
                 base_actions = torch.tanh(model.base_action_head(features))
                 policy_actions = torch.tanh(logits)
                 skill_action_delta_sum += (
@@ -504,6 +556,7 @@ def rollout_episode(
 
 def ppo_update(
     model,
+    online_residual_policy: OnlineResidualPolicy,
     central_encoder: CentralStateEncoder,
     value_head: OnlineValueHead,
     log_std: nn.Parameter,
@@ -514,6 +567,8 @@ def ppo_update(
     *,
     adapt_skill: bool,
     skill_mode: str,
+    ppo_actor_mode: str,
+    online_residual_scale: float,
 ) -> dict[str, float]:
     if not transitions:
         raise RuntimeError("No PPO transitions were collected.")
@@ -555,12 +610,16 @@ def ppo_update(
             contexts = data["skill_context"][indices]
             if skill_mode == "no_skill":
                 skills = torch.zeros_like(data["anchor_skill"][indices])
-            elif adapt_skill:
+            elif adapt_skill and ppo_actor_mode == "joint_finetune":
                 skills = model.posterior_mu(contexts)
             else:
                 skills = data["anchor_skill"][indices]
             features = data["observation_features"][indices]
-            if skill_mode == "full":
+            if ppo_actor_mode == "skill_support":
+                logits = data["anchor_logits"][indices] + online_residual_scale * (
+                    online_residual_policy(features, skills)
+                )
+            elif skill_mode == "full":
                 logits = model.decode_logits(features, skills)
             else:
                 logits = model.base_action_head(features)
@@ -609,15 +668,18 @@ def ppo_update(
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             trainable = [
-                *model.skill_action_head.parameters(),
                 *central_encoder.parameters(),
                 *value_head.parameters(),
                 log_std,
             ]
-            if args.train_base_action_head:
-                trainable.extend(model.base_action_head.parameters())
-            if adapt_skill:
-                trainable.extend(model.posterior_mu.parameters())
+            if ppo_actor_mode == "skill_support":
+                trainable.extend(online_residual_policy.parameters())
+            else:
+                trainable.extend(model.skill_action_head.parameters())
+                if args.train_base_action_head:
+                    trainable.extend(model.base_action_head.parameters())
+                if adapt_skill:
+                    trainable.extend(model.posterior_mu.parameters())
             grad_norm = nn.utils.clip_grad_norm_(trainable, args.max_grad_norm)
             optimizer.step()
             with torch.no_grad():
@@ -647,6 +709,7 @@ def evaluate_policy(
     *,
     checkpoint_env_config: dict[str, Any],
     model,
+    online_residual_policy: OnlineResidualPolicy,
     central_encoder: CentralStateEncoder,
     value_head: OnlineValueHead,
     anchor_base_head: nn.Module,
@@ -672,6 +735,7 @@ def evaluate_policy(
             _, metrics = rollout_episode(
                 env=env,
                 model=model,
+                online_residual_policy=online_residual_policy,
                 central_encoder=central_encoder,
                 value_head=value_head,
                 anchor_base_head=anchor_base_head,
@@ -687,6 +751,8 @@ def evaluate_policy(
                 device=device,
                 stochastic=False,
                 skill_mode=args.skill_mode,
+                ppo_actor_mode=args.ppo_actor_mode,
+                online_residual_scale=args.online_residual_scale,
             )
         finally:
             env.close()
@@ -728,6 +794,7 @@ def curve_point(
 def save_checkpoint(
     path: Path,
     model,
+    online_residual_policy: OnlineResidualPolicy,
     source_payload: dict[str, Any],
     central_encoder: CentralStateEncoder,
     value_head: OnlineValueHead,
@@ -744,6 +811,9 @@ def save_checkpoint(
         {
             "model_config": model.config(),
             "model_state_dict": model.state_dict(),
+            "online_residual_policy_state_dict": (
+                online_residual_policy.state_dict()
+            ),
             "online_central_encoder_config": {
                 "channels": central_encoder.channels,
                 "map_size": central_encoder.map_size,
@@ -756,6 +826,7 @@ def save_checkpoint(
             "online_finetuning": {
                 "method": "homogeneous_skill_vae_parameter_sharing_ppo",
                 "skill_mode": args.skill_mode,
+                "ppo_actor_mode": args.ppo_actor_mode,
                 "difficulty": args.difficulty,
                 "iteration": iteration,
                 "joint_env_steps": joint_env_steps,
@@ -779,13 +850,14 @@ def main() -> None:
     model, source_payload = load_drone_skill_vae(args.vae_checkpoint, device)
     for parameter in model.parameters():
         parameter.requires_grad_(False)
+    joint_finetune = args.ppo_actor_mode == "joint_finetune"
     for parameter in model.skill_action_head.parameters():
-        parameter.requires_grad_(True)
+        parameter.requires_grad_(joint_finetune)
     initial_base_trainable = args.train_base_action_head and not (
         args.skill_mode == "full" and args.full_base_freeze_iterations > 0
     )
     for parameter in model.base_action_head.parameters():
-        parameter.requires_grad_(initial_base_trainable)
+        parameter.requires_grad_(joint_finetune and initial_base_trainable)
     for parameter in model.posterior_mu.parameters():
         parameter.requires_grad_(False)
     model.eval()
@@ -795,6 +867,11 @@ def main() -> None:
     for module in (anchor_base_head, anchor_mu, anchor_skill_head):
         for parameter in module.parameters():
             parameter.requires_grad_(False)
+    online_residual_policy = OnlineResidualPolicy(
+        model.observation_dim,
+        model.latent_dim,
+        model.action_dim,
+    ).to(device)
 
     resolved_mappo, checkpoint_env_config = load_checkpoint_env_config(
         args.mappo_checkpoint
@@ -820,6 +897,10 @@ def main() -> None:
     )
     optimizer = torch.optim.AdamW(
         [
+            {
+                "params": online_residual_policy.parameters(),
+                "lr": args.actor_lr,
+            },
             {"params": model.base_action_head.parameters(), "lr": args.actor_lr},
             {"params": model.skill_action_head.parameters(), "lr": args.actor_lr},
             {"params": model.posterior_mu.parameters(), "lr": args.skill_lr},
@@ -838,6 +919,7 @@ def main() -> None:
     print(
         f"Drone skill-VAE PPO difficulty={args.difficulty}, seed={args.seed}, "
         f"skill_mode={args.skill_mode}, train_base={args.train_base_action_head}, "
+        f"ppo_actor_mode={args.ppo_actor_mode}, "
         f"base_freeze_iterations={args.full_base_freeze_iterations}, "
         f"base_freeze_steps={args.full_base_freeze_joint_steps}, "
         f"train_batch_steps={args.train_batch_joint_steps}, "
@@ -849,6 +931,7 @@ def main() -> None:
     baseline = evaluate_policy(
         checkpoint_env_config=checkpoint_env_config,
         model=model,
+        online_residual_policy=online_residual_policy,
         central_encoder=central_encoder,
         value_head=value_head,
         anchor_base_head=anchor_base_head,
@@ -877,6 +960,8 @@ def main() -> None:
             "curve_method": args.method_name,
             "skill_model": "single_latent_homogeneous_drone_vae",
             "skill_mode": args.skill_mode,
+            "ppo_actor_mode": args.ppo_actor_mode,
+            "online_residual_scale": args.online_residual_scale,
             "skill_duration": model.skill_duration,
             "decoder_observation_conditioned": (
                 model.decoder_observation_conditioned
@@ -907,6 +992,7 @@ def main() -> None:
     best_score = evaluation_score(baseline)
     best_state = {
         "model": copy.deepcopy(model.state_dict()),
+        "online_residual": copy.deepcopy(online_residual_policy.state_dict()),
         "central": copy.deepcopy(central_encoder.state_dict()),
         "value": copy.deepcopy(value_head.state_dict()),
         "log_std": log_std.detach().clone(),
@@ -924,6 +1010,7 @@ def main() -> None:
     save_checkpoint(
         args.output_dir / "drone_skill_vae_online_best.pt",
         model,
+        online_residual_policy,
         source_payload,
         central_encoder,
         value_head,
@@ -947,7 +1034,9 @@ def main() -> None:
             iteration <= args.full_base_freeze_iterations
             or joint_env_steps < args.full_base_freeze_joint_steps
         )
-        base_trainable = args.train_base_action_head and not base_is_frozen
+        base_trainable = (
+            joint_finetune and args.train_base_action_head and not base_is_frozen
+        )
         for parameter in model.base_action_head.parameters():
             parameter.requires_grad_(base_trainable)
         trajectories: list[dict[str, Any]] = []
@@ -960,6 +1049,7 @@ def main() -> None:
                 episode, metrics = rollout_episode(
                     env=env,
                     model=model,
+                    online_residual_policy=online_residual_policy,
                     central_encoder=central_encoder,
                     value_head=value_head,
                     anchor_base_head=anchor_base_head,
@@ -975,6 +1065,8 @@ def main() -> None:
                     device=device,
                     stochastic=True,
                     skill_mode=args.skill_mode,
+                    ppo_actor_mode=args.ppo_actor_mode,
+                    online_residual_scale=args.online_residual_scale,
                 )
             finally:
                 env.close()
@@ -997,13 +1089,15 @@ def main() -> None:
             elif episode_index >= args.episodes_per_iteration:
                 break
         adapt_skill = (
-            args.skill_mode == "full"
+            joint_finetune
+            and args.skill_mode == "full"
             and iteration > args.skill_warmup_iterations
         )
         for parameter in model.posterior_mu.parameters():
             parameter.requires_grad_(adapt_skill)
         update = ppo_update(
             model,
+            online_residual_policy,
             central_encoder,
             value_head,
             log_std,
@@ -1013,6 +1107,8 @@ def main() -> None:
             device,
             adapt_skill=adapt_skill,
             skill_mode=args.skill_mode,
+            ppo_actor_mode=args.ppo_actor_mode,
+            online_residual_scale=args.online_residual_scale,
         )
         train = average_metrics(episode_metrics)
         progress_target = (
@@ -1030,12 +1126,14 @@ def main() -> None:
             f"policy={update['policy_loss']:.4f} value={update['value_loss']:.4f} "
             f"kl={update['approx_kl']:.5f} clip={update['clip_fraction']:.3f} "
             f"skill_mode={args.skill_mode} "
+            f"actor_mode={args.ppo_actor_mode} "
             f"skill_update={'on' if adapt_skill else 'off'} "
             f"base_update={'on' if base_trainable else 'off'}"
         )
         save_checkpoint(
             args.output_dir / "drone_skill_vae_online_last.pt",
             model,
+            online_residual_policy,
             source_payload,
             central_encoder,
             value_head,
@@ -1057,6 +1155,7 @@ def main() -> None:
         evaluation = evaluate_policy(
             checkpoint_env_config=checkpoint_env_config,
             model=model,
+            online_residual_policy=online_residual_policy,
             central_encoder=central_encoder,
             value_head=value_head,
             anchor_base_head=anchor_base_head,
@@ -1096,6 +1195,9 @@ def main() -> None:
             best_score = score
             best_state = {
                 "model": copy.deepcopy(model.state_dict()),
+                "online_residual": copy.deepcopy(
+                    online_residual_policy.state_dict()
+                ),
                 "central": copy.deepcopy(central_encoder.state_dict()),
                 "value": copy.deepcopy(value_head.state_dict()),
                 "log_std": log_std.detach().clone(),
@@ -1104,6 +1206,7 @@ def main() -> None:
             save_checkpoint(
                 args.output_dir / "drone_skill_vae_online_best.pt",
                 model,
+                online_residual_policy,
                 source_payload,
                 central_encoder,
                 value_head,
@@ -1116,6 +1219,7 @@ def main() -> None:
             )
 
     model.load_state_dict(best_state["model"])
+    online_residual_policy.load_state_dict(best_state["online_residual"])
     central_encoder.load_state_dict(best_state["central"])
     value_head.load_state_dict(best_state["value"])
     with torch.no_grad():
@@ -1124,6 +1228,7 @@ def main() -> None:
     save_checkpoint(
         args.output_dir / "drone_skill_vae_online_final.pt",
         model,
+        online_residual_policy,
         source_payload,
         central_encoder,
         value_head,
@@ -1138,6 +1243,7 @@ def main() -> None:
         test_metrics = evaluate_policy(
             checkpoint_env_config=checkpoint_env_config,
             model=model,
+            online_residual_policy=online_residual_policy,
             central_encoder=central_encoder,
             value_head=value_head,
             anchor_base_head=anchor_base_head,

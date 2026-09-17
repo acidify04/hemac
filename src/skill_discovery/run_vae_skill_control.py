@@ -84,6 +84,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--full-base-freeze-iterations", type=int, default=0)
     parser.add_argument("--full-base-freeze-joint-steps", type=int, default=0)
     parser.add_argument(
+        "--ppo-actor-mode",
+        choices=("skill_support", "joint_finetune"),
+        default="skill_support",
+    )
+    parser.add_argument("--online-residual-scale", type=float, default=0.25)
+    parser.add_argument(
         "--shared-terminal-crash-penalty", type=float, default=300.0
     )
     parser.add_argument("--parallel-jobs", type=int, default=1)
@@ -119,6 +125,7 @@ def validate_args(args: argparse.Namespace) -> None:
         "parallel_jobs",
         "torch_cpu_threads",
         "shared_terminal_crash_penalty",
+        "online_residual_scale",
     ):
         if getattr(args, name) <= 0:
             raise ValueError(f"--{name.replace('_', '-')} must be positive.")
@@ -218,7 +225,13 @@ def online_command(
 ) -> list[str]:
     output_dir = experiment_dir(args, mode, difficulty, seed)
     method_name = f"vae_{mode}_controlled"
-    if mode == "full" and (
+    if args.ppo_actor_mode == "skill_support":
+        method_name = (
+            "vae_skill_supported_ppo"
+            if mode == "full"
+            else "vae_no_skill_ppo_control"
+        )
+    elif mode == "full" and (
         args.full_base_freeze_iterations > 0
         or args.full_base_freeze_joint_steps > 0
     ):
@@ -238,7 +251,10 @@ def online_command(
         method_name,
         "--skill-mode",
         mode,
-        "--train-base-action-head",
+        "--ppo-actor-mode",
+        args.ppo_actor_mode,
+        "--online-residual-scale",
+        str(args.online_residual_scale),
         "--difficulty",
         str(difficulty),
         "--iterations",
@@ -285,6 +301,8 @@ def online_command(
         args.device,
         "--deterministic" if args.deterministic else "--no-deterministic",
     ]
+    if args.ppo_actor_mode == "joint_finetune":
+        command.append("--train-base-action-head")
     if args.joint_step_budget is not None:
         command.extend(("--joint-step-budget", str(args.joint_step_budget)))
         command.extend(

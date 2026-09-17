@@ -5,6 +5,7 @@ import torch
 
 from src.skill_discovery.drone_skill_vae import DroneSkillVAE
 from src.skill_discovery.finetune_drone_skill_vae_online import (
+    OnlineResidualPolicy,
     apply_shared_terminal_crash_penalty,
 )
 
@@ -113,3 +114,10 @@ def test_non_terminal_rewards_are_not_modified() -> None:
     )
 
     np.testing.assert_array_equal(unchanged, rewards)
+
+
+def test_online_residual_policy_preserves_frozen_prior_at_initialization() -> None:
+    policy = OnlineResidualPolicy(12, 8, 3)
+    residual = policy(torch.randn(5, 12), torch.randn(5, 8))
+
+    torch.testing.assert_close(residual, torch.zeros_like(residual))
