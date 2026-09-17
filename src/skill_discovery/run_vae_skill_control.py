@@ -1,9 +1,9 @@
 """Run paired skill-transfer versus no-skill PPO experiments.
 
 Both conditions use the same offline checkpoint, BC action head, centralized
-critic architecture, rollout budget, and seeds. By default the full condition
-uses a short skill-first base-head freeze; set --full-base-freeze-iterations 0
-to recover the strict architecture-only full/no-skill control.
+critic architecture, rollout budget, and seeds. Both action heads adapt from
+the first update by default; the optional freeze arguments enable a separate
+skill-first experiment without changing the controlled comparison.
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
     parser.add_argument("--iterations", type=int, default=40)
     parser.add_argument("--episodes-per-iteration", type=int, default=8)
-    parser.add_argument("--train-batch-joint-steps", type=int, default=8000)
+    parser.add_argument("--train-batch-joint-steps", type=int, default=5000)
     parser.add_argument("--eval-every", type=int, default=5)
     parser.add_argument("--joint-step-budget", type=int)
     parser.add_argument("--eval-every-joint-steps", type=int)
@@ -81,8 +81,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--anchor-coeff", type=float, default=0.001)
     parser.add_argument("--skill-anchor-coeff", type=float, default=0.001)
     parser.add_argument("--skill-warmup-iterations", type=int, default=0)
-    parser.add_argument("--full-base-freeze-iterations", type=int, default=10)
-    parser.add_argument("--full-base-freeze-joint-steps", type=int, default=50_000)
+    parser.add_argument("--full-base-freeze-iterations", type=int, default=0)
+    parser.add_argument("--full-base-freeze-joint-steps", type=int, default=0)
+    parser.add_argument(
+        "--shared-terminal-crash-penalty", type=float, default=300.0
+    )
     parser.add_argument("--parallel-jobs", type=int, default=1)
     parser.add_argument("--torch-cpu-threads", type=int, default=2)
     parser.add_argument("--thresholds", nargs="+", default=("3=0.6", "4=0.5"))
@@ -115,6 +118,7 @@ def validate_args(args: argparse.Namespace) -> None:
         "clip_ratio",
         "parallel_jobs",
         "torch_cpu_threads",
+        "shared_terminal_crash_penalty",
     ):
         if getattr(args, name) <= 0:
             raise ValueError(f"--{name.replace('_', '-')} must be positive.")
@@ -273,6 +277,8 @@ def online_command(
         str(args.full_base_freeze_iterations),
         "--full-base-freeze-joint-steps",
         str(args.full_base_freeze_joint_steps),
+        "--shared-terminal-crash-penalty",
+        str(args.shared_terminal_crash_penalty),
         "--seed",
         str(seed),
         "--device",

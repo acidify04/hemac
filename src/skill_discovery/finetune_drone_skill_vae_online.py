@@ -87,7 +87,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--train-batch-joint-steps",
         type=int,
-        default=8000,
+        default=5000,
         help=(
             "Collect at least this many joint environment cycles before each "
             "PPO update. Set to 0 to use --episodes-per-iteration instead."
@@ -159,7 +159,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--full-base-freeze-joint-steps",
         type=int,
-        default=50_000,
+        default=0,
         help=(
             "Keep the BC base head fixed for this many initial target cycles "
             "in full-skill mode. This is ignored by no_skill."
@@ -183,6 +183,15 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--reward-scale", type=float, default=100.0)
+    parser.add_argument(
+        "--shared-terminal-crash-penalty",
+        type=float,
+        default=300.0,
+        help=(
+            "Team penalty assigned to every drone return when any drone causes "
+            "a terminal crash. The crashing drone is not penalized twice."
+        ),
+    )
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--method-name", default="drone_skill_vae_online")
@@ -213,6 +222,7 @@ def validate_args(args: argparse.Namespace) -> None:
         "gae_lambda",
         "clip_ratio",
         "reward_scale",
+        "shared_terminal_crash_penalty",
         "max_grad_norm",
     ):
         if getattr(args, name) <= 0:
@@ -287,6 +297,18 @@ def resolve_device(name: str) -> torch.device:
     return torch.device(name)
 
 
+def apply_shared_terminal_crash_penalty(
+    cycle_rewards: np.ndarray,
+    *,
+    fatal_crash: bool,
+    penalty: float,
+) -> np.ndarray:
+    """Propagate a terminal team failure without double-penalizing its cause."""
+    if not fatal_crash:
+        return cycle_rewards
+    return np.minimum(cycle_rewards, -abs(float(penalty)))
+
+
 def configure_backend(device: torch.device, deterministic: bool) -> None:
     if not deterministic:
         configure_gpu_backend(device)
@@ -314,6 +336,7 @@ def rollout_episode(
     log_std: torch.Tensor,
     action_scale: float,
     reward_scale: float,
+    shared_terminal_crash_penalty: float,
     seed: int,
     device: torch.device,
     stochastic: bool,
@@ -433,6 +456,11 @@ def rollout_episode(
         )
         if not cycle_finished:
             continue
+        cycle_rewards = apply_shared_terminal_crash_penalty(
+            cycle_rewards,
+            fatal_crash=bool(core_env.collided),
+            penalty=shared_terminal_crash_penalty,
+        )
         if stochastic:
             transitions[-1]["agent_mask"] = torch.from_numpy(cycle_mask.copy())
             transitions[-1]["reward"] = torch.from_numpy(
@@ -652,6 +680,9 @@ def evaluate_policy(
                 log_std=log_std,
                 action_scale=drone_action_scale(config),
                 reward_scale=args.reward_scale,
+                shared_terminal_crash_penalty=(
+                    args.shared_terminal_crash_penalty
+                ),
                 seed=seed_base + args.difficulty * 1_000_000 + episode_index,
                 device=device,
                 stochastic=False,
@@ -854,6 +885,9 @@ def main() -> None:
             "full_base_freeze_iterations": args.full_base_freeze_iterations,
             "full_base_freeze_joint_steps": args.full_base_freeze_joint_steps,
             "train_batch_joint_steps": args.train_batch_joint_steps,
+            "shared_terminal_crash_penalty": (
+                args.shared_terminal_crash_penalty
+            ),
             "deterministic": args.deterministic,
             "success_definition": "environment_mission_success",
             "success_coverage_definition": (
@@ -918,9 +952,6 @@ def main() -> None:
             parameter.requires_grad_(base_trainable)
         trajectories: list[dict[str, Any]] = []
         episode_metrics = []
-        collection_stop_step = None
-        if args.joint_step_budget is not None:
-            collection_stop_step = min(args.joint_step_budget, next_eval_step)
         batch_start_steps = joint_env_steps
         episode_index = 0
         while True:
@@ -937,6 +968,9 @@ def main() -> None:
                     log_std=log_std,
                     action_scale=drone_action_scale(config),
                     reward_scale=args.reward_scale,
+                    shared_terminal_crash_penalty=(
+                        args.shared_terminal_crash_penalty
+                    ),
                     seed=args.seed + iteration * 10_000 + episode_index,
                     device=device,
                     stochastic=True,
@@ -950,8 +984,8 @@ def main() -> None:
             joint_env_steps += int(round(metrics["cycles"]))
             episode_index += 1
             if (
-                collection_stop_step is not None
-                and joint_env_steps >= collection_stop_step
+                args.joint_step_budget is not None
+                and joint_env_steps >= args.joint_step_budget
             ):
                 break
             if args.train_batch_joint_steps > 0:

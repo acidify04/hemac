@@ -1,8 +1,12 @@
 """Tests for fixed-duration homogeneous drone skills."""
 
+import numpy as np
 import torch
 
 from src.skill_discovery.drone_skill_vae import DroneSkillVAE
+from src.skill_discovery.finetune_drone_skill_vae_online import (
+    apply_shared_terminal_crash_penalty,
+)
 
 
 def build_model(*, skill_duration: int = 4) -> DroneSkillVAE:
@@ -89,3 +93,23 @@ def test_online_inference_selects_only_after_skill_expiration() -> None:
     assert torch.equal(outputs[1]["skills"], outputs[2]["skills"])
     assert outputs[0]["skill_steps_remaining"] == 2
     assert outputs[2]["skill_steps_remaining"] == 0
+
+
+def test_terminal_crash_penalty_is_shared_without_double_penalty() -> None:
+    rewards = np.array([-300.05, 0.25, 0.75], dtype=np.float32)
+
+    shared = apply_shared_terminal_crash_penalty(
+        rewards, fatal_crash=True, penalty=300.0
+    )
+
+    np.testing.assert_allclose(shared, [-300.05, -300.0, -300.0])
+
+
+def test_non_terminal_rewards_are_not_modified() -> None:
+    rewards = np.array([-0.05, 0.25, 0.75], dtype=np.float32)
+
+    unchanged = apply_shared_terminal_crash_penalty(
+        rewards, fatal_crash=False, penalty=300.0
+    )
+
+    np.testing.assert_array_equal(unchanged, rewards)
