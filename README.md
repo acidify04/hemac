@@ -1,6 +1,3 @@
-# Note
-**The `render` branch is used. (NOT `main`)**
-
 ## Train
 
 To train reinforcement agent for hemac, use this command:
