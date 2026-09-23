@@ -1,0 +1,707 @@
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D1 --seed 0 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=1.89 distance=0.98
+update=20 steps=160000 return=-2.65 distance=0.92
+update=30 steps=240000 return=728.23 distance=40.21
+update=40 steps=320000 return=806.13 distance=44.98
+update=50 steps=400000 return=794.60 distance=45.37
+update=60 steps=480000 return=943.23 distance=54.33
+update=70 steps=560000 return=1128.90 distance=65.43
+update=80 steps=640000 return=1122.58 distance=65.19
+update=90 steps=720000 return=1238.31 distance=71.66
+update=100 steps=800000 return=1251.68 distance=72.46
+update=110 steps=880000 return=1317.61 distance=77.02
+update=120 steps=960000 return=1515.30 distance=87.39
+update=130 steps=1040000 return=1651.61 distance=94.99
+update=140 steps=1120000 return=1596.64 distance=92.19
+update=150 steps=1200000 return=1732.55 distance=99.32
+update=160 steps=1280000 return=1812.32 distance=103.21
+update=170 steps=1360000 return=1724.33 distance=98.24
+update=180 steps=1440000 return=1748.71 distance=99.35
+update=190 steps=1520000 return=1902.57 distance=108.04
+update=200 steps=1600000 return=1919.32 distance=109.04
+update=210 steps=1680000 return=2166.30 distance=121.79
+update=220 steps=1760000 return=2111.83 distance=119.39
+update=230 steps=1840000 return=2118.46 distance=120.46
+update=240 steps=1920000 return=2107.68 distance=118.89
+update=250 steps=2000000 return=2158.56 distance=122.35
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D1 --seed 1 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=328.68 distance=18.86
+update=20 steps=160000 return=-17.00 distance=1.23
+update=30 steps=240000 return=891.97 distance=49.95
+update=40 steps=320000 return=771.26 distance=43.00
+update=50 steps=400000 return=1046.32 distance=59.14
+update=60 steps=480000 return=1051.87 distance=59.17
+update=70 steps=560000 return=1147.13 distance=64.85
+update=80 steps=640000 return=1201.77 distance=68.01
+update=90 steps=720000 return=1171.34 distance=66.50
+update=100 steps=800000 return=1388.50 distance=77.51
+update=110 steps=880000 return=1373.65 distance=77.00
+update=120 steps=960000 return=1488.74 distance=83.46
+update=130 steps=1040000 return=1557.86 distance=87.60
+update=140 steps=1120000 return=1644.58 distance=92.40
+update=150 steps=1200000 return=1618.14 distance=91.65
+update=160 steps=1280000 return=1745.20 distance=98.06
+update=170 steps=1360000 return=1649.70 distance=92.99
+update=180 steps=1440000 return=1722.02 distance=97.45
+update=190 steps=1520000 return=1718.07 distance=97.68
+update=200 steps=1600000 return=1911.43 distance=107.58
+update=210 steps=1680000 return=1861.94 distance=105.39
+update=220 steps=1760000 return=1985.40 distance=111.81
+update=230 steps=1840000 return=1961.00 distance=110.76
+update=240 steps=1920000 return=1971.73 distance=111.20
+update=250 steps=2000000 return=2030.00 distance=114.36
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D1 --seed 2 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=-29.05 distance=0.01
+update=20 steps=160000 return=253.40 distance=16.65
+update=30 steps=240000 return=407.01 distance=24.39
+update=40 steps=320000 return=643.70 distance=38.01
+update=50 steps=400000 return=638.52 distance=41.07
+update=60 steps=480000 return=1039.85 distance=60.81
+update=70 steps=560000 return=1080.97 distance=63.12
+update=80 steps=640000 return=1270.39 distance=73.13
+update=90 steps=720000 return=1324.51 distance=75.94
+update=100 steps=800000 return=1396.50 distance=79.88
+update=110 steps=880000 return=1657.96 distance=93.76
+update=120 steps=960000 return=1415.68 distance=81.73
+update=130 steps=1040000 return=1791.08 distance=100.60
+update=140 steps=1120000 return=1870.19 distance=105.16
+update=150 steps=1200000 return=1910.08 distance=107.37
+update=160 steps=1280000 return=1939.87 distance=108.94
+update=170 steps=1360000 return=1955.77 distance=109.98
+update=180 steps=1440000 return=2104.56 distance=118.14
+update=190 steps=1520000 return=2084.06 distance=117.00
+update=200 steps=1600000 return=2104.00 distance=118.07
+update=210 steps=1680000 return=2175.71 distance=122.06
+update=220 steps=1760000 return=2143.54 distance=121.22
+update=230 steps=1840000 return=2269.72 distance=127.70
+update=240 steps=1920000 return=2306.38 distance=129.96
+update=250 steps=2000000 return=2275.28 distance=128.56
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D1 --seed 3 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=660.73 distance=36.08
+update=20 steps=160000 return=291.00 distance=17.14
+update=30 steps=240000 return=313.77 distance=20.31
+update=40 steps=320000 return=409.37 distance=26.46
+update=50 steps=400000 return=772.72 distance=46.79
+update=60 steps=480000 return=861.51 distance=50.54
+update=70 steps=560000 return=628.13 distance=39.95
+update=80 steps=640000 return=1038.34 distance=61.16
+update=90 steps=720000 return=1077.70 distance=63.08
+update=100 steps=800000 return=1048.28 distance=61.16
+update=110 steps=880000 return=1220.41 distance=70.00
+update=120 steps=960000 return=1298.86 distance=74.05
+update=130 steps=1040000 return=1295.65 distance=73.79
+update=140 steps=1120000 return=1464.82 distance=82.76
+update=150 steps=1200000 return=1591.62 distance=89.39
+update=160 steps=1280000 return=1452.88 distance=82.16
+update=170 steps=1360000 return=1366.27 distance=77.83
+update=180 steps=1440000 return=1588.46 distance=89.84
+update=190 steps=1520000 return=1436.91 distance=82.37
+update=200 steps=1600000 return=1657.70 distance=93.94
+update=210 steps=1680000 return=1816.72 distance=102.38
+update=220 steps=1760000 return=1828.99 distance=102.58
+update=230 steps=1840000 return=1889.40 distance=105.72
+update=240 steps=1920000 return=1640.14 distance=93.12
+update=250 steps=2000000 return=1999.94 distance=111.71
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D1 --seed 4 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=282.01 distance=16.22
+update=20 steps=160000 return=177.38 distance=12.64
+update=30 steps=240000 return=396.24 distance=25.51
+update=40 steps=320000 return=614.01 distance=37.13
+update=50 steps=400000 return=797.64 distance=45.95
+update=60 steps=480000 return=839.34 distance=50.49
+update=70 steps=560000 return=1025.87 distance=60.12
+update=80 steps=640000 return=871.34 distance=54.88
+update=90 steps=720000 return=1092.42 distance=64.97
+update=100 steps=800000 return=909.84 distance=58.38
+update=110 steps=880000 return=1075.72 distance=65.83
+update=120 steps=960000 return=1039.35 distance=63.85
+update=130 steps=1040000 return=969.39 distance=61.55
+update=140 steps=1120000 return=1092.02 distance=66.74
+update=150 steps=1200000 return=1022.61 distance=64.73
+update=160 steps=1280000 return=1004.10 distance=64.66
+update=170 steps=1360000 return=1282.76 distance=77.77
+update=180 steps=1440000 return=1158.54 distance=71.87
+update=190 steps=1520000 return=999.11 distance=65.10
+update=200 steps=1600000 return=945.02 distance=62.19
+update=210 steps=1680000 return=1099.07 distance=70.10
+update=220 steps=1760000 return=1249.70 distance=77.29
+update=230 steps=1840000 return=1452.98 distance=87.30
+update=240 steps=1920000 return=1562.25 distance=92.17
+update=250 steps=2000000 return=1578.17 distance=93.58
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D2 --seed 0 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=-9.11 distance=0.05
+update=20 steps=160000 return=489.13 distance=27.01
+update=30 steps=240000 return=1002.24 distance=54.99
+update=40 steps=320000 return=1152.57 distance=64.72
+update=50 steps=400000 return=1536.12 distance=84.85
+update=60 steps=480000 return=1503.31 distance=84.28
+update=70 steps=560000 return=1620.41 distance=90.72
+update=80 steps=640000 return=1727.91 distance=97.03
+update=90 steps=720000 return=1784.16 distance=100.18
+update=100 steps=800000 return=1808.82 distance=100.95
+update=110 steps=880000 return=1897.99 distance=106.84
+update=120 steps=960000 return=2052.69 distance=115.35
+update=130 steps=1040000 return=2283.27 distance=127.67
+update=140 steps=1120000 return=2255.70 distance=126.32
+update=150 steps=1200000 return=2296.64 distance=128.22
+update=160 steps=1280000 return=2452.44 distance=136.25
+update=170 steps=1360000 return=2487.62 distance=137.95
+update=180 steps=1440000 return=2561.32 distance=142.63
+update=190 steps=1520000 return=2550.75 distance=142.25
+update=200 steps=1600000 return=2685.37 distance=149.15
+update=210 steps=1680000 return=2653.42 distance=147.60
+update=220 steps=1760000 return=2743.10 distance=151.94
+update=230 steps=1840000 return=2826.81 distance=156.39
+update=240 steps=1920000 return=2874.63 distance=158.98
+update=250 steps=2000000 return=2827.24 distance=156.92
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D2 --seed 1 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=468.60 distance=25.34
+update=20 steps=160000 return=996.87 distance=53.94
+update=30 steps=240000 return=1328.69 distance=71.28
+update=40 steps=320000 return=1329.60 distance=72.31
+update=50 steps=400000 return=1511.43 distance=82.86
+update=60 steps=480000 return=1577.62 distance=87.07
+update=70 steps=560000 return=1762.05 distance=96.72
+update=80 steps=640000 return=1736.68 distance=96.96
+update=90 steps=720000 return=1904.81 distance=106.94
+update=100 steps=800000 return=1939.26 distance=109.44
+update=110 steps=880000 return=2153.73 distance=120.47
+update=120 steps=960000 return=2346.47 distance=130.76
+update=130 steps=1040000 return=2466.92 distance=137.08
+update=140 steps=1120000 return=2443.12 distance=135.85
+update=150 steps=1200000 return=2500.28 distance=138.97
+update=160 steps=1280000 return=2477.39 distance=137.94
+update=170 steps=1360000 return=2673.74 distance=148.57
+update=180 steps=1440000 return=2719.79 distance=151.72
+update=190 steps=1520000 return=2836.57 distance=158.39
+update=200 steps=1600000 return=2759.38 distance=154.37
+update=210 steps=1680000 return=2817.03 distance=157.13
+update=220 steps=1760000 return=3016.15 distance=167.10
+update=230 steps=1840000 return=2885.06 distance=160.43
+update=240 steps=1920000 return=3063.55 distance=169.46
+update=250 steps=2000000 return=2976.90 distance=165.20
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D2 --seed 2 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=669.14 distance=34.97
+update=20 steps=160000 return=1168.31 distance=63.26
+update=30 steps=240000 return=1405.68 distance=76.62
+update=40 steps=320000 return=1500.26 distance=82.69
+update=50 steps=400000 return=1779.98 distance=97.66
+update=60 steps=480000 return=1856.71 distance=103.24
+update=70 steps=560000 return=2017.67 distance=111.52
+update=80 steps=640000 return=2184.12 distance=119.78
+update=90 steps=720000 return=2288.60 distance=127.13
+update=100 steps=800000 return=2387.09 distance=132.15
+update=110 steps=880000 return=2417.59 distance=133.31
+update=120 steps=960000 return=2587.59 distance=142.29
+update=130 steps=1040000 return=2743.76 distance=150.05
+update=140 steps=1120000 return=2737.00 distance=148.94
+update=150 steps=1200000 return=2938.40 distance=159.95
+update=160 steps=1280000 return=2808.67 distance=153.69
+update=170 steps=1360000 return=2799.00 distance=153.19
+update=180 steps=1440000 return=2913.13 distance=159.51
+update=190 steps=1520000 return=3035.69 distance=165.89
+update=200 steps=1600000 return=3139.29 distance=171.16
+update=210 steps=1680000 return=3060.00 distance=166.98
+update=220 steps=1760000 return=3105.16 distance=169.47
+update=230 steps=1840000 return=3131.89 distance=171.18
+update=240 steps=1920000 return=3209.11 distance=175.55
+update=250 steps=2000000 return=3255.40 distance=178.43
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D2 --seed 3 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=1152.10 distance=61.01
+update=20 steps=160000 return=623.69 distance=34.99
+update=30 steps=240000 return=720.90 distance=41.58
+update=40 steps=320000 return=743.50 distance=44.01
+update=50 steps=400000 return=1179.37 distance=66.59
+update=60 steps=480000 return=1464.56 distance=81.74
+update=70 steps=560000 return=1868.14 distance=103.35
+update=80 steps=640000 return=1919.76 distance=106.24
+update=90 steps=720000 return=1768.33 distance=99.57
+update=100 steps=800000 return=2066.08 distance=115.73
+update=110 steps=880000 return=2132.62 distance=118.60
+update=120 steps=960000 return=2274.25 distance=126.32
+update=130 steps=1040000 return=2484.21 distance=137.19
+update=140 steps=1120000 return=2722.01 distance=149.26
+update=150 steps=1200000 return=2810.81 distance=155.17
+update=160 steps=1280000 return=2809.14 distance=155.20
+update=170 steps=1360000 return=2894.79 distance=160.10
+update=180 steps=1440000 return=3171.85 distance=173.84
+update=190 steps=1520000 return=3210.43 distance=175.89
+update=200 steps=1600000 return=2879.77 distance=159.69
+update=210 steps=1680000 return=3179.94 distance=174.72
+update=220 steps=1760000 return=3049.03 distance=168.10
+update=230 steps=1840000 return=3192.23 distance=175.98
+update=240 steps=1920000 return=3429.73 distance=187.19
+update=250 steps=2000000 return=3382.76 distance=184.93
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D2 --seed 4 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=354.99 distance=20.03
+update=20 steps=160000 return=866.50 distance=47.31
+update=30 steps=240000 return=1074.01 distance=59.12
+update=40 steps=320000 return=1353.83 distance=74.01
+update=50 steps=400000 return=1657.79 distance=90.32
+update=60 steps=480000 return=1665.04 distance=90.84
+update=70 steps=560000 return=1940.28 distance=105.08
+update=80 steps=640000 return=2077.72 distance=111.62
+update=90 steps=720000 return=2186.20 distance=117.16
+update=100 steps=800000 return=2361.91 distance=126.48
+update=110 steps=880000 return=2495.83 distance=133.32
+update=120 steps=960000 return=2865.78 distance=152.19
+update=130 steps=1040000 return=2935.28 distance=155.62
+update=140 steps=1120000 return=3133.93 distance=166.99
+update=150 steps=1200000 return=2898.00 distance=155.12
+update=160 steps=1280000 return=2848.85 distance=153.26
+update=170 steps=1360000 return=2981.59 distance=160.13
+update=180 steps=1440000 return=3005.71 distance=161.42
+update=190 steps=1520000 return=3005.51 distance=160.99
+update=200 steps=1600000 return=3100.47 distance=165.80
+update=210 steps=1680000 return=3006.61 distance=161.97
+update=220 steps=1760000 return=3083.31 distance=166.25
+update=230 steps=1840000 return=3175.86 distance=171.46
+update=240 steps=1920000 return=3228.77 distance=174.73
+update=250 steps=2000000 return=3019.92 distance=164.85
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D3 --seed 0 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=30.13 distance=2.54
+update=20 steps=160000 return=658.85 distance=36.82
+update=30 steps=240000 return=923.48 distance=51.17
+update=40 steps=320000 return=1141.62 distance=63.23
+update=50 steps=400000 return=1631.50 distance=90.94
+update=60 steps=480000 return=1774.72 distance=100.12
+update=70 steps=560000 return=1917.24 distance=108.33
+update=80 steps=640000 return=2015.31 distance=113.42
+update=90 steps=720000 return=2182.46 distance=121.68
+update=100 steps=800000 return=2259.27 distance=126.83
+update=110 steps=880000 return=2344.90 distance=132.03
+update=120 steps=960000 return=2478.49 distance=138.83
+update=130 steps=1040000 return=2322.26 distance=132.01
+update=140 steps=1120000 return=2571.05 distance=144.48
+update=150 steps=1200000 return=2481.93 distance=140.60
+update=160 steps=1280000 return=2599.22 distance=147.35
+update=170 steps=1360000 return=2622.37 distance=148.74
+update=180 steps=1440000 return=2628.52 distance=148.97
+update=190 steps=1520000 return=2629.55 distance=149.19
+update=200 steps=1600000 return=2722.34 distance=153.75
+update=210 steps=1680000 return=2506.28 distance=142.98
+update=220 steps=1760000 return=2731.41 distance=154.26
+update=230 steps=1840000 return=2855.20 distance=160.06
+update=240 steps=1920000 return=2627.90 distance=149.11
+update=250 steps=2000000 return=1800.98 distance=109.09
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D3 --seed 1 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=683.92 distance=38.05
+update=20 steps=160000 return=1150.31 distance=64.78
+update=30 steps=240000 return=988.06 distance=56.89
+update=40 steps=320000 return=1352.05 distance=76.53
+update=50 steps=400000 return=1663.06 distance=94.45
+update=60 steps=480000 return=1552.55 distance=88.87
+update=70 steps=560000 return=1712.00 distance=97.50
+update=80 steps=640000 return=1737.34 distance=98.25
+update=90 steps=720000 return=1884.21 distance=107.00
+update=100 steps=800000 return=1858.85 distance=105.60
+update=110 steps=880000 return=1921.81 distance=108.25
+update=120 steps=960000 return=1899.43 distance=108.33
+update=130 steps=1040000 return=1905.09 distance=108.48
+update=140 steps=1120000 return=1977.78 distance=112.30
+update=150 steps=1200000 return=1956.77 distance=111.62
+update=160 steps=1280000 return=1938.63 distance=111.45
+update=170 steps=1360000 return=2002.28 distance=114.83
+update=180 steps=1440000 return=2063.92 distance=118.46
+update=190 steps=1520000 return=2092.26 distance=119.62
+update=200 steps=1600000 return=2161.06 distance=123.02
+update=210 steps=1680000 return=2131.67 distance=121.52
+update=220 steps=1760000 return=2133.32 distance=122.79
+update=230 steps=1840000 return=2274.42 distance=130.07
+update=240 steps=1920000 return=2296.55 distance=131.41
+update=250 steps=2000000 return=2308.10 distance=132.70
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D3 --seed 2 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=764.85 distance=42.03
+update=20 steps=160000 return=1168.98 distance=65.72
+update=30 steps=240000 return=1316.18 distance=75.06
+update=40 steps=320000 return=1439.73 distance=83.76
+update=50 steps=400000 return=1573.01 distance=90.58
+update=60 steps=480000 return=1572.03 distance=91.55
+update=70 steps=560000 return=969.78 distance=62.67
+update=80 steps=640000 return=1783.38 distance=103.30
+update=90 steps=720000 return=1882.60 distance=108.22
+update=100 steps=800000 return=1089.59 distance=70.17
+update=110 steps=880000 return=2170.97 distance=123.47
+update=120 steps=960000 return=2352.19 distance=132.33
+update=130 steps=1040000 return=2396.64 distance=134.98
+update=140 steps=1120000 return=2374.72 distance=134.41
+update=150 steps=1200000 return=2485.28 distance=140.41
+update=160 steps=1280000 return=2585.10 distance=145.68
+update=170 steps=1360000 return=2496.70 distance=140.36
+update=180 steps=1440000 return=2593.11 distance=145.26
+update=190 steps=1520000 return=2679.84 distance=150.63
+update=200 steps=1600000 return=2611.66 distance=146.71
+update=210 steps=1680000 return=2752.98 distance=153.59
+update=220 steps=1760000 return=2820.79 distance=157.31
+update=230 steps=1840000 return=2810.33 distance=156.48
+update=240 steps=1920000 return=2805.17 distance=155.76
+update=250 steps=2000000 return=2803.74 distance=156.06
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D3 --seed 3 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=1048.44 distance=56.96
+update=20 steps=160000 return=1133.19 distance=63.13
+update=30 steps=240000 return=1558.22 distance=87.37
+update=40 steps=320000 return=1693.60 distance=96.21
+update=50 steps=400000 return=1707.16 distance=99.17
+update=60 steps=480000 return=1711.84 distance=99.25
+update=70 steps=560000 return=1817.01 distance=104.68
+update=80 steps=640000 return=1932.30 distance=111.70
+update=90 steps=720000 return=2207.16 distance=125.33
+update=100 steps=800000 return=2179.17 distance=123.47
+update=110 steps=880000 return=2128.51 distance=121.77
+update=120 steps=960000 return=2266.62 distance=128.59
+update=130 steps=1040000 return=2072.66 distance=119.19
+update=140 steps=1120000 return=1655.41 distance=98.87
+update=150 steps=1200000 return=2286.25 distance=130.12
+update=160 steps=1280000 return=2469.98 distance=139.10
+update=170 steps=1360000 return=2549.17 distance=143.69
+update=180 steps=1440000 return=2628.63 distance=147.70
+update=190 steps=1520000 return=2308.59 distance=130.98
+update=200 steps=1600000 return=2575.17 distance=144.76
+update=210 steps=1680000 return=2666.26 distance=150.23
+update=220 steps=1760000 return=2631.78 distance=148.56
+update=230 steps=1840000 return=2632.98 distance=148.75
+update=240 steps=1920000 return=2535.61 distance=143.62
+update=250 steps=2000000 return=2444.00 distance=138.80
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D3 --seed 4 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=949.81 distance=52.01
+update=20 steps=160000 return=780.56 distance=44.92
+update=30 steps=240000 return=1301.39 distance=73.16
+update=40 steps=320000 return=1490.89 distance=84.26
+update=50 steps=400000 return=1798.10 distance=99.81
+update=60 steps=480000 return=1676.38 distance=93.56
+update=70 steps=560000 return=1790.48 distance=100.37
+update=80 steps=640000 return=1913.20 distance=107.80
+update=90 steps=720000 return=2039.69 distance=113.98
+update=100 steps=800000 return=1780.65 distance=102.33
+update=110 steps=880000 return=2025.47 distance=113.24
+update=120 steps=960000 return=2161.43 distance=120.27
+update=130 steps=1040000 return=2275.44 distance=126.76
+update=140 steps=1120000 return=2379.67 distance=132.08
+update=150 steps=1200000 return=2465.33 distance=136.73
+update=160 steps=1280000 return=2529.14 distance=140.24
+update=170 steps=1360000 return=2549.66 distance=141.00
+update=180 steps=1440000 return=2550.66 distance=141.64
+update=190 steps=1520000 return=2488.87 distance=138.48
+update=200 steps=1600000 return=2534.93 distance=140.44
+update=210 steps=1680000 return=2582.04 distance=143.41
+update=220 steps=1760000 return=2543.01 distance=141.68
+update=230 steps=1840000 return=2606.37 distance=146.15
+update=240 steps=1920000 return=2675.86 distance=149.64
+update=250 steps=2000000 return=2892.30 distance=160.71
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D4 --seed 0 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=289.83 distance=19.86
+update=20 steps=160000 return=1151.26 distance=69.13
+update=30 steps=240000 return=1206.32 distance=73.24
+update=40 steps=320000 return=1217.16 distance=74.17
+update=50 steps=400000 return=1299.15 distance=79.51
+update=60 steps=480000 return=1352.60 distance=82.43
+update=70 steps=560000 return=1432.38 distance=87.28
+update=80 steps=640000 return=1498.76 distance=91.26
+update=90 steps=720000 return=1467.73 distance=90.05
+update=100 steps=800000 return=1551.78 distance=94.76
+update=110 steps=880000 return=1601.37 distance=98.07
+update=120 steps=960000 return=1553.95 distance=96.14
+update=130 steps=1040000 return=1549.40 distance=95.94
+update=140 steps=1120000 return=1631.36 distance=99.84
+update=150 steps=1200000 return=1656.25 distance=101.14
+update=160 steps=1280000 return=1728.57 distance=105.05
+update=170 steps=1360000 return=1737.77 distance=106.50
+update=180 steps=1440000 return=1807.60 distance=109.42
+update=190 steps=1520000 return=1833.31 distance=110.60
+update=200 steps=1600000 return=1837.13 distance=111.00
+update=210 steps=1680000 return=1819.25 distance=110.67
+update=220 steps=1760000 return=1885.90 distance=114.14
+update=230 steps=1840000 return=1944.18 distance=117.84
+update=240 steps=1920000 return=1927.94 distance=117.05
+update=250 steps=2000000 return=1910.27 distance=115.58
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D4 --seed 1 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=529.51 distance=31.71
+update=20 steps=160000 return=930.43 distance=56.42
+update=30 steps=240000 return=1184.31 distance=72.05
+update=40 steps=320000 return=1278.21 distance=77.87
+update=50 steps=400000 return=1341.22 distance=80.94
+update=60 steps=480000 return=1287.94 distance=79.09
+update=70 steps=560000 return=1466.42 distance=90.22
+update=80 steps=640000 return=1551.99 distance=95.40
+update=90 steps=720000 return=1541.90 distance=95.59
+update=100 steps=800000 return=1549.75 distance=96.48
+update=110 steps=880000 return=1705.91 distance=105.13
+update=120 steps=960000 return=1690.86 distance=104.90
+update=130 steps=1040000 return=1628.63 distance=101.33
+update=140 steps=1120000 return=1715.29 distance=105.56
+update=150 steps=1200000 return=1707.36 distance=105.60
+update=160 steps=1280000 return=1717.14 distance=106.67
+update=170 steps=1360000 return=1711.24 distance=106.63
+update=180 steps=1440000 return=1731.88 distance=107.70
+update=190 steps=1520000 return=1705.85 distance=106.55
+update=200 steps=1600000 return=1697.11 distance=106.05
+update=210 steps=1680000 return=1738.42 distance=107.88
+update=220 steps=1760000 return=1773.40 distance=109.53
+update=230 steps=1840000 return=1781.31 distance=110.28
+update=240 steps=1920000 return=1825.16 distance=112.69
+update=250 steps=2000000 return=1815.66 distance=112.12
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D4 --seed 2 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=477.43 distance=29.05
+update=20 steps=160000 return=1069.92 distance=64.32
+update=30 steps=240000 return=1303.80 distance=78.80
+update=40 steps=320000 return=1395.16 distance=85.35
+update=50 steps=400000 return=1534.51 distance=91.69
+update=60 steps=480000 return=1566.29 distance=94.12
+update=70 steps=560000 return=1629.55 distance=97.56
+update=80 steps=640000 return=1640.58 distance=98.93
+update=90 steps=720000 return=1872.42 distance=111.10
+update=100 steps=800000 return=1791.88 distance=108.49
+update=110 steps=880000 return=1871.87 distance=112.39
+update=120 steps=960000 return=1945.58 distance=116.23
+update=130 steps=1040000 return=1933.17 distance=116.65
+update=140 steps=1120000 return=1896.35 distance=115.03
+update=150 steps=1200000 return=1948.08 distance=118.04
+update=160 steps=1280000 return=1933.32 distance=116.81
+update=170 steps=1360000 return=1883.40 distance=114.86
+update=180 steps=1440000 return=2028.52 distance=123.07
+update=190 steps=1520000 return=1956.42 distance=119.82
+update=200 steps=1600000 return=2017.48 distance=123.01
+update=210 steps=1680000 return=2058.56 distance=124.82
+update=220 steps=1760000 return=2142.69 distance=129.08
+update=230 steps=1840000 return=2182.39 distance=130.83
+update=240 steps=1920000 return=2064.13 distance=124.70
+update=250 steps=2000000 return=2043.38 distance=123.97
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D4 --seed 3 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=515.45 distance=30.57
+update=20 steps=160000 return=1183.13 distance=68.34
+update=30 steps=240000 return=1255.61 distance=76.58
+update=40 steps=320000 return=1429.79 distance=86.56
+update=50 steps=400000 return=1543.52 distance=91.88
+update=60 steps=480000 return=1601.72 distance=95.03
+update=70 steps=560000 return=1675.33 distance=99.96
+update=80 steps=640000 return=1701.83 distance=102.03
+update=90 steps=720000 return=1776.57 distance=105.78
+update=100 steps=800000 return=1719.69 distance=103.51
+update=110 steps=880000 return=1699.25 distance=103.02
+update=120 steps=960000 return=1803.45 distance=108.19
+update=130 steps=1040000 return=1857.34 distance=110.47
+update=140 steps=1120000 return=1904.56 distance=113.39
+update=150 steps=1200000 return=1886.80 distance=112.63
+update=160 steps=1280000 return=1938.64 distance=115.68
+update=170 steps=1360000 return=1971.41 distance=117.45
+update=180 steps=1440000 return=2003.00 distance=119.81
+update=190 steps=1520000 return=1998.23 distance=119.91
+update=200 steps=1600000 return=2011.70 distance=121.51
+update=210 steps=1680000 return=1942.40 distance=119.12
+update=220 steps=1760000 return=2037.77 distance=122.89
+update=230 steps=1840000 return=2014.20 distance=122.31
+update=240 steps=1920000 return=2045.87 distance=123.77
+update=250 steps=2000000 return=1594.39 distance=101.09
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.train_happo --suite difficulty --task D4 --seed 4 --allow-target-task --output-root src/mamujoco/checkpoints/pilot_happo --total-env-steps 2000000 --max-cycles 1000 --episodes-per-update 8 --eval-every-updates 10 --eval-episodes 5 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+update=10 steps=80000 return=668.40 distance=40.20
+update=20 steps=160000 return=1204.27 distance=71.25
+update=30 steps=240000 return=1427.97 distance=85.58
+update=40 steps=320000 return=1518.11 distance=91.59
+update=50 steps=400000 return=1553.96 distance=93.70
+update=60 steps=480000 return=1685.93 distance=101.47
+update=70 steps=560000 return=1738.74 distance=104.11
+update=80 steps=640000 return=1686.45 distance=102.23
+update=90 steps=720000 return=1779.38 distance=107.57
+update=100 steps=800000 return=1853.22 distance=112.00
+update=110 steps=880000 return=1854.72 distance=111.89
+update=120 steps=960000 return=1966.03 distance=117.74
+update=130 steps=1040000 return=1866.82 distance=114.24
+update=140 steps=1120000 return=2023.88 distance=123.53
+update=150 steps=1200000 return=2006.81 distance=122.88
+update=160 steps=1280000 return=2031.70 distance=124.97
+update=170 steps=1360000 return=2043.54 distance=125.39
+update=180 steps=1440000 return=2025.69 distance=124.66
+update=190 steps=1520000 return=2001.86 distance=123.32
+update=200 steps=1600000 return=2010.20 distance=123.60
+update=210 steps=1680000 return=2015.29 distance=123.16
+update=220 steps=1760000 return=2074.32 distance=126.59
+update=230 steps=1840000 return=2068.46 distance=125.54
+update=240 steps=1920000 return=2121.15 distance=128.37
+update=250 steps=2000000 return=2029.21 distance=123.68
+$ /home/choi/anaconda3/envs/mappo/bin/python -m mamujoco.pilot_difficulty --checkpoint-root src/mamujoco/checkpoints/pilot_happo --seeds 0 1 2 3 4 --episodes 20 --max-cycles 1000 --environment-version HalfCheetah-v2 --device cuda --difficulty-strengths 1.0 0.8 0.6 0.4 --source-difficulties D1 D2 --target-difficulties D3 D4
+AdroitHandRelocateDense-v1, AdroitHandHammerDense-v1, AdroitHandDoorDense-v1 environment's reward functions were updated in v1.2.1 without an environment version update. Therefore, use gymnasium-robotics==1.2.0 for v1 reproducibility or use v2 in gymnasium-robotics>=1.4.3. See https://github.com/Farama-Foundation/Gymnasium-Robotics/pull/220 for more details
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/registration.py:519: DeprecationWarning: [33mWARN: The environment HalfCheetah-v2 is out of date. You should consider upgrading to version `v5`.[0m
+  logger.deprecation(
+/home/choi/anaconda3/envs/mappo/lib/python3.9/site-packages/gymnasium/envs/mujoco/mujoco_py_env.py:223: DeprecationWarning: [33mWARN: This version of the mujoco environments depends on the mujoco-py bindings, which are no longer maintained and may stop working. Please upgrade to the v5 or v4 versions of the environments (which depend on the mujoco python bindings instead), unless you are trying to precisely replicate previous works).[0m
+  logger.deprecation(
+seed=0 D1->D1 return=2107.82
+seed=0 D1->D2 return=1344.64
+seed=0 D1->D3 return=491.26
+seed=0 D1->D4 return=-282.52
+seed=0 D2->D1 return=412.48
+seed=0 D2->D2 return=2867.01
+seed=0 D2->D3 return=2121.87
+seed=0 D2->D4 return=356.21
+seed=0 D3->D1 return=-277.21
+seed=0 D3->D2 return=2.85
+seed=0 D3->D3 return=2760.88
+seed=0 D3->D4 return=1419.16
+seed=0 D4->D1 return=-473.17
+seed=0 D4->D2 return=-414.95
+seed=0 D4->D3 return=-390.68
+seed=0 D4->D4 return=1834.61
+seed=1 D1->D1 return=2037.56
+seed=1 D1->D2 return=1310.54
+seed=1 D1->D3 return=336.29
+seed=1 D1->D4 return=-311.02
+seed=1 D2->D1 return=1731.50
+seed=1 D2->D2 return=2984.23
+seed=1 D2->D3 return=2312.46
+seed=1 D2->D4 return=613.39
+seed=1 D3->D1 return=-488.01
+seed=1 D3->D2 return=-294.28
+seed=1 D3->D3 return=2345.27
+seed=1 D3->D4 return=1076.11
+seed=1 D4->D1 return=-409.42
+seed=1 D4->D2 return=-367.01
+seed=1 D4->D3 return=-397.14
+seed=1 D4->D4 return=1827.81
+seed=2 D1->D1 return=2261.35
+seed=2 D1->D2 return=1605.39
+seed=2 D1->D3 return=569.04
+seed=2 D1->D4 return=-17.71
+seed=2 D2->D1 return=1467.65
+seed=2 D2->D2 return=3216.34
+seed=2 D2->D3 return=2109.42
+seed=2 D2->D4 return=724.86
+seed=2 D3->D1 return=4.13
+seed=2 D3->D2 return=-168.77
+seed=2 D3->D3 return=2810.81
+seed=2 D3->D4 return=1310.75
+seed=2 D4->D1 return=-379.73
+seed=2 D4->D2 return=-367.02
+seed=2 D4->D3 return=-315.21
+seed=2 D4->D4 return=2189.35
+seed=3 D1->D1 return=1943.87
+seed=3 D1->D2 return=1238.02
+seed=3 D1->D3 return=453.01
+seed=3 D1->D4 return=77.20
+seed=3 D2->D1 return=3160.67
+seed=3 D2->D2 return=3397.65
+seed=3 D2->D3 return=2391.68
+seed=3 D2->D4 return=824.43
+seed=3 D3->D1 return=-336.73
+seed=3 D3->D2 return=10.95
+seed=3 D3->D3 return=2655.31
+seed=3 D3->D4 return=1186.19
+seed=3 D4->D1 return=-431.52
+seed=3 D4->D2 return=-546.80
+seed=3 D4->D3 return=-259.34
+seed=3 D4->D4 return=2044.27
+seed=4 D1->D1 return=1627.95
+seed=4 D1->D2 return=1205.91
+seed=4 D1->D3 return=-377.90
+seed=4 D1->D4 return=-288.11
+seed=4 D2->D1 return=1298.02
+seed=4 D2->D2 return=3225.48
+seed=4 D2->D3 return=1999.35
+seed=4 D2->D4 return=688.07
+seed=4 D3->D1 return=652.74
+seed=4 D3->D2 return=1230.53
+seed=4 D3->D3 return=2847.91
+seed=4 D3->D4 return=1386.47
+seed=4 D4->D1 return=-407.50
+seed=4 D4->D2 return=-311.66
+seed=4 D4->D3 return=-133.06
+seed=4 D4->D4 return=2111.25
+Saved 4x4 cross-evaluation: src/mamujoco/outputs/difficulty/pilot_cross/HalfCheetah-v2
