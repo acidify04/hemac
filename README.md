@@ -24,6 +24,13 @@ cd hemac
 python example.py --playback step
 ```
 
+## MaMuJoCo offline multi-task experiments
+
+The maintained six-agent HalfCheetah HAPPO, Skill-VAE, and HiSSD transfer
+pipeline is documented in [`src/mamujoco/README.md`](src/mamujoco/README.md).
+It uses a dedicated `mappo` environment so its modern Gymnasium dependencies do
+not change the HeMAC RLlib environment.
+
 ---
 
 ## `HeMAC.py`

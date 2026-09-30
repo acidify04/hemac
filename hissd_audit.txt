@@ -1,0 +1,1152 @@
+===== HiSSD RELEVANT FILES =====
+src/mamujoco/checkpoints/offline/joint_disable/hissd/seed_1/zero_shot_evaluation_fixed.json
+src/mamujoco/checkpoints/offline/joint_disable/hissd/seed_1/zero_shot_evaluation.json
+src/mamujoco/collect_offline_data.py
+src/mamujoco/dataset.py
+src/mamujoco/env.py
+src/mamujoco/evaluate_zero_shot.py
+src/mamujoco/models.py
+src/mamujoco/offline_data/joint_disable/manifest.json
+src/mamujoco/offline_models.py
+src/mamujoco/train_happo.py
+src/mamujoco/train_offline.py
+
+
+===== KEYWORD SEARCH =====
+src/mamujoco/happo.py:52:        agent: torch.as_tensor(value, dtype=torch.float32, device=device).reshape(
+src/mamujoco/happo.py:74:    gamma: float = 0.99,
+src/mamujoco/happo.py:96:        state = torch.as_tensor(env.state(), dtype=torch.float32, device=device)
+src/mamujoco/happo.py:101:            agent: actions[agent].squeeze(0).cpu().numpy().astype(np.float32)
+src/mamujoco/happo.py:114:                torch.as_tensor(executed_actions[agent], dtype=torch.float32)
+src/mamujoco/happo.py:117:            active_rows[agent].append(agent != env.task.disabled_agent)
+src/mamujoco/happo.py:126:    rewards_tensor = torch.tensor(reward_rows, dtype=torch.float32)
+src/mamujoco/happo.py:127:    values = torch.tensor(value_rows + [0.0], dtype=torch.float32)
+src/mamujoco/happo.py:131:        delta = rewards_tensor[index] + gamma * values[index + 1] - values[index]
+src/mamujoco/happo.py:132:        gae = delta + gamma * gae_lambda * gae
+src/mamujoco/happo.py:214:        minibatch_size: int = 1024,
+src/mamujoco/happo.py:224:        self.minibatch_size = int(minibatch_size)
+src/mamujoco/happo.py:256:                for start in range(0, count, self.minibatch_size):
+src/mamujoco/happo.py:257:                    indices = permutation[start : start + self.minibatch_size]
+src/mamujoco/happo.py:294:            for start in range(0, count, self.minibatch_size):
+src/mamujoco/happo.py:295:                indices = permutation[start : start + self.minibatch_size]
+src/mamujoco/select_quality_checkpoints.py:30:        raise ValueError("Training history contains no evaluation records")
+src/mamujoco/select_quality_checkpoints.py:68:        history_path = directory / "training_metrics.jsonl"
+src/mamujoco/select_quality_checkpoints.py:69:        if not history_path.is_file():
+src/mamujoco/select_quality_checkpoints.py:70:            raise FileNotFoundError(f"Missing HAPPO history: {history_path}")
+src/mamujoco/select_quality_checkpoints.py:71:        with history_path.open("r", encoding="utf-8") as file:
+src/mamujoco/env.py:18:DEFAULT_AGENT_OBSK = 1
+src/mamujoco/env.py:54:    actions: Mapping[str, np.ndarray], disabled_agent: str | None
+src/mamujoco/env.py:58:        agent: np.asarray(action, dtype=np.float32).copy()
+src/mamujoco/env.py:61:    if disabled_agent is not None:
+src/mamujoco/env.py:62:        if disabled_agent not in masked:
+src/mamujoco/env.py:63:            raise KeyError(f"Missing action for disabled agent {disabled_agent}")
+src/mamujoco/env.py:64:        masked[disabled_agent].fill(0.0)
+src/mamujoco/env.py:69:    """Fixed-interface 6-agent HalfCheetah with task-specific interventions."""
+src/mamujoco/env.py:78:        agent_obsk: int = DEFAULT_AGENT_OBSK,
+src/mamujoco/env.py:88:        if int(agent_obsk) != DEFAULT_AGENT_OBSK:
+src/mamujoco/env.py:89:            raise ValueError("The transfer protocol requires agent_obsk=1.")
+src/mamujoco/env.py:92:        self.agent_obsk = int(agent_obsk)
+src/mamujoco/env.py:102:            "agent_obsk": self.agent_obsk,
+src/mamujoco/env.py:148:        return np.asarray(self.env.state(), dtype=np.float32)
+src/mamujoco/env.py:170:            agent: np.zeros(self.action_space(agent).shape, dtype=np.float32)
+src/mamujoco/env.py:177:        executed = mask_disabled_action(actions, self.task.disabled_agent)
+src/mamujoco/env.py:191:            info["disabled"] = agent == self.task.disabled_agent
+src/mamujoco/env.py:207:    agent_obsk: int = DEFAULT_AGENT_OBSK,
+src/mamujoco/env.py:215:        agent_obsk=agent_obsk,
+src/mamujoco/difficulty_protocol.py:116:    batch_size: int,
+src/mamujoco/difficulty_protocol.py:118:    if target_count + d1_count + d2_count != batch_size:
+src/mamujoco/difficulty_protocol.py:119:        raise ValueError("adaptation sample counts must sum to batch size")
+src/mamujoco/collect_offline_data.py:65:            agent: torch.as_tensor(value, dtype=torch.float32, device=device).reshape(1, -1)
+src/mamujoco/collect_offline_data.py:68:        state = np.asarray(env.state(), dtype=np.float32).copy()
+src/mamujoco/collect_offline_data.py:71:            agent: actions[agent].squeeze(0).cpu().numpy().astype(np.float32)
+src/mamujoco/collect_offline_data.py:78:            next_state = np.asarray(env.state(), dtype=np.float32).copy()
+src/mamujoco/collect_offline_data.py:83:            current = np.asarray(observations[agent], dtype=np.float32)
+src/mamujoco/collect_offline_data.py:85:                next_observations.get(agent, np.zeros_like(current)), dtype=np.float32
+src/mamujoco/collect_offline_data.py:110:        "rewards": torch.tensor(reward_rows, dtype=torch.float32),
+src/mamujoco/collect_offline_data.py:141:        "agent_obsk": 1,
+src/mamujoco/collect_offline_data.py:197:                    "agent_obsk": 1,
+src/mamujoco/collect_difficulty_data.py:66:        "agent_obsk": 1,
+src/mamujoco/collect_difficulty_data.py:121:                        "agent_obsk": 1,
+src/mamujoco/aggregate_evaluations.py:1:"""Pool four-seed zero-shot evaluations into the paper-style 32 runs."""
+src/mamujoco/dataset.py:30:def _history_windows(
+src/mamujoco/dataset.py:35:    history_length: int,
+src/mamujoco/dataset.py:37:    """Build causal history ending at each requested transition."""
+src/mamujoco/dataset.py:39:        (output_length, history_length, *tensor.shape[1:]), dtype=tensor.dtype
+src/mamujoco/dataset.py:41:    valid = torch.zeros((output_length, history_length), dtype=torch.bool)
+src/mamujoco/dataset.py:44:        begin = max(0, end - history_length)
+src/mamujoco/dataset.py:46:        histories[offset, history_length - count :].copy_(tensor[begin:end])
+src/mamujoco/dataset.py:47:        valid[offset, history_length - count :] = True
+src/mamujoco/dataset.py:58:        sequence_length: int = 1,
+src/mamujoco/dataset.py:59:        history_length: int = 32,
+src/mamujoco/dataset.py:91:                "disabled_agent",
+src/mamujoco/dataset.py:117:        self.sequence_length = int(sequence_length)
+src/mamujoco/dataset.py:118:        self.history_length = int(history_length)
+src/mamujoco/dataset.py:119:        self.stride = int(stride or sequence_length)
+src/mamujoco/dataset.py:121:        if self.sequence_length <= 0 or self.history_length <= 0 or self.stride <= 0:
+src/mamujoco/dataset.py:122:            raise ValueError("sequence_length, history_length, and stride must be positive")
+src/mamujoco/dataset.py:134:                length = min(self.sequence_length, transitions - start)
+src/mamujoco/dataset.py:162:        valid = torch.zeros(self.sequence_length, dtype=torch.bool)
+src/mamujoco/dataset.py:169:                self.sequence_length,
+src/mamujoco/dataset.py:173:        history_observations = {}
+src/mamujoco/dataset.py:174:        history_valid = None
+src/mamujoco/dataset.py:176:            history, agent_history_valid = _history_windows(
+src/mamujoco/dataset.py:180:                self.sequence_length,
+src/mamujoco/dataset.py:181:                self.history_length,
+src/mamujoco/dataset.py:183:            history_observations[agent] = history.float()
+src/mamujoco/dataset.py:184:            if history_valid is None:
+src/mamujoco/dataset.py:185:                history_valid = agent_history_valid
+src/mamujoco/dataset.py:191:                self.sequence_length,
+src/mamujoco/dataset.py:200:                self.sequence_length,
+src/mamujoco/dataset.py:204:        active_agents = torch.tensor(
+src/mamujoco/dataset.py:205:            [agent != task.disabled_agent for agent in AGENT_IDS], dtype=torch.bool
+src/mamujoco/dataset.py:209:            "history_observations": history_observations,
+src/mamujoco/dataset.py:210:            "history_valid": history_valid,
+src/mamujoco/dataset.py:214:                payload["states"], window.start, window.length, self.sequence_length
+src/mamujoco/dataset.py:220:                self.sequence_length,
+src/mamujoco/dataset.py:223:                payload["rewards"], window.start, window.length, self.sequence_length
+src/mamujoco/dataset.py:229:                self.sequence_length,
+src/mamujoco/dataset.py:232:            "active_agents": active_agents,
+src/mamujoco/dataset.py:245:    batch_size: int = 128,
+src/mamujoco/dataset.py:246:    sequence_length: int = 1,
+src/mamujoco/dataset.py:247:    history_length: int = 32,
+src/mamujoco/dataset.py:255:        sequence_length=sequence_length,
+src/mamujoco/dataset.py:256:        history_length=history_length,
+src/mamujoco/dataset.py:262:        batch_size=batch_size,
+src/mamujoco/train_offline.py:1:"""Train HiSSD or Skill-VAE on fixed MaMuJoCo source-task datasets."""
+src/mamujoco/train_offline.py:15:    HISSD_ALPHA,
+src/mamujoco/train_offline.py:16:    HISSD_BETA,
+src/mamujoco/train_offline.py:17:    HISSD_EXPECTILE,
+src/mamujoco/train_offline.py:29:    parser.add_argument("--algorithm", choices=("hissd", "skill_vae"), required=True)
+src/mamujoco/train_offline.py:35:    parser.add_argument("--batch-size", type=int, default=128)
+src/mamujoco/train_offline.py:37:    parser.add_argument("--history-length", type=int, default=32)
+src/mamujoco/train_offline.py:38:    parser.add_argument("--learning-rate", type=float, default=5e-4)
+src/mamujoco/train_offline.py:39:    parser.add_argument("--gamma", type=float, default=0.99)
+src/mamujoco/train_offline.py:41:    parser.add_argument("--alpha", type=float, default=HISSD_ALPHA)
+src/mamujoco/train_offline.py:42:    parser.add_argument("--beta", type=float, default=HISSD_BETA)
+src/mamujoco/train_offline.py:43:    parser.add_argument("--expectile", type=float, default=HISSD_EXPECTILE)
+src/mamujoco/train_offline.py:106:        "batch_size",
+src/mamujoco/train_offline.py:107:        "sequence_length",
+src/mamujoco/train_offline.py:108:        "history_length",
+src/mamujoco/train_offline.py:110:        "alpha",
+src/mamujoco/train_offline.py:111:        "beta",
+src/mamujoco/train_offline.py:112:        "expectile",
+src/mamujoco/train_offline.py:117:    if args.expectile >= 1:
+src/mamujoco/train_offline.py:118:        raise ValueError("--expectile must be strictly between 0 and 1")
+src/mamujoco/train_offline.py:143:        history_length=args.history_length,
+src/mamujoco/train_offline.py:144:        training_sequence_length=args.sequence_length,
+src/mamujoco/train_offline.py:146:    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+src/mamujoco/train_offline.py:149:        batch_size=args.batch_size,
+src/mamujoco/train_offline.py:150:        sequence_length=args.sequence_length,
+src/mamujoco/train_offline.py:151:        history_length=args.history_length,
+src/mamujoco/train_offline.py:169:                gamma=args.gamma,
+src/mamujoco/train_offline.py:170:                alpha=args.alpha,
+src/mamujoco/train_offline.py:171:                beta=args.beta,
+src/mamujoco/train_offline.py:172:                expectile=args.expectile,
+src/mamujoco/adapt_difficulty.py:50:    def __init__(self, observation_dims, action_dims, skill_dim: int, hidden_dim: int):
+src/mamujoco/adapt_difficulty.py:55:                nn.Linear(observation_dims[agent] + skill_dim, hidden_dim),
+src/mamujoco/adapt_difficulty.py:69:    def residuals(self, observations, task_skills):
+src/mamujoco/adapt_difficulty.py:72:                torch.cat((observations[agent], task_skills[:, :, index]), dim=-1)
+src/mamujoco/adapt_difficulty.py:87:    parser.add_argument("--batch-size", type=int, default=128)
+src/mamujoco/adapt_difficulty.py:90:    parser.add_argument("--history-length", type=int, default=32)
+src/mamujoco/adapt_difficulty.py:92:    parser.add_argument("--learning-rate", type=float, default=5e-4)
+src/mamujoco/adapt_difficulty.py:93:    parser.add_argument("--gamma", type=float, default=0.99)
+src/mamujoco/adapt_difficulty.py:124:        batch["history_observations"],
+src/mamujoco/adapt_difficulty.py:125:        batch["history_valid"],
+src/mamujoco/adapt_difficulty.py:126:        batch["active_agents"],
+src/mamujoco/adapt_difficulty.py:130:def _pooled_query(query: torch.Tensor, active_agents: torch.Tensor) -> torch.Tensor:
+src/mamujoco/adapt_difficulty.py:131:    numeric = active_agents.to(query.dtype)
+src/mamujoco/adapt_difficulty.py:152:def _finalize_gae(transitions: list[dict], gamma: float, gae_lambda: float) -> None:
+src/mamujoco/adapt_difficulty.py:157:        delta = transition["reward"] + gamma * continuation * next_value - transition["value"]
+src/mamujoco/adapt_difficulty.py:158:        advantage = delta + gamma * gae_lambda * continuation * advantage
+src/mamujoco/adapt_difficulty.py:159:        transition["advantage"] = torch.tensor(advantage, dtype=torch.float32)
+src/mamujoco/adapt_difficulty.py:160:        transition["return"] = torch.tensor(advantage + transition["value"], dtype=torch.float32)
+src/mamujoco/adapt_difficulty.py:173:            agent: torch.as_tensor(value, dtype=torch.float32, device=device).reshape(1, -1)
+src/mamujoco/adapt_difficulty.py:176:        state = torch.as_tensor(env.state(), dtype=torch.float32, device=device).reshape(1, -1)
+src/mamujoco/adapt_difficulty.py:178:        task_skill = next_hidden["last_task_skill"]
+src/mamujoco/adapt_difficulty.py:180:        residual_values = residual.residuals(residual_input, task_skill.unsqueeze(1))
+src/mamujoco/adapt_difficulty.py:193:            numpy_actions[agent] = action.squeeze(0).cpu().numpy().astype(np.float32)
+src/mamujoco/adapt_difficulty.py:198:            next_state = torch.as_tensor(env.state(), dtype=torch.float32).reshape(1, -1)
+src/mamujoco/adapt_difficulty.py:206:                "history_observations": {
+src/mamujoco/adapt_difficulty.py:207:                    agent: next_hidden["task_observation_history"][agent].cpu()
+src/mamujoco/adapt_difficulty.py:210:                "history_valid": next_hidden["task_history_valid"].cpu(),
+src/mamujoco/adapt_difficulty.py:224:                "active_agents": torch.ones(len(AGENT_IDS), dtype=torch.bool),
+src/mamujoco/adapt_difficulty.py:278:                source_batch["history_observations"],
+src/mamujoco/adapt_difficulty.py:279:                source_batch["history_valid"],
+src/mamujoco/adapt_difficulty.py:280:                source_batch["active_agents"],
+src/mamujoco/adapt_difficulty.py:290:    contexts = [_pooled_query(target_query, target_batch["active_agents"])]
+src/mamujoco/adapt_difficulty.py:293:        contexts.append(_pooled_query(source_query, source_batch["active_agents"]))
+src/mamujoco/adapt_difficulty.py:339:                agent: torch.as_tensor(value, dtype=torch.float32, device=device).reshape(1, -1)
+src/mamujoco/adapt_difficulty.py:343:            task_skill = hidden["last_task_skill"].unsqueeze(1)
+src/mamujoco/adapt_difficulty.py:346:                task_skill,
+src/mamujoco/adapt_difficulty.py:351:                ).squeeze(0).cpu().numpy().astype(np.float32)
+src/mamujoco/adapt_difficulty.py:378:    counts = tuple(int(round(args.batch_size * ratio)) for ratio in ratios)
+src/mamujoco/adapt_difficulty.py:379:    validate_adaptation_counts(*counts, args.batch_size)
+src/mamujoco/adapt_difficulty.py:380:    if counts != (64, 32, 32) and args.batch_size == 128 and ratios == (0.5, 0.25, 0.25):
+src/mamujoco/adapt_difficulty.py:381:        raise AssertionError("Default adaptation batch must be 64/32/32")
+src/mamujoco/adapt_difficulty.py:405:    if model.history_length != args.history_length:
+src/mamujoco/adapt_difficulty.py:407:            f"Checkpoint history length is {model.history_length}, requested {args.history_length}"
+src/mamujoco/adapt_difficulty.py:419:        model.skill_dim,
+src/mamujoco/adapt_difficulty.py:429:        lr=args.learning_rate,
+src/mamujoco/adapt_difficulty.py:433:        sequence_length=1,
+src/mamujoco/adapt_difficulty.py:434:        history_length=args.history_length,
+src/mamujoco/adapt_difficulty.py:439:        sequence_length=1,
+src/mamujoco/adapt_difficulty.py:440:        history_length=args.history_length,
+src/mamujoco/adapt_difficulty.py:479:                _finalize_gae(episode, args.gamma, args.gae_lambda)
+src/mamujoco/evaluate_zero_shot.py:26:    parser.add_argument("--algorithm", choices=("hissd", "skill_vae"), required=True)
+src/mamujoco/evaluate_zero_shot.py:33:        help="Eight episodes for each of four training seeds gives 32 paper-style runs.",
+src/mamujoco/evaluate_zero_shot.py:63:        history_length=payload.get("model_config", {}).get("history_length", 32),
+src/mamujoco/evaluate_zero_shot.py:64:        training_sequence_length=payload.get("model_config", {}).get(
+src/mamujoco/evaluate_zero_shot.py:65:            "training_sequence_length",
+src/mamujoco/evaluate_zero_shot.py:66:            payload.get("config", {}).get("sequence_length", 1),
+src/mamujoco/evaluate_zero_shot.py:81:    disabled_agent = getattr(getattr(env, "task", None), "disabled_agent", None)
+src/mamujoco/evaluate_zero_shot.py:82:    active_agents = torch.tensor(
+src/mamujoco/evaluate_zero_shot.py:83:        [[agent != disabled_agent for agent in AGENT_IDS]],
+src/mamujoco/evaluate_zero_shot.py:89:            agent: torch.as_tensor(value, dtype=torch.float32, device=device).reshape(1, -1)
+src/mamujoco/evaluate_zero_shot.py:93:            tensor_obs, hidden, active_agents=active_agents
+src/mamujoco/evaluate_zero_shot.py:96:            agent: actions[agent].squeeze(0).cpu().numpy().astype(np.float32)
+src/mamujoco/tasks.py:18:SUPPORTED_SUITES = ("difficulty", "dynamics", "joint_disable")
+src/mamujoco/tasks.py:31:    disabled_agent: str | None = None
+src/mamujoco/tasks.py:41:        if self.disabled_agent is not None and self.disabled_agent not in AGENT_IDS:
+src/mamujoco/tasks.py:42:            raise ValueError(f"Unknown disabled agent: {self.disabled_agent}")
+src/mamujoco/tasks.py:49:        if self.disabled_agent is None:
+src/mamujoco/tasks.py:51:        return JOINT_NAMES[int(self.disabled_agent.rsplit("_", 1)[1])]
+src/mamujoco/tasks.py:54:    def active_agents(self) -> tuple[str, ...]:
+src/mamujoco/tasks.py:55:        return tuple(agent for agent in AGENT_IDS if agent != self.disabled_agent)
+src/mamujoco/tasks.py:63:_JOINT_DISABLE_TASKS = (
+src/mamujoco/tasks.py:64:    TaskSpec("joint_disable", "complete", "source"),
+src/mamujoco/tasks.py:65:    TaskSpec("joint_disable", "back_thigh", "source", "agent_0"),
+src/mamujoco/tasks.py:66:    TaskSpec("joint_disable", "back_foot", "source", "agent_2"),
+src/mamujoco/tasks.py:67:    TaskSpec("joint_disable", "front_thigh", "source", "agent_3"),
+src/mamujoco/tasks.py:68:    TaskSpec("joint_disable", "front_shin", "source", "agent_4"),
+src/mamujoco/tasks.py:69:    TaskSpec("joint_disable", "back_shin", "target", "agent_1"),
+src/mamujoco/tasks.py:70:    TaskSpec("joint_disable", "front_foot", "target", "agent_5"),
+src/mamujoco/tasks.py:119:    "joint_disable": _JOINT_DISABLE_TASKS,
+src/mamujoco/PARAMETER_AUDIT.md:9:D3=0.6 and D4=0.4 unseen targets. Difficulty is inferred implicitly from
+src/mamujoco/PARAMETER_AUDIT.md:10:observation history and is never passed to the policy as an ID or scalar.
+src/mamujoco/PARAMETER_AUDIT.md:15:The default adaptation batch is 64 target, 32 D1, and 32 D2, with 500,000 joint
+src/mamujoco/PARAMETER_AUDIT.md:20:The observation-history representation follows the existing Drone design at
+src/mamujoco/PARAMETER_AUDIT.md:23:history transformer; per-agent features; active-agent mean pooling; pooled
+src/mamujoco/PARAMETER_AUDIT.md:24:delta; GRU context; and task-skill/query heads. MAMuJoCo uses a vector-specific
+src/mamujoco/PARAMETER_AUDIT.md:27:The source loss retains expectile TD value learning, `exp(TD / alpha)` planner
+src/mamujoco/PARAMETER_AUDIT.md:28:weighting, and the beta-weighted task objective. Source difficulty labels are
+src/mamujoco/PARAMETER_AUDIT.md:46:| Adaptation batch size | 128 | `--adaptation-batch-size` |
+src/mamujoco/PARAMETER_AUDIT.md:64:| Skill dimension per token | 256 | 256 |
+src/mamujoco/PARAMETER_AUDIT.md:67:| Alpha | 10.0 | 10.0 |
+src/mamujoco/PARAMETER_AUDIT.md:68:| Beta | 2.0 | 2.0 |
+src/mamujoco/PARAMETER_AUDIT.md:69:| Expectile epsilon | 0.9 | 0.9 |
+src/mamujoco/PARAMETER_AUDIT.md:70:| Batch size | 128 | 128 |
+src/mamujoco/PARAMETER_AUDIT.md:73:| Learning rate | 0.0005 | 0.0005 |
+src/mamujoco/PARAMETER_AUDIT.md:76:sequence length of 1. Both HiSSD and the Skill-VAE comparison use 256-dimensional
+src/mamujoco/PARAMETER_AUDIT.md:77:hidden and skill representations and the same optimizer, batch size, learning
+src/mamujoco/PARAMETER_AUDIT.md:84:  continuous-action MAMuJoCo implementation. Transformer heads, activations,
+src/mamujoco/PARAMETER_AUDIT.md:89:- The appendix prose says the MAMuJoCo transformers have 64-unit hidden layers,
+src/mamujoco/PARAMETER_AUDIT.md:105:  mixed-task batches directly; it matches the numerical batch size but not that
+src/mamujoco/PARAMETER_AUDIT.md:107:- The paper's forward predictor produces both the next global state and next
+src/mamujoco/PARAMETER_AUDIT.md:110:- The current coordination transformer mixes all six local observations before
+src/mamujoco/train_happo.py:47:    parser.add_argument("--minibatch-size", type=int, default=1024)
+src/mamujoco/train_happo.py:48:    parser.add_argument("--gamma", type=float, default=0.99)
+src/mamujoco/train_happo.py:85:        "minibatch_size",
+src/mamujoco/train_happo.py:133:        agent_obsk=args.agent_obsk,
+src/mamujoco/train_happo.py:147:        minibatch_size=args.minibatch_size,
+src/mamujoco/train_happo.py:160:    history_path = output_dir / "training_metrics.jsonl"
+src/mamujoco/train_happo.py:172:                    gamma=args.gamma,
+src/mamujoco/train_happo.py:206:                    "agent_obsk": args.agent_obsk,
+src/mamujoco/train_happo.py:227:            with history_path.open("a", encoding="utf-8") as file:
+src/mamujoco/pilot_difficulty.py:216:        "agent_obsk": 1,
+src/mamujoco/offline_models.py:1:"""Vector-observation Skill-VAE and HiSSD models for six MaMuJoCo agents."""
+src/mamujoco/offline_models.py:18:HISSD_SKILL_DIM = 256
+src/mamujoco/offline_models.py:19:HISSD_ALPHA = 10.0
+src/mamujoco/offline_models.py:20:HISSD_BETA = 2.0
+src/mamujoco/offline_models.py:21:HISSD_EXPECTILE = 0.9
+src/mamujoco/offline_models.py:35:    """Agent-specific input encoders, recurrent history, and team attention."""
+src/mamujoco/offline_models.py:50:            {agent: nn.GRUCell(hidden_dim, hidden_dim) for agent in self.agent_ids}
+src/mamujoco/offline_models.py:52:        layer = nn.TransformerEncoderLayer(
+src/mamujoco/offline_models.py:59:        self.coordination = nn.TransformerEncoder(
+src/mamujoco/offline_models.py:63:    def initial_state(self, batch_size: int, *, device, dtype):
+src/mamujoco/offline_models.py:65:            agent: torch.zeros(batch_size, self.hidden_dim, device=device, dtype=dtype)
+src/mamujoco/offline_models.py:69:    def step(self, observations, hidden, active_agents=None):
+src/mamujoco/offline_models.py:75:            if active_agents is not None:
+src/mamujoco/offline_models.py:76:                mask = active_agents[:, agent_index].unsqueeze(-1)
+src/mamujoco/offline_models.py:83:    def forward(self, observations, valid, active_agents):
+src/mamujoco/offline_models.py:85:        batch_size, sequence_length = first.shape[:2]
+src/mamujoco/offline_models.py:87:            batch_size, device=first.device, dtype=first.dtype
+src/mamujoco/offline_models.py:90:        for time_index in range(sequence_length):
+src/mamujoco/offline_models.py:96:                step_obs, hidden, active_agents=active_agents
+src/mamujoco/offline_models.py:98:            time_mask = valid[:, time_index].reshape(batch_size, 1)
+src/mamujoco/offline_models.py:131:class DifficultyHistoryEncoder(nn.Module):
+src/mamujoco/offline_models.py:132:    """Infer latent actuator difficulty from causal local-observation history."""
+src/mamujoco/offline_models.py:138:        skill_dim: int = HISSD_SKILL_DIM,
+src/mamujoco/offline_models.py:140:        history_length: int = 32,
+src/mamujoco/offline_models.py:145:        self.skill_dim = int(skill_dim)
+src/mamujoco/offline_models.py:146:        self.history_length = int(history_length)
+src/mamujoco/offline_models.py:152:            torch.zeros(self.history_length, hidden_dim)
+src/mamujoco/offline_models.py:154:        layer = nn.TransformerEncoderLayer(
+src/mamujoco/offline_models.py:161:        self.history_transformer = nn.TransformerEncoder(
+src/mamujoco/offline_models.py:164:        self.context_gru = nn.GRUCell(skill_dim * 2, skill_dim)
+src/mamujoco/offline_models.py:166:            nn.Linear(hidden_dim, skill_dim), nn.LayerNorm(skill_dim), nn.Tanh()
+src/mamujoco/offline_models.py:168:        self.context_projection = nn.Linear(skill_dim, skill_dim)
+src/mamujoco/offline_models.py:170:            nn.Linear(skill_dim, skill_dim), nn.ReLU(), nn.Linear(skill_dim, skill_dim)
+src/mamujoco/offline_models.py:201:        history_observations: Mapping[str, torch.Tensor],
+src/mamujoco/offline_models.py:202:        history_valid: torch.Tensor,
+src/mamujoco/offline_models.py:203:        active_agents: torch.Tensor,
+src/mamujoco/offline_models.py:205:        first = history_observations[self.agent_ids[0]]
+src/mamujoco/offline_models.py:206:        batch_size, sequence_length, history_length = first.shape[:3]
+src/mamujoco/offline_models.py:207:        if history_length != self.history_length:
+src/mamujoco/offline_models.py:209:                f"Expected history length {self.history_length}, got {history_length}"
+src/mamujoco/offline_models.py:213:                batch_size * sequence_length, history_length, value.shape[-1]
+src/mamujoco/offline_models.py:215:            for agent, value in history_observations.items()
+src/mamujoco/offline_models.py:218:        flat_valid = history_valid.reshape(
+src/mamujoco/offline_models.py:219:            batch_size * sequence_length, history_length
+src/mamujoco/offline_models.py:221:        active = active_agents[:, None, :].expand(
+src/mamujoco/offline_models.py:222:            batch_size, sequence_length, len(self.agent_ids)
+src/mamujoco/offline_models.py:223:        ).reshape(batch_size * sequence_length, len(self.agent_ids))
+src/mamujoco/offline_models.py:229:            -1, history_length, self.hidden_dim
+src/mamujoco/offline_models.py:231:        padding = ~valid_agents.permute(0, 2, 1).reshape(-1, history_length)
+src/mamujoco/offline_models.py:238:                history_length,
+src/mamujoco/offline_models.py:239:                history_length,
+src/mamujoco/offline_models.py:245:        transformed = self.history_transformer(
+src/mamujoco/offline_models.py:250:            batch_size * sequence_length,
+src/mamujoco/offline_models.py:252:            history_length,
+src/mamujoco/offline_models.py:258:            batch_size * sequence_length,
+src/mamujoco/offline_models.py:259:            self.skill_dim,
+src/mamujoco/offline_models.py:264:        for time_index in range(history_length):
+src/mamujoco/offline_models.py:270:            candidate = self.context_gru(
+src/mamujoco/offline_models.py:276:        positions = torch.arange(history_length, device=tokens.device)
+src/mamujoco/offline_models.py:284:        task_skill = last_agent_features + self.context_projection(context).unsqueeze(1)
+src/mamujoco/offline_models.py:285:        task_skill = task_skill * active.unsqueeze(-1).to(task_skill.dtype)
+src/mamujoco/offline_models.py:288:        task_skill = task_skill.reshape(
+src/mamujoco/offline_models.py:289:            batch_size, sequence_length, len(self.agent_ids), self.skill_dim
+src/mamujoco/offline_models.py:292:            batch_size, sequence_length, len(self.agent_ids), self.skill_dim
+src/mamujoco/offline_models.py:294:        return task_skill, query
+src/mamujoco/offline_models.py:297:class AgentActionDecoders(nn.Module):
+src/mamujoco/offline_models.py:301:        self.decoders = nn.ModuleDict(
+src/mamujoco/offline_models.py:315:            agent: self.decoders[agent](features[:, :, index])
+src/mamujoco/offline_models.py:320:def _masked_agent_action_loss(predicted, target, valid, active_agents):
+src/mamujoco/offline_models.py:323:        mask = valid & active_agents[:, index].unsqueeze(1)
+src/mamujoco/offline_models.py:357:class MultiAgentSkillVAE(nn.Module):
+src/mamujoco/offline_models.py:358:    """Observation-conditioned recurrent skill VAE with separate action heads."""
+src/mamujoco/offline_models.py:360:    algorithm = "skill_vae"
+src/mamujoco/offline_models.py:368:        skill_dim: int = HISSD_SKILL_DIM,
+src/mamujoco/offline_models.py:375:        self.skill_dim = int(skill_dim)
+src/mamujoco/offline_models.py:377:        self.mean = nn.Linear(hidden_dim, skill_dim)
+src/mamujoco/offline_models.py:378:        self.log_variance = nn.Linear(hidden_dim, skill_dim)
+src/mamujoco/offline_models.py:379:        self.decoders = AgentActionDecoders(action_dims, skill_dim, hidden_dim)
+src/mamujoco/offline_models.py:380:        self.forward_predictor = nn.Sequential(
+src/mamujoco/offline_models.py:381:            nn.Linear(skill_dim * len(AGENT_IDS), hidden_dim),
+src/mamujoco/offline_models.py:388:            batch["observations"], batch["valid"], batch["active_agents"]
+src/mamujoco/offline_models.py:393:            skill = mean + torch.randn_like(mean) * (0.5 * log_variance).exp()
+src/mamujoco/offline_models.py:395:            skill = mean
+src/mamujoco/offline_models.py:396:        actions = self.decoders(skill)
+src/mamujoco/offline_models.py:397:        next_state = self.forward_predictor(skill.flatten(start_dim=2))
+src/mamujoco/offline_models.py:403:            "skill": skill,
+src/mamujoco/offline_models.py:412:            batch["active_agents"],
+src/mamujoco/offline_models.py:432:    def initial_inference_state(self, batch_size: int, *, device):
+src/mamujoco/offline_models.py:433:        return self.encoder.initial_state(batch_size, device=device, dtype=torch.float32)
+src/mamujoco/offline_models.py:438:        skill = self.mean(coordinated)
+src/mamujoco/offline_models.py:440:            agent: self.decoders.decoders[agent](skill[:, index])
+src/mamujoco/offline_models.py:447:    """Continuous HiSSD with common/task skills and IQL value learning."""
+src/mamujoco/offline_models.py:458:        skill_dim: int = HISSD_SKILL_DIM,
+src/mamujoco/offline_models.py:459:        history_length: int = 32,
+src/mamujoco/offline_models.py:460:        training_sequence_length: int = 1,
+src/mamujoco/offline_models.py:468:        self.skill_dim = int(skill_dim)
+src/mamujoco/offline_models.py:469:        self.history_length = int(history_length)
+src/mamujoco/offline_models.py:470:        self.training_sequence_length = int(training_sequence_length)
+src/mamujoco/offline_models.py:471:        if self.training_sequence_length <= 0:
+src/mamujoco/offline_models.py:472:            raise ValueError("training_sequence_length must be positive")
+src/mamujoco/offline_models.py:476:            "skill_dim": self.skill_dim,
+src/mamujoco/offline_models.py:477:            "history_length": self.history_length,
+src/mamujoco/offline_models.py:478:            "training_sequence_length": self.training_sequence_length,
+src/mamujoco/offline_models.py:481:        self.task_encoder = DifficultyHistoryEncoder(
+src/mamujoco/offline_models.py:484:            skill_dim,
+src/mamujoco/offline_models.py:485:            history_length=self.history_length,
+src/mamujoco/offline_models.py:487:        self.common_projection = nn.Sequential(nn.Linear(hidden_dim, skill_dim), nn.Tanh())
+src/mamujoco/offline_models.py:488:        self.task_classifier = nn.Linear(skill_dim, self.num_source_tasks)
+src/mamujoco/offline_models.py:489:        self.decoders = AgentActionDecoders(
+src/mamujoco/offline_models.py:490:            action_dims, skill_dim * 2, hidden_dim
+src/mamujoco/offline_models.py:492:        self.forward_predictor = nn.Sequential(
+src/mamujoco/offline_models.py:493:            nn.Linear(skill_dim * len(AGENT_IDS), hidden_dim),
+src/mamujoco/offline_models.py:497:        self.value_network = nn.Sequential(
+src/mamujoco/offline_models.py:504:        self.target_value_network = copy.deepcopy(self.value_network)
+src/mamujoco/offline_models.py:505:        for parameter in self.target_value_network.parameters():
+src/mamujoco/offline_models.py:510:            batch["observations"], batch["valid"], batch["active_agents"]
+src/mamujoco/offline_models.py:512:        history_observations = batch.get("history_observations")
+src/mamujoco/offline_models.py:513:        history_valid = batch.get("history_valid")
+src/mamujoco/offline_models.py:514:        if history_observations is None:
+src/mamujoco/offline_models.py:515:            history_observations = {
+src/mamujoco/offline_models.py:518:                    (0, 0, self.history_length - 1, 0),
+src/mamujoco/offline_models.py:522:            history_valid = functional.pad(
+src/mamujoco/offline_models.py:524:                (self.history_length - 1, 0),
+src/mamujoco/offline_models.py:526:        task_skill, task_query = self.task_encoder(
+src/mamujoco/offline_models.py:527:            history_observations, history_valid, batch["active_agents"]
+src/mamujoco/offline_models.py:529:        common_skill = self.common_projection(common_hidden)
+src/mamujoco/offline_models.py:530:        decoder_input = torch.cat((common_skill, task_skill), dim=-1)
+src/mamujoco/offline_models.py:531:        actions = self.decoders(decoder_input)
+src/mamujoco/offline_models.py:532:        predicted_state = self.forward_predictor(
+src/mamujoco/offline_models.py:533:            common_skill.flatten(start_dim=2)
+src/mamujoco/offline_models.py:535:        numeric_active = batch["active_agents"].to(task_query.dtype)
+src/mamujoco/offline_models.py:541:            "common_skill": common_skill,
+src/mamujoco/offline_models.py:542:            "task_skill": task_skill,
+src/mamujoco/offline_models.py:545:            "pooled_task_skill": pooled_task,
+src/mamujoco/offline_models.py:552:        gamma=0.99,
+src/mamujoco/offline_models.py:553:        alpha=HISSD_ALPHA,
+src/mamujoco/offline_models.py:554:        beta=HISSD_BETA,
+src/mamujoco/offline_models.py:555:        expectile=HISSD_EXPECTILE,
+src/mamujoco/offline_models.py:559:        values = self.value_network(batch["states"]).squeeze(-1)
+src/mamujoco/offline_models.py:561:            next_values = self.target_value_network(batch["next_states"]).squeeze(-1)
+src/mamujoco/offline_models.py:563:            target = batch["rewards"] + gamma * continuation * next_values
+src/mamujoco/offline_models.py:565:        expectile_weight = torch.abs(
+src/mamujoco/offline_models.py:566:            expectile - (td_residual.detach() < 0).to(values.dtype)
+src/mamujoco/offline_models.py:569:            expectile_weight[valid] * td_residual[valid].pow(2)
+src/mamujoco/offline_models.py:571:        planner_weight = torch.exp(td_residual.detach() / alpha).clamp(max=100.0)
+src/mamujoco/offline_models.py:576:            batch["active_agents"],
+src/mamujoco/offline_models.py:581:        prediction_loss = (planner_weight[valid] * state_error[valid]).mean()
+src/mamujoco/offline_models.py:583:            output["pooled_task_skill"], batch["task_id"]
+src/mamujoco/offline_models.py:586:            self.task_classifier(output["pooled_task_skill"]), batch["task_id"]
+src/mamujoco/offline_models.py:592:            + beta * (task_loss + classification_loss)
+src/mamujoco/offline_models.py:604:    def update_target(self, tau: float = 0.005):
+src/mamujoco/offline_models.py:606:            self.target_value_network.parameters(), self.value_network.parameters()
+src/mamujoco/offline_models.py:608:            target.mul_(1.0 - tau).add_(source, alpha=tau)
+src/mamujoco/offline_models.py:610:    def initial_inference_state(self, batch_size: int, *, device):
+src/mamujoco/offline_models.py:613:                batch_size, device=device, dtype=torch.float32
+src/mamujoco/offline_models.py:615:            "task_observation_history": {
+src/mamujoco/offline_models.py:617:                    batch_size,
+src/mamujoco/offline_models.py:618:                    self.history_length,
+src/mamujoco/offline_models.py:624:            "task_history_valid": torch.zeros(
+src/mamujoco/offline_models.py:625:                batch_size, self.history_length, dtype=torch.bool, device=device
+src/mamujoco/offline_models.py:630:    def act_step(self, observations, hidden, active_agents=None):
+src/mamujoco/offline_models.py:631:        if active_agents is None:
+src/mamujoco/offline_models.py:632:            active_agents = torch.ones(
+src/mamujoco/offline_models.py:639:        if self.training_sequence_length == 1:
+src/mamujoco/offline_models.py:646:            observations, common_input_state, active_agents=active_agents
+src/mamujoco/offline_models.py:648:        if self.training_sequence_length == 1:
+src/mamujoco/offline_models.py:650:        next_observation_history = {
+src/mamujoco/offline_models.py:653:                    hidden["task_observation_history"][agent][:, 1:],
+src/mamujoco/offline_models.py:660:        next_history_valid = torch.cat(
+src/mamujoco/offline_models.py:662:                hidden["task_history_valid"][:, 1:],
+src/mamujoco/offline_models.py:672:        history_batch = {
+src/mamujoco/offline_models.py:674:            for agent, value in next_observation_history.items()
+src/mamujoco/offline_models.py:676:        task_skill, task_query = self.task_encoder(
+src/mamujoco/offline_models.py:677:            history_batch, next_history_valid.unsqueeze(1), active_agents
+src/mamujoco/offline_models.py:679:        task_skill = task_skill[:, 0]
+src/mamujoco/offline_models.py:681:        common_skill = self.common_projection(common_hidden)
+src/mamujoco/offline_models.py:682:        features = torch.cat((common_skill, task_skill), dim=-1)
+src/mamujoco/offline_models.py:684:            agent: self.decoders.decoders[agent](features[:, index])
+src/mamujoco/offline_models.py:689:            "task_observation_history": next_observation_history,
+src/mamujoco/offline_models.py:690:            "task_history_valid": next_history_valid,
+src/mamujoco/offline_models.py:691:            "last_task_skill": task_skill,
+src/mamujoco/offline_models.py:703:    history_length: int = 32,
+src/mamujoco/offline_models.py:704:    training_sequence_length: int = 1,
+src/mamujoco/offline_models.py:712:            history_length=history_length,
+src/mamujoco/offline_models.py:713:            training_sequence_length=training_sequence_length,
+src/mamujoco/offline_models.py:715:    if algorithm == "skill_vae":
+src/mamujoco/offline_models.py:716:        return MultiAgentSkillVAE(observation_dims, action_dims, state_dim)
+src/mamujoco/run_protocol.py:20:LEGACY_SUITES = ("dynamics", "joint_disable")
+src/mamujoco/run_protocol.py:35:        "--algorithms", nargs="+", choices=("hissd", "skill_vae"),
+src/mamujoco/run_protocol.py:36:        default=("hissd", "skill_vae"),
+src/mamujoco/run_protocol.py:56:    parser.add_argument("--adaptation-batch-size", type=int, default=128)
+src/mamujoco/run_protocol.py:286:                        "--batch-size", args.adaptation_batch_size,
+src/mamujoco/README.md:3:This package ports the repository's independent-policy HAPPO, Skill-VAE, and
+src/mamujoco/README.md:11:- Observation radius: `agent_obsk=1`
+src/mamujoco/README.md:38:The HiSSD-based controller instead infers a context from causal observation
+src/mamujoco/README.md:39:history using per-agent observation encoders, current/delta/running statistics,
+src/mamujoco/README.md:40:a history transformer, active-agent mean pooling, pooled deltas, and a GRU.
+src/mamujoco/README.md:50:64 target + 32 D1 + 32 D2.
+src/mamujoco/README.md:64:`joint_disable` follows the paper protocol. Source tasks are `complete`,
+src/mamujoco/README.md:66:tasks are `back_shin` and `front_foot`. A disabled agent remains present but its
+src/mamujoco/README.md:121:`--adaptation-eval-interval`, `--adaptation-batch-size`,
+src/mamujoco/README.md:160:  --adaptation-eval-interval 2 --adaptation-batch-size 4
+src/mamujoco/README.md:164:override retains the production batch of 128 with counts 64/32/32.
+src/mamujoco/README.md:180:The paper-scale defaults are 100 trajectories per source task, batch size 128,
+src/mamujoco/README.md:181:1,000,000 offline gradient steps, learning rate 5e-4, discount 0.99, target
+src/mamujoco/README.md:182:update rate 0.005, alpha 10.0, beta 2.0, expectile 0.9, four training seeds,
+src/mamujoco/README.md:184:skill dimensions are all 256. The four evaluation files are pooled into 32
+src/mamujoco/README.md:198:  --suite joint_disable --task complete --seed 1 --device cuda
+src/mamujoco/README.md:201:  --suite joint_disable --task all --trajectories-per-task 100 --device cuda
+src/mamujoco/README.md:204:  --algorithm hissd --suite joint_disable --seed 1 --device cuda
+src/mamujoco/README.md:207:  --algorithm hissd --suite joint_disable \
+src/mamujoco/README.md:208:  --checkpoint src/mamujoco/checkpoints/offline/joint_disable/hissd/seed_1/latest.pt \
+
+
+===== train_offline.py =====
+"""Train HiSSD or Skill-VAE on fixed MaMuJoCo source-task datasets."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+import torch
+
+from .dataset import build_dataloader
+from .env import DEFAULT_ENVIRONMENT_VERSION, recorded_environment_version
+from .happo import resolve_device, seed_everything
+from .offline_models import (
+    HISSD_ALPHA,
+    HISSD_BETA,
+    HISSD_EXPECTILE,
+    build_offline_model,
+)
+from .tasks import AGENT_IDS, SUPPORTED_SUITES
+
+
+DEFAULT_DATA_ROOT = Path("src/mamujoco/offline_data")
+DEFAULT_OUTPUT_ROOT = Path("src/mamujoco/checkpoints/offline")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--algorithm", choices=("hissd", "skill_vae"), required=True)
+    parser.add_argument("--suite", choices=SUPPORTED_SUITES, required=True)
+    parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--data-root", type=Path, default=DEFAULT_DATA_ROOT)
+    parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
+    parser.add_argument("--training-steps", type=int, default=1_000_000)
+    parser.add_argument("--batch-size", type=int, default=128)
+    parser.add_argument("--sequence-length", type=int, default=1)
+    parser.add_argument("--history-length", type=int, default=32)
+    parser.add_argument("--learning-rate", type=float, default=5e-4)
+    parser.add_argument("--gamma", type=float, default=0.99)
+    parser.add_argument("--target-update-rate", type=float, default=0.005)
+    parser.add_argument("--alpha", type=float, default=HISSD_ALPHA)
+    parser.add_argument("--beta", type=float, default=HISSD_BETA)
+    parser.add_argument("--expectile", type=float, default=HISSD_EXPECTILE)
+    parser.add_argument("--gradient-norm-clip", type=float, default=10.0)
+    parser.add_argument("--checkpoint-every", type=int, default=10_000)
+    parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    return parser.parse_args()
+
+
+def _to_device(value, device):
+    if isinstance(value, torch.Tensor):
+        return value.to(device, non_blocking=True)
+    if isinstance(value, dict):
+        return {key: _to_device(item, device) for key, item in value.items()}
+    return value
+
+
+def infer_dimensions(manifest_path: Path):
+    with manifest_path.open("r", encoding="utf-8") as file:
+        manifest = json.load(file)
+    first_task = next(iter(manifest["tasks"].values()))
+    first_entry = first_task["episodes"][0]
+    data_root = manifest_path.parents[1]
+    payload = torch.load(
+        data_root / first_entry["path"], map_location="cpu", weights_only=False
+    )
+    observation_dims = {
+        agent: int(payload["observations"][agent].shape[-1]) for agent in AGENT_IDS
+    }
+    action_dims = {
+        agent: int(payload["actions"][agent].shape[-1]) for agent in AGENT_IDS
+    }
+    state_dim = int(payload["states"].shape[-1])
+    return observation_dims, action_dims, state_dim
+
+
+def save_checkpoint(path: Path, model, args, step: int, metrics: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(
+        {
+            "format_version": 1,
+            "algorithm": args.algorithm,
+            "suite": args.suite,
+            "step": step,
+            "seed": args.seed,
+            "observation_dims": model.observation_dims,
+            "action_dims": model.action_dims,
+            "state_dim": model.state_dim,
+            "model_config": getattr(model, "model_config", {}),
+            "model": model.state_dict(),
+            "metrics": metrics,
+            "config": vars(args),
+            "environment_version": args.environment_version,
+            "backend": f"gymnasium_robotics.mamujoco_v1/{args.environment_version}",
+        },
+        path,
+    )
+
+
+def main() -> None:
+    args = parse_args()
+    for name in (
+        "training_steps",
+        "batch_size",
+        "sequence_length",
+        "history_length",
+        "checkpoint_every",
+        "alpha",
+        "beta",
+        "expectile",
+        "gradient_norm_clip",
+    ):
+        if getattr(args, name) <= 0:
+            raise ValueError(f"--{name.replace('_', '-')} must be positive")
+    if args.expectile >= 1:
+        raise ValueError("--expectile must be strictly between 0 and 1")
+    seed_everything(args.seed)
+    device = resolve_device(args.device)
+    manifest_path = args.manifest or args.data_root / args.suite / "manifest.json"
+    with manifest_path.open("r", encoding="utf-8") as file:
+        manifest = json.load(file)
+    args.environment_version = (
+        recorded_environment_version(manifest) or DEFAULT_ENVIRONMENT_VERSION
+    )
+    if args.suite == "difficulty":
+        protocol = manifest.get("difficulty_protocol", {})
+        target_names = set(protocol.get("target_difficulties", ()))
+        leaked = target_names & set(manifest.get("tasks", {}))
+        if leaked:
+            raise ValueError(
+                f"Target difficulty leakage in offline data: {sorted(leaked)}"
+            )
+    num_source_tasks = len(manifest["tasks"])
+    observation_dims, action_dims, state_dim = infer_dimensions(manifest_path)
+    model = build_offline_model(
+        args.algorithm,
+        observation_dims,
+        action_dims,
+        state_dim,
+        num_source_tasks=num_source_tasks,
+        history_length=args.history_length,
+        training_sequence_length=args.sequence_length,
+    ).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    dataloader = build_dataloader(
+        manifest_path,
+        batch_size=args.batch_size,
+        sequence_length=args.sequence_length,
+        history_length=args.history_length,
+        num_workers=args.num_workers,
+    )
+    iterator = iter(dataloader)
+    output_dir = args.output_root / args.suite / args.algorithm / f"seed_{args.seed}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    metrics_path = output_dir / "training_metrics.jsonl"
+
+    for step in range(1, args.training_steps + 1):
+        try:
+            batch = next(iterator)
+        except StopIteration:
+            iterator = iter(dataloader)
+            batch = next(iterator)
+        batch = _to_device(batch, device)
+        if args.algorithm == "hissd":
+            loss, metrics = model.loss(
+                batch,
+                gamma=args.gamma,
+                alpha=args.alpha,
+                beta=args.beta,
+                expectile=args.expectile,
+            )
+        else:
+            loss, metrics = model.loss(batch)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(
+            model.parameters(), args.gradient_norm_clip
+        )
+        optimizer.step()
+        if args.algorithm == "hissd":
+            model.update_target(args.target_update_rate)
+
+        if step == 1 or step % 100 == 0:
+            record = {
+                "step": step,
+                **{key: float(value.cpu()) for key, value in metrics.items()},
+            }
+            with metrics_path.open("a", encoding="utf-8") as file:
+                file.write(json.dumps(record, sort_keys=True) + "\n")
+        if step % args.checkpoint_every == 0 or step == args.training_steps:
+            scalar_metrics = {
+                key: float(value.cpu()) for key, value in metrics.items()
+            }
+            save_checkpoint(output_dir / "latest.pt", model, args, step, scalar_metrics)
+            save_checkpoint(
+                output_dir / f"checkpoint_{step:07d}.pt",
+                model,
+                args,
+                step,
+                scalar_metrics,
+            )
+            print(
+                f"algorithm={args.algorithm} suite={args.suite} "
+                f"step={step} loss={scalar_metrics['loss']:.6f}"
+            )
+
+
+if __name__ == "__main__":
+    main()
+
+
+===== offline_models.py : HiSSD locations =====
+1:"""Vector-observation Skill-VAE and HiSSD models for six MaMuJoCo agents."""
+15:HISSD_HIDDEN_DIM = 256
+16:HISSD_MLP_HIDDEN_UNITS = 256
+17:HISSD_ATTENTION_DIM = 256
+18:HISSD_SKILL_DIM = 256
+19:HISSD_ALPHA = 10.0
+20:HISSD_BETA = 2.0
+21:HISSD_EXPECTILE = 0.9
+35:    """Agent-specific input encoders, recurrent history, and team attention."""
+50:            {agent: nn.GRUCell(hidden_dim, hidden_dim) for agent in self.agent_ids}
+52:        layer = nn.TransformerEncoderLayer(
+59:        self.coordination = nn.TransformerEncoder(
+131:class DifficultyHistoryEncoder(nn.Module):
+132:    """Infer latent actuator difficulty from causal local-observation history."""
+137:        hidden_dim: int = HISSD_HIDDEN_DIM,
+138:        skill_dim: int = HISSD_SKILL_DIM,
+140:        history_length: int = 32,
+146:        self.history_length = int(history_length)
+152:            torch.zeros(self.history_length, hidden_dim)
+154:        layer = nn.TransformerEncoderLayer(
+157:            dim_feedforward=HISSD_MLP_HIDDEN_UNITS,
+161:        self.history_transformer = nn.TransformerEncoder(
+164:        self.context_gru = nn.GRUCell(skill_dim * 2, skill_dim)
+201:        history_observations: Mapping[str, torch.Tensor],
+202:        history_valid: torch.Tensor,
+205:        first = history_observations[self.agent_ids[0]]
+206:        batch_size, sequence_length, history_length = first.shape[:3]
+207:        if history_length != self.history_length:
+208:            raise ValueError(
+209:                f"Expected history length {self.history_length}, got {history_length}"
+212:            agent: value.reshape(
+213:                batch_size * sequence_length, history_length, value.shape[-1]
+215:            for agent, value in history_observations.items()
+218:        flat_valid = history_valid.reshape(
+219:            batch_size * sequence_length, history_length
+229:            -1, history_length, self.hidden_dim
+231:        padding = ~valid_agents.permute(0, 2, 1).reshape(-1, history_length)
+238:                history_length,
+239:                history_length,
+245:        transformed = self.history_transformer(
+252:            history_length,
+264:        for time_index in range(history_length):
+270:            candidate = self.context_gru(
+276:        positions = torch.arange(history_length, device=tokens.device)
+281:        ).max(dim=1).values
+284:        task_skill = last_agent_features + self.context_projection(context).unsqueeze(1)
+285:        task_skill = task_skill * active.unsqueeze(-1).to(task_skill.dtype)
+288:        task_skill = task_skill.reshape(
+294:        return task_skill, query
+297:class AgentActionDecoders(nn.Module):
+301:        self.decoders = nn.ModuleDict(
+315:            agent: self.decoders[agent](features[:, :, index])
+345:    logits = logits - logits.max(dim=1, keepdim=True).values.detach()
+367:        hidden_dim: int = HISSD_HIDDEN_DIM,
+368:        skill_dim: int = HISSD_SKILL_DIM,
+379:        self.decoders = AgentActionDecoders(action_dims, skill_dim, hidden_dim)
+380:        self.forward_predictor = nn.Sequential(
+396:        actions = self.decoders(skill)
+397:        next_state = self.forward_predictor(skill.flatten(start_dim=2))
+440:            agent: self.decoders.decoders[agent](skill[:, index])
+446:class HiSSD(nn.Module):
+447:    """Continuous HiSSD with common/task skills and IQL value learning."""
+449:    algorithm = "hissd"
+457:        hidden_dim: int = HISSD_HIDDEN_DIM,
+458:        skill_dim: int = HISSD_SKILL_DIM,
+459:        history_length: int = 32,
+469:        self.history_length = int(history_length)
+472:            raise ValueError("training_sequence_length must be positive")
+477:            "history_length": self.history_length,
+481:        self.task_encoder = DifficultyHistoryEncoder(
+485:            history_length=self.history_length,
+489:        self.decoders = AgentActionDecoders(
+492:        self.forward_predictor = nn.Sequential(
+497:        self.value_network = nn.Sequential(
+504:        self.target_value_network = copy.deepcopy(self.value_network)
+505:        for parameter in self.target_value_network.parameters():
+512:        history_observations = batch.get("history_observations")
+513:        history_valid = batch.get("history_valid")
+514:        if history_observations is None:
+515:            history_observations = {
+517:                    value.unsqueeze(2),
+518:                    (0, 0, self.history_length - 1, 0),
+520:                for agent, value in batch["observations"].items()
+522:            history_valid = functional.pad(
+524:                (self.history_length - 1, 0),
+526:        task_skill, task_query = self.task_encoder(
+527:            history_observations, history_valid, batch["active_agents"]
+529:        common_skill = self.common_projection(common_hidden)
+530:        decoder_input = torch.cat((common_skill, task_skill), dim=-1)
+531:        actions = self.decoders(decoder_input)
+532:        predicted_state = self.forward_predictor(
+533:            common_skill.flatten(start_dim=2)
+541:            "common_skill": common_skill,
+542:            "task_skill": task_skill,
+545:            "pooled_task_skill": pooled_task,
+553:        alpha=HISSD_ALPHA,
+554:        beta=HISSD_BETA,
+555:        expectile=HISSD_EXPECTILE,
+559:        values = self.value_network(batch["states"]).squeeze(-1)
+561:            next_values = self.target_value_network(batch["next_states"]).squeeze(-1)
+563:            target = batch["rewards"] + gamma * continuation * next_values
+564:        td_residual = target - values
+565:        expectile_weight = torch.abs(
+566:            expectile - (td_residual.detach() < 0).to(values.dtype)
+568:        value_loss = (
+569:            expectile_weight[valid] * td_residual[valid].pow(2)
+571:        planner_weight = torch.exp(td_residual.detach() / alpha).clamp(max=100.0)
+581:        prediction_loss = (planner_weight[valid] * state_error[valid]).mean()
+583:            output["pooled_task_skill"], batch["task_id"]
+586:            self.task_classifier(output["pooled_task_skill"]), batch["task_id"]
+589:            value_loss
+596:            "value_loss": value_loss.detach(),
+606:            self.target_value_network.parameters(), self.value_network.parameters()
+615:            "task_observation_history": {
+618:                    self.history_length,
+624:            "task_history_valid": torch.zeros(
+625:                batch_size, self.history_length, dtype=torch.bool, device=device
+650:        next_observation_history = {
+653:                    hidden["task_observation_history"][agent][:, 1:],
+660:        next_history_valid = torch.cat(
+662:                hidden["task_history_valid"][:, 1:],
+672:        history_batch = {
+673:            agent: value.unsqueeze(1)
+674:            for agent, value in next_observation_history.items()
+676:        task_skill, task_query = self.task_encoder(
+677:            history_batch, next_history_valid.unsqueeze(1), active_agents
+679:        task_skill = task_skill[:, 0]
+681:        common_skill = self.common_projection(common_hidden)
+682:        features = torch.cat((common_skill, task_skill), dim=-1)
+684:            agent: self.decoders.decoders[agent](features[:, index])
+689:            "task_observation_history": next_observation_history,
+690:            "task_history_valid": next_history_valid,
+691:            "last_task_skill": task_skill,
+703:    history_length: int = 32,
+706:    if algorithm == "hissd":
+707:        return HiSSD(
+712:            history_length=history_length,
+717:    raise ValueError(f"Unknown offline algorithm: {algorithm}")
+
+
+===== evaluate_zero_shot.py =====
+"""Evaluate source and unseen MaMuJoCo tasks without target adaptation."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+import numpy as np
+import torch
+
+from .env import (
+    add_environment_version_argument,
+    make_env,
+    recorded_environment_version,
+)
+from .happo import _episode_done, resolve_device
+from .metrics import EpisodeMetrics
+from .offline_models import build_offline_model
+from .tasks import AGENT_IDS, SUPPORTED_SUITES, list_tasks
+from .difficulty_protocol import add_difficulty_arguments, protocol_from_args
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--algorithm", choices=("hissd", "skill_vae"), required=True)
+    parser.add_argument("--suite", choices=SUPPORTED_SUITES, required=True)
+    parser.add_argument("--checkpoint", type=Path, required=True)
+    parser.add_argument(
+        "--episodes",
+        type=int,
+        default=8,
+        help="Eight episodes for each of four training seeds gives 32 paper-style runs.",
+    )
+    parser.add_argument("--seed-base", type=int, default=20_000_000)
+    parser.add_argument("--max-cycles", type=int, default=1000)
+    parser.add_argument("--render", action="store_true")
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    add_environment_version_argument(parser)
+    add_difficulty_arguments(parser)
+    return parser.parse_args()
+
+
+def load_model(path: Path, *, algorithm: str, suite: str, device):
+    payload = torch.load(path, map_location=device, weights_only=False)
+    if payload.get("algorithm") != algorithm:
+        raise ValueError(
+            f"Checkpoint algorithm is {payload.get('algorithm')!r}, expected {algorithm!r}."
+        )
+    if payload.get("suite") != suite:
+        raise ValueError(
+            f"Checkpoint suite is {payload.get('suite')!r}, expected {suite!r}."
+        )
+    model = build_offline_model(
+        algorithm,
+        payload["observation_dims"],
+        payload["action_dims"],
+        payload["state_dim"],
+        num_source_tasks=payload.get("model_config", {}).get(
+            "num_source_tasks", 5
+        ),
+        history_length=payload.get("model_config", {}).get("history_length", 32),
+        training_sequence_length=payload.get("model_config", {}).get(
+            "training_sequence_length",
+            payload.get("config", {}).get("sequence_length", 1),
+        ),
+    ).to(device)
+    model.load_state_dict(payload["model"])
+    model.eval()
+    return model, payload
+
+
+@torch.no_grad()
+def evaluate_episode(env, model, *, seed: int, device, render: bool):
+    observations, _ = env.reset(seed=seed)
+    hidden = model.initial_inference_state(1, device=device)
+    metrics = EpisodeMetrics()
+    if hasattr(env, "x_position"):
+        metrics.begin(env.x_position)
+    disabled_agent = getattr(getattr(env, "task", None), "disabled_agent", None)
+    active_agents = torch.tensor(
+        [[agent != disabled_agent for agent in AGENT_IDS]],
+        dtype=torch.bool,
+        device=device,
+    )
+    while observations:
+        tensor_obs = {
+            agent: torch.as_tensor(value, dtype=torch.float32, device=device).reshape(1, -1)
+            for agent, value in observations.items()
+        }
+        actions, hidden = model.act_step(
+            tensor_obs, hidden, active_agents=active_agents
+        )
+        numpy_actions = {
+            agent: actions[agent].squeeze(0).cpu().numpy().astype(np.float32)
+            for agent in AGENT_IDS
+        }
+        observations, rewards, terminations, truncations, infos = env.step(
+            numpy_actions
+        )
+        metrics.update(rewards, infos)
+        if render:
+            env.render()
+        if _episode_done(terminations, truncations):
+            break
+    return metrics.finalize()
+
+
+def summarize(records):
+    keys = (
+        "episode_return",
+        "forward_distance",
+        "forward_reward",
+        "forward_velocity",
+        "control_cost",
+        "episode_length",
+    )
+    return {
+        key: {
+            "mean": float(np.mean([record[key] for record in records])),
+            "std": float(np.std([record[key] for record in records], ddof=1))
+            if len(records) > 1
+            else 0.0,
+        }
+        for key in keys
+    }
+
+
+def main() -> None:
+    args = parse_args()
+    if args.episodes <= 0:
+        raise ValueError("--episodes must be positive")
+    device = resolve_device(args.device)
+    model, checkpoint = load_model(
+        args.checkpoint,
+        algorithm=args.algorithm,
+        suite=args.suite,
+        device=device,
+    )
+    checkpoint_version = recorded_environment_version(checkpoint)
+    if checkpoint_version != args.environment_version:
+        raise ValueError(
+            f"Checkpoint uses {checkpoint_version!r}, expected "
+            f"{args.environment_version!r}"
+        )
+    results = {
+        "algorithm": args.algorithm,
+        "suite": args.suite,
+        "checkpoint": str(args.checkpoint.resolve()),
+        "checkpoint_step": checkpoint.get("step"),
+        "primary_metric": "episode_return",
+        "zero_shot": True,
+        "target_gradient_updates": 0,
+        "environment_version": args.environment_version,
+        "episodes_per_task": args.episodes,
+        "source": {},
+        "target": {},
+    }
+    if args.suite == "difficulty":
+        protocol = protocol_from_args(args)
+        all_tasks = protocol.tasks
+        results["difficulty_protocol"] = protocol.to_dict()
+    else:
+        all_tasks = list_tasks(args.suite)
+    for task_index, task in enumerate(all_tasks):
+        env = make_env(
+            task,
+            environment_version=args.environment_version,
+            render_mode="human" if args.render else None,
+            max_cycles=args.max_cycles,
+        )
+        try:
+            records = [
+                evaluate_episode(
+                    env,
+                    model,
+                    seed=args.seed_base + task_index * 1_000_000 + episode,
+                    device=device,
+                    render=args.render,
+                )
+                for episode in range(args.episodes)
+            ]
+        finally:
+            env.close()
+        summary = summarize(records)
+        results[task.split][task.name] = {
+            "task": task.to_dict(),
+            "metrics": summary,
+            "episodes": records,
+            "episode_seeds": [
+                args.seed_base + task_index * 1_000_000 + episode
+                for episode in range(args.episodes)
+            ],
+        }
+        print(
+            f"[{task.split}] {task.name}: "
+            f"return={summary['episode_return']['mean']:.2f}±"
+            f"{summary['episode_return']['std']:.2f}, "
+            f"distance={summary['forward_distance']['mean']:.2f}"
+        )
+    output = args.output or args.checkpoint.parent / "zero_shot_evaluation.json"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("w", encoding="utf-8") as file:
+        json.dump(results, file, indent=2, sort_keys=True)
+    print(f"Saved evaluation: {output}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+===== POSSIBLE CONFIG / DATASET / ENV CODE =====
+src/mamujoco/offline_models.py:69:    def step(self, observations, hidden, active_agents=None):
+src/mamujoco/offline_models.py:75:            if active_agents is not None:
+src/mamujoco/offline_models.py:76:                mask = active_agents[:, agent_index].unsqueeze(-1)
+src/mamujoco/offline_models.py:83:    def forward(self, observations, valid, active_agents):
+src/mamujoco/offline_models.py:96:                step_obs, hidden, active_agents=active_agents
+src/mamujoco/offline_models.py:203:        active_agents: torch.Tensor,
+src/mamujoco/offline_models.py:221:        active = active_agents[:, None, :].expand(
+src/mamujoco/offline_models.py:320:def _masked_agent_action_loss(predicted, target, valid, active_agents):
+src/mamujoco/offline_models.py:323:        mask = valid & active_agents[:, index].unsqueeze(1)
+src/mamujoco/offline_models.py:388:            batch["observations"], batch["valid"], batch["active_agents"]
+src/mamujoco/offline_models.py:412:            batch["active_agents"],
+src/mamujoco/offline_models.py:510:            batch["observations"], batch["valid"], batch["active_agents"]
+src/mamujoco/offline_models.py:527:            history_observations, history_valid, batch["active_agents"]
+src/mamujoco/offline_models.py:535:        numeric_active = batch["active_agents"].to(task_query.dtype)
+src/mamujoco/offline_models.py:576:            batch["active_agents"],
+src/mamujoco/offline_models.py:630:    def act_step(self, observations, hidden, active_agents=None):
+src/mamujoco/offline_models.py:631:        if active_agents is None:
+src/mamujoco/offline_models.py:632:            active_agents = torch.ones(
+src/mamujoco/offline_models.py:646:            observations, common_input_state, active_agents=active_agents
+src/mamujoco/offline_models.py:677:            history_batch, next_history_valid.unsqueeze(1), active_agents
+src/mamujoco/adapt_difficulty.py:21:from .dataset import MultiTaskTrajectoryDataset
+src/mamujoco/adapt_difficulty.py:126:        batch["active_agents"],
+src/mamujoco/adapt_difficulty.py:130:def _pooled_query(query: torch.Tensor, active_agents: torch.Tensor) -> torch.Tensor:
+src/mamujoco/adapt_difficulty.py:131:    numeric = active_agents.to(query.dtype)
+src/mamujoco/adapt_difficulty.py:224:                "active_agents": torch.ones(len(AGENT_IDS), dtype=torch.bool),
+src/mamujoco/adapt_difficulty.py:280:                source_batch["active_agents"],
+src/mamujoco/adapt_difficulty.py:290:    contexts = [_pooled_query(target_query, target_batch["active_agents"])]
+src/mamujoco/adapt_difficulty.py:293:        contexts.append(_pooled_query(source_query, source_batch["active_agents"]))
+src/mamujoco/adapt_difficulty.py:431:    d1_dataset = MultiTaskTrajectoryDataset(
+src/mamujoco/adapt_difficulty.py:437:    d2_dataset = MultiTaskTrajectoryDataset(
+src/mamujoco/train_happo.py:133:        agent_obsk=args.agent_obsk,
+src/mamujoco/train_happo.py:206:                    "agent_obsk": args.agent_obsk,
+src/mamujoco/env.py:18:DEFAULT_AGENT_OBSK = 1
+src/mamujoco/env.py:53:def mask_disabled_action(
+src/mamujoco/env.py:54:    actions: Mapping[str, np.ndarray], disabled_agent: str | None
+src/mamujoco/env.py:56:    """Return copied actions with a disabled joint torque forced to zero."""
+src/mamujoco/env.py:61:    if disabled_agent is not None:
+src/mamujoco/env.py:62:        if disabled_agent not in masked:
+src/mamujoco/env.py:63:            raise KeyError(f"Missing action for disabled agent {disabled_agent}")
+src/mamujoco/env.py:64:        masked[disabled_agent].fill(0.0)
+src/mamujoco/env.py:78:        agent_obsk: int = DEFAULT_AGENT_OBSK,
+src/mamujoco/env.py:88:        if int(agent_obsk) != DEFAULT_AGENT_OBSK:
+src/mamujoco/env.py:89:            raise ValueError("The transfer protocol requires agent_obsk=1.")
+src/mamujoco/env.py:92:        self.agent_obsk = int(agent_obsk)
+src/mamujoco/env.py:102:            "agent_obsk": self.agent_obsk,
+src/mamujoco/env.py:177:        executed = mask_disabled_action(actions, self.task.disabled_agent)
+src/mamujoco/env.py:191:            info["disabled"] = agent == self.task.disabled_agent
+src/mamujoco/env.py:207:    agent_obsk: int = DEFAULT_AGENT_OBSK,
+src/mamujoco/env.py:215:        agent_obsk=agent_obsk,
+src/mamujoco/happo.py:117:            active_rows[agent].append(agent != env.task.disabled_agent)
+src/mamujoco/dataset.py:51:class MultiTaskTrajectoryDataset(Dataset):
+src/mamujoco/dataset.py:91:                "disabled_agent",
+src/mamujoco/dataset.py:204:        active_agents = torch.tensor(
+src/mamujoco/dataset.py:205:            [agent != task.disabled_agent for agent in AGENT_IDS], dtype=torch.bool
+src/mamujoco/dataset.py:232:            "active_agents": active_agents,
+src/mamujoco/dataset.py:253:    dataset = MultiTaskTrajectoryDataset(
+src/mamujoco/README.md:11:- Observation radius: `agent_obsk=1`
+src/mamujoco/README.md:64:`joint_disable` follows the paper protocol. Source tasks are `complete`,
+src/mamujoco/README.md:65:`back_thigh`, `back_foot`, `front_thigh`, and `front_shin`. The unseen target
+src/mamujoco/README.md:66:tasks are `back_shin` and `front_foot`. A disabled agent remains present but its
+src/mamujoco/README.md:198:  --suite joint_disable --task complete --seed 1 --device cuda
+src/mamujoco/README.md:201:  --suite joint_disable --task all --trajectories-per-task 100 --device cuda
+src/mamujoco/README.md:204:  --algorithm hissd --suite joint_disable --seed 1 --device cuda
+src/mamujoco/README.md:207:  --algorithm hissd --suite joint_disable \
+src/mamujoco/README.md:208:  --checkpoint src/mamujoco/checkpoints/offline/joint_disable/hissd/seed_1/latest.pt \
+src/mamujoco/collect_difficulty_data.py:11:from .collect_offline_data import collect_trajectory
+src/mamujoco/collect_difficulty_data.py:66:        "agent_obsk": 1,
+src/mamujoco/collect_difficulty_data.py:104:                    trajectory = collect_trajectory(
+src/mamujoco/collect_difficulty_data.py:111:                    trajectory["metadata"] = {
+src/mamujoco/collect_difficulty_data.py:121:                        "agent_obsk": 1,
+src/mamujoco/collect_difficulty_data.py:125:                    torch.save(trajectory, episode_path)
+src/mamujoco/collect_difficulty_data.py:131:                            "transitions": int(trajectory["rewards"].shape[0]),
+src/mamujoco/collect_difficulty_data.py:136:                            **trajectory["metrics"],
+src/mamujoco/collect_difficulty_data.py:142:                        f"return={trajectory['metrics']['episode_return']:.2f}"
+src/mamujoco/pilot_difficulty.py:216:        "agent_obsk": 1,
+src/mamujoco/run_protocol.py:20:LEGACY_SUITES = ("dynamics", "joint_disable")
+src/mamujoco/collect_offline_data.py:48:def collect_trajectory(env, actors, *, seed: int, deterministic: bool, device):
+src/mamujoco/collect_offline_data.py:141:        "agent_obsk": 1,
+src/mamujoco/collect_offline_data.py:183:                trajectory = collect_trajectory(
+src/mamujoco/collect_offline_data.py:190:                trajectory["metadata"] = {
+src/mamujoco/collect_offline_data.py:197:                    "agent_obsk": 1,
+src/mamujoco/collect_offline_data.py:201:                torch.save(trajectory, episode_path)
+src/mamujoco/collect_offline_data.py:206:                        "transitions": int(trajectory["rewards"].shape[0]),
+src/mamujoco/collect_offline_data.py:207:                        **trajectory["metrics"],
+src/mamujoco/collect_offline_data.py:212:                    f"return={trajectory['metrics']['episode_return']:.2f}"
+src/mamujoco/tasks.py:10:    "back_thigh",
+src/mamujoco/tasks.py:11:    "back_shin",
+src/mamujoco/tasks.py:12:    "back_foot",
+src/mamujoco/tasks.py:13:    "front_thigh",
+src/mamujoco/tasks.py:14:    "front_shin",
+src/mamujoco/tasks.py:15:    "front_foot",
+src/mamujoco/tasks.py:18:SUPPORTED_SUITES = ("difficulty", "dynamics", "joint_disable")
+src/mamujoco/tasks.py:31:    disabled_agent: str | None = None
+src/mamujoco/tasks.py:41:        if self.disabled_agent is not None and self.disabled_agent not in AGENT_IDS:
+src/mamujoco/tasks.py:42:            raise ValueError(f"Unknown disabled agent: {self.disabled_agent}")
+src/mamujoco/tasks.py:48:    def disabled_joint(self) -> str | None:
+src/mamujoco/tasks.py:49:        if self.disabled_agent is None:
+src/mamujoco/tasks.py:51:        return JOINT_NAMES[int(self.disabled_agent.rsplit("_", 1)[1])]
+src/mamujoco/tasks.py:54:    def active_agents(self) -> tuple[str, ...]:
+src/mamujoco/tasks.py:55:        return tuple(agent for agent in AGENT_IDS if agent != self.disabled_agent)
+src/mamujoco/tasks.py:59:        result["disabled_joint"] = self.disabled_joint
+src/mamujoco/tasks.py:63:_JOINT_DISABLE_TASKS = (
+src/mamujoco/tasks.py:64:    TaskSpec("joint_disable", "complete", "source"),
+src/mamujoco/tasks.py:65:    TaskSpec("joint_disable", "back_thigh", "source", "agent_0"),
+src/mamujoco/tasks.py:66:    TaskSpec("joint_disable", "back_foot", "source", "agent_2"),
+src/mamujoco/tasks.py:67:    TaskSpec("joint_disable", "front_thigh", "source", "agent_3"),
+src/mamujoco/tasks.py:68:    TaskSpec("joint_disable", "front_shin", "source", "agent_4"),
+src/mamujoco/tasks.py:69:    TaskSpec("joint_disable", "back_shin", "target", "agent_1"),
+src/mamujoco/tasks.py:70:    TaskSpec("joint_disable", "front_foot", "target", "agent_5"),
+src/mamujoco/tasks.py:119:    "joint_disable": _JOINT_DISABLE_TASKS,
+src/mamujoco/evaluate_zero_shot.py:81:    disabled_agent = getattr(getattr(env, "task", None), "disabled_agent", None)
+src/mamujoco/evaluate_zero_shot.py:82:    active_agents = torch.tensor(
+src/mamujoco/evaluate_zero_shot.py:83:        [[agent != disabled_agent for agent in AGENT_IDS]],
+src/mamujoco/evaluate_zero_shot.py:93:            tensor_obs, hidden, active_agents=active_agents
