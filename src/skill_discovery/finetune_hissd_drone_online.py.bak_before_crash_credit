@@ -363,59 +363,6 @@ def parse_args() -> argparse.Namespace:
         deterministic=True,
     )
 
-    # Default protocol for HiSSD -> online PPO adaptation.
-    # CLI arguments can still override any of these values.
-    parser.set_defaults(
-        # Policy / evaluation
-        skill_mode="full",
-        credit_assignment="agent",
-        use_pretrained_value=False,
-        deterministic=True,
-        device="cuda",
-        seed=2026,
-        method_name="hissd_fixedfull_residual_ppo",
-
-        # Collection / budget
-        train_batch_joint_steps=4_000,
-        joint_step_budget=500_000,
-        eval_every_joint_steps=25_000,
-        eval_episodes=200,
-        eval_envs=1,
-        eval_seed_base=100_000_000,
-
-        # PPO
-        ppo_epochs=5,
-        minibatch_size=1024,
-        actor_lr=3e-4,
-        gamma=0.995,
-        clip_ratio=0.2,
-        target_kl=0.02,
-        entropy_coeff=0.01,
-
-        # HiSSD adaptation
-        base_head_lr=3e-5,
-        encoder_lr=1e-5,
-        base_unfreeze_after_joint_steps=4_000,
-        encoder_unfreeze_after_joint_steps=12_000,
-
-        # Full pretrained HiSSD skill + PPO residual
-        skill_prior_init=1.0,
-        skill_prior_max=1.0,
-        skill_gate_lr=3e-5,
-        skill_residual_lr=3e-5,
-
-        # Regularization
-        anchor_coeff=0.001,
-        skill_anchor_coeff=0.001,
-        context_warmup_iterations=0,
-        shared_terminal_crash_penalty=0.0,
-
-        # Validation rollback
-        rollback_score_drop=0.15,
-        rollback_min_best_success=0.6,
-        rollback_patience=2,
-    )
-
     return parser.parse_args()
 
 
@@ -453,10 +400,10 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--log-std-min must be lower than --log-std-max.")
     if args.anchor_coeff < 0.0 or args.skill_anchor_coeff < 0.0:
         raise ValueError("Anchor coefficients cannot be negative.")
-    if not 0.0 <= args.skill_prior_init <= 1.0:
-        raise ValueError("--skill-prior-init must be in [0, 1].")
-    if not 0.0 < args.skill_prior_max <= 1.0:
-        raise ValueError("--skill-prior-max must be in (0, 1].")
+    if not 0.0 <= args.skill_prior_init < 1.0:
+        raise ValueError("--skill-prior-init must be in [0, 1).")
+    if not 0.0 < args.skill_prior_max < 1.0:
+        raise ValueError("--skill-prior-max must be in (0, 1).")
     if args.skill_prior_init > args.skill_prior_max:
         raise ValueError("--skill-prior-init cannot exceed --skill-prior-max.")
     if args.shared_terminal_crash_penalty < 0.0:
@@ -486,7 +433,7 @@ def validate_args(args: argparse.Namespace) -> None:
             "--joint-step-budget and --eval-every-joint-steps must be used together."
         )
     if args.joint_step_budget is not None:
-        if args.joint_step_budget < 0 or args.eval_every_joint_steps <= 0:
+        if args.joint_step_budget <= 0 or args.eval_every_joint_steps <= 0:
             raise ValueError("Joint-step budget and evaluation interval must be positive.")
         if args.eval_every_joint_steps > args.joint_step_budget:
             raise ValueError(
@@ -582,15 +529,12 @@ class OnlineSkillConditionedResidualPolicy(nn.Module):
         )
         initial_gate = float(skill_prior_init)
         maximum_gate = float(skill_prior_max)
-        if not 0.0 < maximum_gate <= 1.0:
+        if not 0.0 < maximum_gate < 1.0:
             raise ValueError("skill_prior_max must be in (0, 1).")
         if not 0.0 <= initial_gate <= maximum_gate:
             raise ValueError("skill_prior_init must be in [0, skill_prior_max].")
         self.use_skill_prior = initial_gate > 0.0
         self.skill_prior_max = maximum_gate
-        self.fixed_full_skill_prior = (
-            initial_gate == 1.0 and maximum_gate == 1.0
-        )
         self.register_buffer(
             "initial_skill_prior_gate",
             torch.full((action_dim,), initial_gate),
@@ -627,11 +571,6 @@ class OnlineSkillConditionedResidualPolicy(nn.Module):
         common_skills: torch.Tensor,
         task_skills: torch.Tensor,
     ) -> torch.Tensor:
-        if self.fixed_full_skill_prior:
-            return observation_features.new_ones(
-                *observation_features.shape[:-1],
-                self.skill_gate_network.out_features,
-            )
         if not self.use_skill_prior:
             return observation_features.new_zeros(
                 *observation_features.shape[:-1],
@@ -674,24 +613,6 @@ def online_action_mean(
         observation_features, common_skills, task_skills
     )
     pretrained_action = torch.tanh(pretrained_logits) * action_scale
-    if getattr(residual_policy, "fixed_full_skill_prior", False):
-        residual = residual_policy(
-            observation_features,
-            common_skills,
-            task_skills,
-        )
-        action_mean = pretrained_action + residual
-
-        if compute_skill_delta:
-            skill_action_delta = residual.abs().mean()
-        else:
-            skill_action_delta = pretrained_logits.new_zeros(())
-
-        # Third return value is used as the PPO action anchor.
-        # For exact pure-HiSSD initialization, anchor to the HiSSD policy,
-        # not the BC/base-action policy.
-        return action_mean, skill_action_delta, pretrained_action
-
     skill_prior = residual_policy.skill_prior_fraction(
         observation_features, common_skills, task_skills
     ) * (
@@ -954,22 +875,6 @@ def rollout_episode(
                     action_scale,
                     compute_skill_delta=False,
                 )
-
-                pure_action = outputs["actions"][0] * action_scale
-
-                if cycle_count == 0:
-                    print(
-                        "ACTION_DEBUG",
-                        "fixed_full=",
-                        getattr(no_skill_policy, "fixed_full_skill_prior", False),
-                        "pure_vs_online_max=",
-                        float((pure_action - action_mean).abs().max()),
-                        "pure_vs_online_mean=",
-                        float((pure_action - action_mean).abs().mean()),
-                        "residual_max=",
-                        float((action_mean - base_action).abs().max()),
-                    )
-                    
                 anchor_action_mean = base_action
                 if skill_mode == "no_skill":
                     common_skills = torch.zeros_like(common_skills)
@@ -3388,176 +3293,6 @@ def rollout_episodes_multiprocess_eval_exact(
     return [], metrics
 
 
-
-def rollout_episode_deterministic_eval(
-    *,
-    env,
-    model,
-    no_skill_policy,
-    action_scale: float,
-    seed: int,
-    device: torch.device,
-    skill_mode: str,
-) -> dict[str, float]:
-    """Deterministic evaluation without training-only critic/reward bookkeeping."""
-
-    # Match pure HiSSD evaluation semantics.
-    model.eval()
-    no_skill_policy.eval()
-
-    env.reset(seed=seed)
-    core_env = get_core_env(env)
-
-    agent_order = list(env.possible_agents)
-    drone_ids = [
-        agent_id
-        for agent_id in agent_order
-        if agent_id.startswith("drone_")
-    ]
-
-    if len(drone_ids) != len(agent_order):
-        raise ValueError(
-            "Drone-only evaluation received a non-drone agent."
-        )
-
-    valid_mask = torch.ones(
-        1,
-        len(drone_ids),
-        dtype=torch.bool,
-        device=device,
-    )
-
-    recurrent_state = model.initial_inference_state(
-        batch_size=1,
-        device=device,
-    )
-
-    cached_actions: dict[str, np.ndarray] = {}
-    cycle_count = 0
-    episode_return = 0.0
-    last_agent_id = agent_order[-1]
-
-    for agent_id in env.agent_iter():
-        (
-            _,
-            reward,
-            termination,
-            truncation,
-            _,
-        ) = env.last()
-
-        # Read-only bookkeeping. This does not affect policy/environment state.
-        episode_return += float(reward)
-
-        if termination or truncation:
-            env.step(None)
-            continue
-
-        if not cached_actions:
-            observations = drone_observation_batch(
-                env,
-                drone_ids,
-                action_scale,
-                device,
-            )
-
-            with torch.no_grad():
-                outputs, recurrent_state = model.inference_step(
-                    observations,
-                    valid_mask,
-                    recurrent_state,
-                )
-
-                observation_features = outputs[
-                    "observation_features"
-                ][0]
-                common_skills = outputs["common_skills"][0]
-                task_skills = outputs["task_skills"][0]
-
-                # For the exact full-prior path, use the action that
-                # inference_step already produced. This is exactly the same
-                # HiSSD action path used by evaluate_hissd_pure.py.
-                if (
-                    skill_mode == "full"
-                    and getattr(
-                        no_skill_policy,
-                        "fixed_full_skill_prior",
-                        False,
-                    )
-                ):
-                    pretrained_action = (
-                        outputs["actions"][0] * action_scale
-                    )
-                    residual = no_skill_policy(
-                        observation_features,
-                        common_skills,
-                        task_skills,
-                    )
-                    action_mean = pretrained_action + residual
-                else:
-                    action_mean, _, _ = online_action_mean(
-                        model,
-                        no_skill_policy,
-                        observation_features,
-                        common_skills,
-                        task_skills,
-                        skill_mode,
-                        action_scale,
-                        compute_skill_delta=False,
-                    )
-
-            for index, drone_id in enumerate(drone_ids):
-                action_space = env.action_space(drone_id)
-
-                action = (
-                    action_mean[index]
-                    .detach()
-                    .cpu()
-                    .numpy()
-                )
-
-                cached_actions[drone_id] = np.ascontiguousarray(
-                    np.clip(
-                        action,
-                        action_space.low,
-                        action_space.high,
-                    ),
-                    dtype=np.float32,
-                )
-
-        env.step(cached_actions.pop(agent_id))
-
-        cycle_completed = (
-            agent_id == last_agent_id
-            or bool(core_env.terminate)
-            or bool(core_env.truncate)
-        )
-
-        if cycle_completed:
-            cycle_count += 1
-            cached_actions.clear()
-
-    goal_found = any(
-        agent_found_goal(core_env, drone_id)
-        for drone_id in drone_ids
-    )
-
-    return {
-        "success": float(bool(core_env.mission_success)),
-        "goal_found": float(goal_found),
-        "fatal_crash": float(bool(core_env.collided)),
-        "drone_crash": float(bool(core_env.drone_crash)),
-        "observer_crash": 0.0,
-        "coverage": float(
-            core_env.current_coverage_ratio()
-        ),
-        "reward_coverage": float(
-            core_env.current_drone_reward_coverage_ratio()
-        ),
-        "cycles": float(cycle_count),
-        "episode_return": float(episode_return),
-    }
-
 def evaluate_policy(
     *,
     checkpoint_env_config: dict[str, Any],
@@ -3663,7 +3398,7 @@ def evaluate_policy(
                         (
                             seed_base
                             + args.difficulty
-                            * 100_000
+                            * 1_000_000
                             + episode_index
                         )
                         for episode_index in range(
@@ -3738,17 +3473,38 @@ def evaluate_policy(
                 env = HeMAC_v0.env(**config)
 
                 try:
-                    result = rollout_episode_deterministic_eval(
+                    _, result = rollout_episode(
                         env=env,
                         model=model,
                         no_skill_policy=no_skill_policy,
-                        action_scale=drone_action_scale(config),
+                        value_head=value_head,
+                        anchor_head=anchor_head,
+                        anchor_context_adapter=(
+                            anchor_context_adapter
+                        ),
+                        use_pretrained_value=(
+                            use_pretrained_value
+                        ),
+                        credit_assignment=(
+                            args.credit_assignment
+                        ),
+                        log_std=log_std,
+                        action_scale=action_scale,
+                        reward_scale=args.reward_scale,
+                        shared_terminal_crash_penalty=(
+                            args.shared_terminal_crash_penalty
+                        ),
+                        success_min_coverage_ratio=(
+                            args.success_min_coverage_ratio
+                        ),
                         seed=(
                             seed_base
-                            + args.difficulty * 100_000
+                            + args.difficulty
+                            * 1_000_000
                             + episode_index
                         ),
                         device=device,
+                        stochastic=False,
                         skill_mode=args.skill_mode,
                     )
 
@@ -4068,10 +3824,6 @@ def main() -> None:
         f"task_context_adapter={sum(p.numel() for p in context_adapter.parameters()) if context_adapter is not None else 0:,}, "
         f"critic={sum(p.numel() for p in value_head.parameters()):,}"
     )
-
-    model.eval()
-    no_skill_policy.eval()
-    value_head.eval()
 
     baseline = evaluate_policy(
         checkpoint_env_config=checkpoint_env_config,

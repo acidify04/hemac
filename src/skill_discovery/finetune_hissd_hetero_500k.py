@@ -850,6 +850,7 @@ def main() -> None:
     try:
         for stage in range(args.start_stage, args.end_stage + 1):
             stage_joint_env_steps = 0
+            last_eval_joint_env_steps = 0
             progress_log(
                 f"Starting online PPO stage {stage}: mixture={STAGE_MIXTURES[stage]}"
             )
@@ -1034,8 +1035,14 @@ def main() -> None:
                     metrics={**train_metrics, **update_metrics},
                     args=args,
                 )
-                if stage_iteration % args.eval_every != 0:
+                if (
+                    stage_joint_env_steps - last_eval_joint_env_steps < args.eval_every
+                    and stage_joint_env_steps < args.joint_step_budget
+                ):
                     continue
+
+                last_eval_joint_env_steps = stage_joint_env_steps
+
                 evaluation = evaluate_policy(
                     difficulty=stage,
                     checkpoint_env_config=checkpoint_env_config,

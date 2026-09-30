@@ -7,7 +7,10 @@ from src.skill_discovery.drone_skill_vae import DroneSkillVAE
 from src.skill_discovery.finetune_drone_skill_vae_online import (
     OnlineResidualPolicy,
     apply_shared_terminal_crash_penalty,
+    centralized_team_values,
+    cycle_training_signal,
 )
+from src.skill_discovery.finetune_hissd_online import OnlineValueHead
 
 
 def build_model(*, skill_duration: int = 4) -> DroneSkillVAE:
@@ -121,3 +124,44 @@ def test_online_residual_policy_preserves_frozen_prior_at_initialization() -> No
     residual = policy(torch.randn(5, 12), torch.randn(5, 8))
 
     torch.testing.assert_close(residual, torch.zeros_like(residual))
+
+
+def test_online_residual_policy_can_override_frozen_prior() -> None:
+    policy = OnlineResidualPolicy(2, 1, 1, hidden_dim=4)
+    with torch.no_grad():
+        policy.network[-1].bias.fill_(2.0)
+
+    residual = policy(torch.zeros(1, 2), torch.zeros(1, 1))
+
+    torch.testing.assert_close(residual, torch.full_like(residual, 2.0))
+
+
+def test_team_cycle_signal_broadcasts_cooperative_reward() -> None:
+    rewards, mask, episode_reward = cycle_training_signal(
+        np.array([2.0, 4.0, 0.0], dtype=np.float32),
+        np.array([True, True, False]),
+        10.0,
+        reward_mode="team",
+    )
+
+    np.testing.assert_allclose(rewards, np.array([13.0, 13.0, 13.0]))
+    assert mask.tolist() == [True, True, False]
+    assert episode_reward == 13.0
+
+
+def test_centralized_team_value_is_shared_across_agents() -> None:
+    value_head = OnlineValueHead(7, hidden_dim=4)
+    observations = torch.randn(2, 3, 2)
+    skills = torch.randn(2, 3, 1)
+    central = torch.randn(2, 4)
+
+    values = centralized_team_values(
+        value_head,
+        observations,
+        skills,
+        central,
+        torch.ones(2, 3, dtype=torch.bool),
+    )
+
+    assert values.shape == (2, 3)
+    torch.testing.assert_close(values[:, :1].expand_as(values), values)

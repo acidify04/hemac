@@ -183,7 +183,16 @@ def parse_args() -> argparse.Namespace:
             "residual; joint_finetune retains the earlier end-to-end head update."
         ),
     )
-    parser.add_argument("--online-residual-scale", type=float, default=0.25)
+    parser.add_argument("--online-residual-scale", type=float, default=1.0)
+    parser.add_argument(
+        "--reward-mode",
+        choices=("team", "individual"),
+        default="team",
+        help=(
+            "team broadcasts mean drone shaping plus terminal task credit to "
+            "the shared policy; individual preserves per-drone rewards."
+        ),
+    )
     parser.add_argument(
         "--train-base-action-head",
         action="store_true",
@@ -348,7 +357,71 @@ class OnlineResidualPolicy(nn.Module):
         self, observation_features: torch.Tensor, skills: torch.Tensor
     ) -> torch.Tensor:
         inputs = torch.cat((observation_features, skills), dim=-1)
-        return torch.tanh(self.network(inputs))
+        # PPO clipping bounds each update; an extra tanh here prevents the
+        # target policy from overriding a poor frozen source action prior.
+        return self.network(inputs)
+
+
+def cycle_training_signal(
+    cycle_rewards: np.ndarray,
+    cycle_mask: np.ndarray,
+    shared_success_reward: float,
+    *,
+    reward_mode: str,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """Build cooperative team credit or preserve legacy individual credit."""
+    active_rewards = cycle_rewards[cycle_mask]
+    mean_active_reward = (
+        float(active_rewards.mean()) if active_rewards.size else 0.0
+    )
+    episode_reward = mean_active_reward + float(shared_success_reward)
+    if reward_mode == "individual":
+        return cycle_rewards + shared_success_reward, cycle_mask, episode_reward
+    if reward_mode != "team":
+        raise ValueError(f"Unknown reward mode: {reward_mode!r}.")
+    return (
+        np.full_like(cycle_rewards, episode_reward),
+        # A terminal collision/success can end an AEC cycle before every
+        # sampled drone action is applied. Share the team reward, but never
+        # optimize log-probabilities for actions the environment did not use.
+        cycle_mask.copy(),
+        episode_reward,
+    )
+
+
+def centralized_team_values(
+    value_head: OnlineValueHead,
+    observation_features: torch.Tensor,
+    skills: torch.Tensor,
+    central_features: torch.Tensor,
+    agent_mask: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Predict one centralized team value and broadcast it to every drone."""
+    squeeze_batch = observation_features.ndim == 2
+    if squeeze_batch:
+        observation_features = observation_features.unsqueeze(0)
+        skills = skills.unsqueeze(0)
+        central_features = central_features.unsqueeze(0)
+        if agent_mask is not None:
+            agent_mask = agent_mask.unsqueeze(0)
+    if observation_features.ndim != 3 or skills.ndim != 3:
+        raise ValueError("Expected batched [B,A,D] actor features and skills.")
+    if agent_mask is None:
+        agent_mask = torch.ones(
+            observation_features.shape[:2],
+            dtype=torch.bool,
+            device=observation_features.device,
+        )
+    numeric_mask = agent_mask.unsqueeze(-1).to(observation_features.dtype)
+    denominator = numeric_mask.sum(dim=1).clamp_min(1.0)
+    pooled_observation = (observation_features * numeric_mask).sum(dim=1) / denominator
+    pooled_skill = (skills * numeric_mask).sum(dim=1) / denominator
+    team_input = torch.cat(
+        (pooled_observation, pooled_skill, central_features), dim=-1
+    )
+    team_value = value_head(team_input)
+    values = team_value.unsqueeze(1).expand(-1, observation_features.shape[1])
+    return values[0] if squeeze_batch else values
 
 
 def configure_backend(device: torch.device, deterministic: bool) -> None:
@@ -386,6 +459,7 @@ def rollout_episode(
     skill_mode: str,
     ppo_actor_mode: str,
     online_residual_scale: float,
+    reward_mode: str,
 ) -> tuple[list[dict[str, Any]], dict[str, float]]:
     env.reset(seed=seed)
     core_env = get_core_env(env)
@@ -455,15 +529,12 @@ def rollout_episode(
                     build_global_central_map(core_env)
                 ).unsqueeze(0).to(device)
                 central = central_encoder(central_map)[0]
-                critic_features = torch.cat(
-                    (
-                        features,
-                        skills,
-                        central.unsqueeze(0).expand(len(drone_ids), -1),
-                    ),
-                    dim=-1,
+                value = centralized_team_values(
+                    value_head,
+                    features,
+                    skills,
+                    central,
                 )
-                value = value_head(critic_features)
                 distribution = Normal(logits, log_std.exp())
                 raw_action = distribution.sample() if stochastic else logits
                 normalized_action = torch.tanh(raw_action)
@@ -513,15 +584,18 @@ def rollout_episode(
             fatal_crash=bool(core_env.collided),
             penalty=shared_terminal_crash_penalty,
         )
+        training_rewards, training_mask, cycle_episode_reward = cycle_training_signal(
+            cycle_rewards,
+            cycle_mask,
+            shared_success_reward,
+            reward_mode=reward_mode,
+        )
         if stochastic:
-            transitions[-1]["agent_mask"] = torch.from_numpy(cycle_mask.copy())
+            transitions[-1]["agent_mask"] = torch.from_numpy(training_mask.copy())
             transitions[-1]["reward"] = torch.from_numpy(
-                (cycle_rewards + shared_success_reward) / reward_scale
+                training_rewards / reward_scale
             )
-        if np.any(cycle_mask):
-            episode_return += (
-                float(cycle_rewards[cycle_mask].mean()) + shared_success_reward
-            )
+        episode_return += cycle_episode_reward
         cycle_count += 1
         cached_actions = {}
         cycle_rewards = None
@@ -637,15 +711,13 @@ def ppo_update(
             policy_loss = -torch.minimum(unclipped, clipped)[minibatch_mask].mean()
 
             central = central_encoder(data["central_map"][indices])
-            critic_features = torch.cat(
-                (
-                    features,
-                    skills,
-                    central.unsqueeze(1).expand(-1, features.shape[1], -1),
-                ),
-                dim=-1,
+            values = centralized_team_values(
+                value_head,
+                features,
+                skills,
+                central,
+                minibatch_mask,
             )
-            values = value_head(critic_features)
             value_loss = F.mse_loss(
                 values[minibatch_mask], returns[indices][minibatch_mask]
             )
@@ -753,6 +825,7 @@ def evaluate_policy(
                 skill_mode=args.skill_mode,
                 ppo_actor_mode=args.ppo_actor_mode,
                 online_residual_scale=args.online_residual_scale,
+                reward_mode=args.reward_mode,
             )
         finally:
             env.close()
@@ -766,6 +839,8 @@ def curve_point(
     joint_env_steps: int,
     iteration: int,
     scheduled_joint_env_steps: int | None = None,
+    update_metrics: dict[str, float] | None = None,
+    train_metrics: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     point = {
         "method": args.method_name,
@@ -788,6 +863,22 @@ def curve_point(
     }
     if scheduled_joint_env_steps is not None:
         point["scheduled_joint_env_steps"] = scheduled_joint_env_steps
+    if update_metrics is not None:
+        for name in (
+            "policy_loss",
+            "value_loss",
+            "entropy",
+            "anchor_loss",
+            "approx_kl",
+            "clip_fraction",
+            "grad_norm",
+        ):
+            if name in update_metrics:
+                point[f"ppo_{name}"] = float(update_metrics[name])
+    if train_metrics is not None:
+        point["train_success_rate"] = float(train_metrics["success"])
+        point["train_fatal_crash_rate"] = float(train_metrics["fatal_crash"])
+        point["train_episode_return"] = float(train_metrics["episode_return"])
     return point
 
 
@@ -920,6 +1011,7 @@ def main() -> None:
         f"Drone skill-VAE PPO difficulty={args.difficulty}, seed={args.seed}, "
         f"skill_mode={args.skill_mode}, train_base={args.train_base_action_head}, "
         f"ppo_actor_mode={args.ppo_actor_mode}, "
+        f"reward_mode={args.reward_mode}, "
         f"base_freeze_iterations={args.full_base_freeze_iterations}, "
         f"base_freeze_steps={args.full_base_freeze_joint_steps}, "
         f"train_batch_steps={args.train_batch_joint_steps}, "
@@ -962,6 +1054,7 @@ def main() -> None:
             "skill_mode": args.skill_mode,
             "ppo_actor_mode": args.ppo_actor_mode,
             "online_residual_scale": args.online_residual_scale,
+            "reward_mode": args.reward_mode,
             "skill_duration": model.skill_duration,
             "decoder_observation_conditioned": (
                 model.decoder_observation_conditioned
@@ -1067,6 +1160,7 @@ def main() -> None:
                     skill_mode=args.skill_mode,
                     ppo_actor_mode=args.ppo_actor_mode,
                     online_residual_scale=args.online_residual_scale,
+                    reward_mode=args.reward_mode,
                 )
             finally:
                 env.close()
@@ -1175,6 +1269,8 @@ def main() -> None:
                     joint_env_steps,
                     iteration,
                     scheduled_joint_env_steps=scheduled_eval_step,
+                    update_metrics=update,
+                    train_metrics=train,
                 )
             ],
         )

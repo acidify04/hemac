@@ -481,28 +481,20 @@ def main() -> None:
                 )
             if iteration % args.eval_every != 0:
                 continue
-            metrics = evaluate(
-                algo,
-                env_config,
-                args,
-                description=f"iteration {iteration} eval",
-            )
-            latest_eval_success = metrics["success"]
+            metrics = evaluate(algo, env_config, args)
             append_curve_points(
                 curve_path,
                 [curve_point(args, metrics, env_steps, iteration)],
             )
-            progress_write(
+            print(
                 f"EVAL success={metrics['success']:.3f} "
                 f"goal={metrics['goal_found']:.3f} "
                 f"crash={metrics['fatal_crash']:.3f}"
             )
-        if tqdm is not None and hasattr(training_iterations, "close"):
-            training_iterations.close()
         checkpoint = algo.save(str(args.output_dir / "final_checkpoint"))
         checkpoint_path = getattr(checkpoint, "checkpoint", checkpoint)
-        progress_write(f"Saved final checkpoint: {checkpoint_path}")
-        progress_write(f"Saved learning curve: {curve_path}")
+        print(f"Saved final checkpoint: {checkpoint_path}")
+        print(f"Saved learning curve: {curve_path}")
     finally:
         algo.stop()
         ray.shutdown()

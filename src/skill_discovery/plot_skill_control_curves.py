@@ -30,10 +30,18 @@ METRICS = (
 MODE_LABELS = {
     "full": "Skill",
     "no_skill": "No skill",
+    "mappo_checkpoint": "MAPPO checkpoint",
+    "behavior_cloning": "Behavior cloning + PPO",
+    "hissd_zero_shot": "HiSSD zero-shot",
+    "hissd_finetuned": "HiSSD + PPO fine-tuning",
 }
 MODE_COLORS = {
     "full": "#087e8b",
     "no_skill": "#d1495b",
+    "mappo_checkpoint": "#264653",
+    "behavior_cloning": "#e9c46a",
+    "hissd_zero_shot": "#e76f51",
+    "hissd_finetuned": "#2a9d8f",
 }
 
 
@@ -46,10 +54,17 @@ def parse_args() -> argparse.Namespace:
 
 
 def skill_mode(payload: dict[str, Any], point: dict[str, Any]) -> str:
+    method = str(point.get("method", ""))
+    if method in {
+        "mappo_checkpoint",
+        "behavior_cloning",
+        "hissd_zero_shot",
+        "hissd_finetuned",
+    }:
+        return method
     mode = str(payload.get("metadata", {}).get("skill_mode", ""))
     if mode in MODE_LABELS:
         return mode
-    method = str(point.get("method", ""))
     if "no_skill" in method:
         return "no_skill"
     if "full" in method:
@@ -111,9 +126,9 @@ def main() -> None:
         raise ValueError("No learning-curve points were found.")
 
     difficulties = sorted({key[1] for key in grouped})
-    modes = [mode for mode in MODE_LABELS if any(key[0] == mode for key in grouped)]
-    if not modes:
-        modes = sorted({key[0] for key in grouped})
+    available_modes = {key[0] for key in grouped}
+    modes = [mode for mode in MODE_LABELS if mode in available_modes]
+    modes.extend(sorted(available_modes.difference(modes)))
 
     import matplotlib
 
@@ -190,6 +205,32 @@ def main() -> None:
                     linewidth=2.2,
                     label=f"{MODE_LABELS.get(mode, mode)} (n={len(metric_runs)})",
                 )
+                if metric == "success_rate" and all(
+                    all("best_checkpoint_success_rate" in point for point in run)
+                    for run in metric_runs
+                ):
+                    best_values_by_step = [
+                        [
+                            interpolate_metric(
+                                run, "best_checkpoint_success_rate", step
+                            )
+                            for run in metric_runs
+                        ]
+                        for step in grid
+                    ]
+                    best_means = [
+                        statistics.fmean(values)
+                        for values in best_values_by_step
+                    ]
+                    axis.plot(
+                        [step / 1000.0 for step in grid],
+                        best_means,
+                        color=color,
+                        linewidth=1.4,
+                        linestyle="--",
+                        alpha=0.75,
+                        label=f"{MODE_LABELS.get(mode, mode)} best checkpoint",
+                    )
                 if len(metric_runs) > 1:
                     low = [interval["ci95_low"] for interval in intervals]
                     high = [interval["ci95_high"] for interval in intervals]

@@ -9,8 +9,6 @@ while a residual critic assigns credit to each homogeneous drone.
 
 from __future__ import annotations
 
-import multiprocessing as mp
-
 import argparse
 import copy
 import json
@@ -57,7 +55,6 @@ from skill_discovery.finetune_hissd_online import (
     OnlineValueHead,
     add_gae,
     average_metrics,
-    convert_observation,
     drone_observation_batch,
     seed_everything,
 )
@@ -86,7 +83,7 @@ def parse_args() -> argparse.Namespace:
         "--difficulty",
         type=int,
         choices=range(1, len(OBSTACLE_CURRICULUM_LEVELS) + 1),
-        default=3,
+        required=True,
     )
     parser.add_argument("--success-min-coverage-ratio", type=float, default=0.6)
     parser.add_argument("--iterations", type=int, default=40)
@@ -110,29 +107,9 @@ def parse_args() -> argparse.Namespace:
             "policy inference call. 1 preserves the original rollout path."
         ),
     )
-    parser.add_argument(
-        "--multiprocess-rollout",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help=(
-            "Run HeMAC environment stepping/observation construction in "
-            "spawned CPU worker processes while keeping neural inference "
-            "batched on the main-process GPU."
-        ),
-    )
     parser.add_argument("--eval-every", type=int, default=5)
     parser.add_argument("--joint-step-budget", type=int)
     parser.add_argument("--eval-every-joint-steps", type=int)
-    parser.add_argument(
-        "--eval-envs",
-        type=int,
-        choices=range(1, 33),
-        default=8,
-        help=(
-            "Number of parallel HeMAC environments used for deterministic "
-            "evaluation. Uses the existing rollout worker pool when possible."
-        ),
-    )
     parser.add_argument("--eval-episodes", type=int, default=30)
     parser.add_argument(
         "--eval-seed-base",
@@ -308,114 +285,6 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Optional JSON destination for --eval-only metrics.",
     )
-    # STANDARD HISSD ONLINE EXPERIMENT DEFAULTS
-    #
-    # These values define the current matched D3 learning-efficiency
-    # protocol. Every option can still be overridden explicitly from
-    # the command line.
-    parser.set_defaults(
-        difficulty=3,
-        method_name="hissd_skill_supported_ppo",
-        skill_mode="full",
-
-        rollout_envs=8,
-        eval_envs=8,
-        multiprocess_rollout=True,
-
-        train_batch_joint_steps=4000,
-        joint_step_budget=500_000,
-        eval_every_joint_steps=25_000,
-        eval_episodes=200,
-        eval_seed_base=100_000_000,
-
-        ppo_epochs=5,
-        minibatch_size=1024,
-
-        actor_lr=3e-4,
-        base_head_lr=3e-5,
-        encoder_lr=1e-5,
-        base_unfreeze_after_joint_steps=4_000,
-        encoder_unfreeze_after_joint_steps=12_000,
-
-        skill_prior_init=0.10,
-        skill_gate_lr=3e-5,
-        skill_residual_lr=3e-5,
-        skill_prior_max=0.25,
-
-        gamma=0.995,
-        clip_ratio=0.2,
-        target_kl=0.02,
-        entropy_coeff=0.01,
-        anchor_coeff=0.001,
-        skill_anchor_coeff=0.001,
-        context_warmup_iterations=0,
-
-        shared_terminal_crash_penalty=0.0,
-
-        rollback_score_drop=0.15,
-        rollback_min_best_success=0.6,
-        rollback_patience=2,
-
-        credit_assignment="agent",
-        use_pretrained_value=False,
-
-        device="cuda",
-        deterministic=True,
-    )
-
-    # Default protocol for HiSSD -> online PPO adaptation.
-    # CLI arguments can still override any of these values.
-    parser.set_defaults(
-        # Policy / evaluation
-        skill_mode="full",
-        credit_assignment="agent",
-        use_pretrained_value=False,
-        deterministic=True,
-        device="cuda",
-        seed=2026,
-        method_name="hissd_fixedfull_residual_ppo",
-
-        # Collection / budget
-        train_batch_joint_steps=4_000,
-        joint_step_budget=500_000,
-        eval_every_joint_steps=25_000,
-        eval_episodes=200,
-        eval_envs=1,
-        eval_seed_base=100_000_000,
-
-        # PPO
-        ppo_epochs=5,
-        minibatch_size=1024,
-        actor_lr=3e-4,
-        gamma=0.995,
-        clip_ratio=0.2,
-        target_kl=0.02,
-        entropy_coeff=0.01,
-
-        # HiSSD adaptation
-        base_head_lr=3e-5,
-        encoder_lr=1e-5,
-        base_unfreeze_after_joint_steps=4_000,
-        encoder_unfreeze_after_joint_steps=12_000,
-
-        # Full pretrained HiSSD skill + PPO residual
-        skill_prior_init=1.0,
-        skill_prior_max=1.0,
-        skill_gate_lr=3e-5,
-        skill_residual_lr=3e-5,
-
-        # Regularization
-        anchor_coeff=0.001,
-        skill_anchor_coeff=0.001,
-        context_warmup_iterations=0,
-        shared_terminal_crash_penalty=0.0,
-
-        # Validation rollback
-        rollback_score_drop=0.15,
-        rollback_min_best_success=0.6,
-        rollback_patience=2,
-    )
-
     return parser.parse_args()
 
 
@@ -453,10 +322,10 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--log-std-min must be lower than --log-std-max.")
     if args.anchor_coeff < 0.0 or args.skill_anchor_coeff < 0.0:
         raise ValueError("Anchor coefficients cannot be negative.")
-    if not 0.0 <= args.skill_prior_init <= 1.0:
-        raise ValueError("--skill-prior-init must be in [0, 1].")
-    if not 0.0 < args.skill_prior_max <= 1.0:
-        raise ValueError("--skill-prior-max must be in (0, 1].")
+    if not 0.0 <= args.skill_prior_init < 1.0:
+        raise ValueError("--skill-prior-init must be in [0, 1).")
+    if not 0.0 < args.skill_prior_max < 1.0:
+        raise ValueError("--skill-prior-max must be in (0, 1).")
     if args.skill_prior_init > args.skill_prior_max:
         raise ValueError("--skill-prior-init cannot exceed --skill-prior-max.")
     if args.shared_terminal_crash_penalty < 0.0:
@@ -486,7 +355,7 @@ def validate_args(args: argparse.Namespace) -> None:
             "--joint-step-budget and --eval-every-joint-steps must be used together."
         )
     if args.joint_step_budget is not None:
-        if args.joint_step_budget < 0 or args.eval_every_joint_steps <= 0:
+        if args.joint_step_budget <= 0 or args.eval_every_joint_steps <= 0:
             raise ValueError("Joint-step budget and evaluation interval must be positive.")
         if args.eval_every_joint_steps > args.joint_step_budget:
             raise ValueError(
@@ -582,15 +451,12 @@ class OnlineSkillConditionedResidualPolicy(nn.Module):
         )
         initial_gate = float(skill_prior_init)
         maximum_gate = float(skill_prior_max)
-        if not 0.0 < maximum_gate <= 1.0:
+        if not 0.0 < maximum_gate < 1.0:
             raise ValueError("skill_prior_max must be in (0, 1).")
         if not 0.0 <= initial_gate <= maximum_gate:
             raise ValueError("skill_prior_init must be in [0, skill_prior_max].")
         self.use_skill_prior = initial_gate > 0.0
         self.skill_prior_max = maximum_gate
-        self.fixed_full_skill_prior = (
-            initial_gate == 1.0 and maximum_gate == 1.0
-        )
         self.register_buffer(
             "initial_skill_prior_gate",
             torch.full((action_dim,), initial_gate),
@@ -627,11 +493,6 @@ class OnlineSkillConditionedResidualPolicy(nn.Module):
         common_skills: torch.Tensor,
         task_skills: torch.Tensor,
     ) -> torch.Tensor:
-        if self.fixed_full_skill_prior:
-            return observation_features.new_ones(
-                *observation_features.shape[:-1],
-                self.skill_gate_network.out_features,
-            )
         if not self.use_skill_prior:
             return observation_features.new_zeros(
                 *observation_features.shape[:-1],
@@ -674,24 +535,6 @@ def online_action_mean(
         observation_features, common_skills, task_skills
     )
     pretrained_action = torch.tanh(pretrained_logits) * action_scale
-    if getattr(residual_policy, "fixed_full_skill_prior", False):
-        residual = residual_policy(
-            observation_features,
-            common_skills,
-            task_skills,
-        )
-        action_mean = pretrained_action + residual
-
-        if compute_skill_delta:
-            skill_action_delta = residual.abs().mean()
-        else:
-            skill_action_delta = pretrained_logits.new_zeros(())
-
-        # Third return value is used as the PPO action anchor.
-        # For exact pure-HiSSD initialization, anchor to the HiSSD policy,
-        # not the BC/base-action policy.
-        return action_mean, skill_action_delta, pretrained_action
-
     skill_prior = residual_policy.skill_prior_fraction(
         observation_features, common_skills, task_skills
     ) * (
@@ -954,22 +797,6 @@ def rollout_episode(
                     action_scale,
                     compute_skill_delta=False,
                 )
-
-                pure_action = outputs["actions"][0] * action_scale
-
-                if cycle_count == 0:
-                    print(
-                        "ACTION_DEBUG",
-                        "fixed_full=",
-                        getattr(no_skill_policy, "fixed_full_skill_prior", False),
-                        "pure_vs_online_max=",
-                        float((pure_action - action_mean).abs().max()),
-                        "pure_vs_online_mean=",
-                        float((pure_action - action_mean).abs().mean()),
-                        "residual_max=",
-                        float((action_mean - base_action).abs().max()),
-                    )
-                    
                 anchor_action_mean = base_action
                 if skill_mode == "no_skill":
                     common_skills = torch.zeros_like(common_skills)
@@ -1243,1035 +1070,6 @@ def _batched_episode_metrics(slot):
     }
 
 
-
-def _worker_observation_packet(
-    env,
-    core_env,
-    drone_ids,
-    action_scale: float,
-):
-    """Build raw CPU observations inside an environment worker.
-
-    Keep action_history unnormalized here. The canonical observation
-    path transfers the raw tensor to the target device first and only
-    then divides by action_scale. Main-process rollout code performs
-    that normalization on CUDA.
-    """
-    converted = [
-        convert_observation(
-            env.observe(agent_id),
-            "drone",
-        )
-        for agent_id in drone_ids
-    ]
-
-    observations_np = {
-        "global_map": np.ascontiguousarray(
-            np.stack(
-                [
-                    item["global_map"]
-                    for item in converted
-                ]
-            )[None, ...]
-        ),
-        "local_map": np.ascontiguousarray(
-            np.stack(
-                [
-                    item["local_map"]
-                    for item in converted
-                ]
-            )[None, ...]
-        ),
-        "action_history": np.ascontiguousarray(
-            np.stack(
-                [
-                    item["action_history"]
-                    for item in converted
-                ]
-            )[None, ...]
-        ),
-    }
-
-    central_map = np.ascontiguousarray(
-        build_global_central_map(core_env)
-    )
-
-    return {
-        "observations": observations_np,
-        "central_map": central_map,
-    }
-
-
-def _hemac_env_worker(
-    connection,
-    config,
-    action_scale: float,
-    reward_scale: float,
-    shared_terminal_crash_penalty: float,
-):
-    """Own exactly one HeMAC environment in a CPU-only subprocess."""
-    import traceback
-
-    # Prevent each env process from creating its own large CPU thread pool.
-    torch.set_num_threads(1)
-
-    env = None
-
-    try:
-        env = HeMAC_v0.env(**config)
-
-        core_env = get_core_env(env)
-        agent_order = list(env.possible_agents)
-        drone_ids = [
-            agent_id
-            for agent_id in agent_order
-            if agent_id.startswith("drone_")
-        ]
-
-        if len(drone_ids) != len(agent_order):
-            raise ValueError(
-                "Multiprocess rollout requires drone-only HeMAC."
-            )
-
-        drone_index = {
-            drone_id: index
-            for index, drone_id in enumerate(drone_ids)
-        }
-        drone_indices = list(range(len(drone_ids)))
-        last_agent_id = agent_order[-1]
-
-        cycle_count = 0
-        episode_return = 0.0
-
-        def final_metrics():
-            goal_found = any(
-                agent_found_goal(core_env, drone_id)
-                for drone_id in drone_ids
-            )
-
-            return {
-                "success": float(bool(core_env.mission_success)),
-                "goal_found": float(goal_found),
-                "fatal_crash": float(bool(core_env.collided)),
-                "drone_crash": float(bool(core_env.drone_crash)),
-                "observer_crash": 0.0,
-                "coverage": float(
-                    core_env.current_coverage_ratio()
-                ),
-                "reward_coverage": float(
-                    core_env.current_drone_reward_coverage_ratio()
-                ),
-                "cycles": float(cycle_count),
-                "episode_return": float(episode_return),
-            }
-
-        while True:
-            command, payload = connection.recv()
-
-            if command == "close":
-                break
-
-            if command in {"reset", "reset_fresh"}:
-                if command == "reset_fresh":
-                    if env is not None:
-                        env.close()
-
-                    env = HeMAC_v0.env(**config)
-
-                env.reset(seed=int(payload))
-
-                # Wrapper keeps the same underlying HeMAC instance,
-                # but refresh these references defensively.
-                core_env = get_core_env(env)
-                agent_order = list(env.possible_agents)
-                drone_ids = [
-                    agent_id
-                    for agent_id in agent_order
-                    if agent_id.startswith("drone_")
-                ]
-                drone_index = {
-                    drone_id: index
-                    for index, drone_id in enumerate(drone_ids)
-                }
-                drone_indices = list(range(len(drone_ids)))
-                last_agent_id = agent_order[-1]
-
-                cycle_count = 0
-                episode_return = 0.0
-
-                packet = _worker_observation_packet(
-                    env,
-                    core_env,
-                    drone_ids,
-                    action_scale,
-                )
-
-                connection.send(
-                    (
-                        "ok",
-                        {
-                            "packet": packet,
-                            "drone_count": len(drone_ids),
-                        },
-                    )
-                )
-                continue
-
-            if command != "step":
-                raise RuntimeError(
-                    f"Unknown worker command: {command!r}"
-                )
-
-            actions = np.asarray(
-                payload,
-                dtype=np.float32,
-            )
-
-            if actions.shape[0] != len(drone_ids):
-                raise ValueError(
-                    f"Expected actions for {len(drone_ids)} drones, "
-                    f"got shape {actions.shape}"
-                )
-
-            cached_actions = {}
-
-            for index, drone_id in enumerate(drone_ids):
-                action_space = env.action_space(drone_id)
-
-                cached_actions[drone_id] = np.ascontiguousarray(
-                    np.clip(
-                        actions[index],
-                        action_space.low,
-                        action_space.high,
-                    ),
-                    dtype=np.float32,
-                )
-
-            cycle_rewards = np.zeros(
-                len(agent_order),
-                dtype=np.float32,
-            )
-            distributed_success_rewards = np.zeros(
-                len(agent_order),
-                dtype=np.float32,
-            )
-            cycle_mask = np.zeros(
-                len(agent_order),
-                dtype=np.bool_,
-            )
-            shared_success_reward = 0.0
-
-            cycle_completed = False
-
-            while not cycle_completed:
-                agent_id = env.agent_selection
-
-                (
-                    _,
-                    _,
-                    termination,
-                    truncation,
-                    _,
-                ) = env.last()
-
-                if termination or truncation:
-                    env.step(None)
-
-                    if not env.agents:
-                        break
-
-                    continue
-
-                index = drone_index[agent_id]
-                cycle_mask[index] = True
-
-                env.step(
-                    cached_actions[agent_id]
-                )
-
-                for (
-                    reward_index,
-                    reward_agent_id,
-                ) in enumerate(drone_ids):
-                    cycle_rewards[
-                        reward_index
-                    ] += _local_reward_after_step(
-                        core_env,
-                        reward_agent_id,
-                    )
-
-                shared_success_reward = max(
-                    shared_success_reward,
-                    float(core_env.global_reward),
-                )
-
-                for (
-                    reward_index,
-                    reward_agent_id,
-                ) in enumerate(drone_ids):
-                    distributed_success_rewards[
-                        reward_index
-                    ] = max(
-                        distributed_success_rewards[
-                            reward_index
-                        ],
-                        float(
-                            core_env._global_reward_for_agent(
-                                reward_agent_id
-                            )
-                        ),
-                    )
-
-                cycle_completed = (
-                    agent_id == last_agent_id
-                    or bool(core_env.terminate)
-                    or bool(core_env.truncate)
-                )
-
-            if not cycle_completed:
-                raise RuntimeError(
-                    "HeMAC episode terminated before completing "
-                    "the expected world cycle."
-                )
-
-            cycle_rewards = apply_shared_terminal_crash_penalty(
-                cycle_rewards,
-                fatal_crash=bool(core_env.collided),
-                penalty=shared_terminal_crash_penalty,
-            )
-
-            team_reward = _team_reward(
-                cycle_rewards,
-                cycle_mask,
-                [],
-                drone_indices,
-                shared_success_reward,
-            )
-
-            episode_return += float(team_reward)
-            cycle_count += 1
-
-            per_drone_reward = combine_per_drone_rewards(
-                cycle_rewards,
-                distributed_success_rewards,
-            )
-
-            done = bool(
-                core_env.terminate
-                or core_env.truncate
-            )
-
-            if done:
-                # Match the original PettingZoo AEC dead-agent cleanup.
-                while env.agents:
-                    (
-                        _,
-                        _,
-                        termination,
-                        truncation,
-                        _,
-                    ) = env.last()
-
-                    if not (
-                        termination
-                        or truncation
-                    ):
-                        break
-
-                    env.step(None)
-
-                next_packet = None
-                metrics = final_metrics()
-
-            else:
-                next_packet = _worker_observation_packet(
-                    env,
-                    core_env,
-                    drone_ids,
-                    action_scale,
-                )
-                metrics = None
-
-            connection.send(
-                (
-                    "ok",
-                    {
-                        "reward": np.ascontiguousarray(
-                            per_drone_reward
-                            / reward_scale,
-                            dtype=np.float32,
-                        ),
-                        "agent_mask": np.ascontiguousarray(
-                            cycle_mask,
-                            dtype=np.bool_,
-                        ),
-                        "done": done,
-                        "packet": next_packet,
-                        "metrics": metrics,
-                    },
-                )
-            )
-
-    except BaseException:
-        try:
-            connection.send(
-                (
-                    "error",
-                    traceback.format_exc(),
-                )
-            )
-        except BaseException:
-            pass
-        raise
-
-    finally:
-        if env is not None:
-            try:
-                env.close()
-            except BaseException:
-                pass
-
-        try:
-            connection.close()
-        except BaseException:
-            pass
-
-
-class HeMACWorkerPool:
-    """Persistent CPU environment workers; CUDA stays in the parent."""
-
-    def __init__(
-        self,
-        *,
-        num_workers: int,
-        config,
-        action_scale: float,
-        reward_scale: float,
-        shared_terminal_crash_penalty: float,
-    ):
-        if num_workers <= 0:
-            raise ValueError("num_workers must be positive")
-
-        self.context = mp.get_context("spawn")
-        self.connections = []
-        self.processes = []
-
-        for worker_index in range(num_workers):
-            parent_connection, child_connection = (
-                self.context.Pipe()
-            )
-
-            process = self.context.Process(
-                target=_hemac_env_worker,
-                args=(
-                    child_connection,
-                    config,
-                    action_scale,
-                    reward_scale,
-                    shared_terminal_crash_penalty,
-                ),
-                name=f"hemac-rollout-{worker_index}",
-                daemon=True,
-            )
-
-            process.start()
-            child_connection.close()
-
-            self.connections.append(
-                parent_connection
-            )
-            self.processes.append(
-                process
-            )
-
-    def _receive(self, worker_index: int):
-        try:
-            status, payload = (
-                self.connections[
-                    worker_index
-                ].recv()
-            )
-        except EOFError as error:
-            process = self.processes[
-                worker_index
-            ]
-            raise RuntimeError(
-                f"HeMAC worker {worker_index} exited "
-                f"unexpectedly with exit code "
-                f"{process.exitcode}."
-            ) from error
-
-        if status == "error":
-            raise RuntimeError(
-                f"HeMAC worker {worker_index} failed:\n"
-                f"{payload}"
-            )
-
-        if status != "ok":
-            raise RuntimeError(
-                f"Unexpected worker status: {status!r}"
-            )
-
-        return payload
-
-    def reset(
-        self,
-        worker_indices,
-        seeds,
-        fresh: bool = False,
-    ):
-        if len(worker_indices) != len(seeds):
-            raise ValueError(
-                "worker_indices and seeds must match"
-            )
-
-        for worker_index, seed in zip(
-            worker_indices,
-            seeds,
-        ):
-            self.connections[
-                worker_index
-            ].send(
-                (
-                    (
-                        "reset_fresh"
-                        if fresh
-                        else "reset"
-                    ),
-                    int(seed),
-                )
-            )
-
-        return [
-            self._receive(worker_index)
-            for worker_index in worker_indices
-        ]
-
-    def step(
-        self,
-        worker_indices,
-        actions,
-    ):
-        if len(worker_indices) != len(actions):
-            raise ValueError(
-                "worker_indices and actions must match"
-            )
-
-        # Send every action first. This is what allows all
-        # environment workers to execute simultaneously.
-        for worker_index, action in zip(
-            worker_indices,
-            actions,
-        ):
-            self.connections[
-                worker_index
-            ].send(
-                (
-                    "step",
-                    np.ascontiguousarray(
-                        action,
-                        dtype=np.float32,
-                    ),
-                )
-            )
-
-        # Then wait for all workers.
-        return [
-            self._receive(worker_index)
-            for worker_index in worker_indices
-        ]
-
-    def close(self):
-        for connection in self.connections:
-            try:
-                connection.send(
-                    ("close", None)
-                )
-            except (
-                BrokenPipeError,
-                EOFError,
-                OSError,
-            ):
-                pass
-
-        for connection in self.connections:
-            try:
-                connection.close()
-            except OSError:
-                pass
-
-        for process in self.processes:
-            process.join(timeout=2.0)
-
-            if process.is_alive():
-                process.terminate()
-                process.join(timeout=2.0)
-
-
-def rollout_episodes_multiprocess(
-    *,
-    worker_pool: HeMACWorkerPool,
-    seeds,
-    model,
-    no_skill_policy: OnlineSkillConditionedResidualPolicy,
-    value_head: OnlineValueHead,
-    anchor_head: nn.Module,
-    anchor_context_adapter: nn.Module | None,
-    use_pretrained_value: bool,
-    credit_assignment: str,
-    log_std: torch.Tensor,
-    action_scale: float,
-    reward_scale: float,
-    shared_terminal_crash_penalty: float,
-    success_min_coverage_ratio: float,
-    device: torch.device,
-    stochastic: bool,
-    skill_mode: str,
-):
-    """CPU-parallel env rollout with one batched GPU inference process."""
-    if use_pretrained_value:
-        raise ValueError(
-            "Multiprocess rollout currently requires "
-            "--no-use-pretrained-value."
-        )
-
-    if credit_assignment != "agent":
-        raise ValueError(
-            "Multiprocess rollout currently requires "
-            "--credit-assignment agent."
-        )
-
-    batch_size = len(seeds)
-
-    if batch_size == 0:
-        return [], []
-
-    worker_indices = list(
-        range(batch_size)
-    )
-
-    reset_results = worker_pool.reset(
-        worker_indices,
-        seeds,
-    )
-
-    drone_count = reset_results[0][
-        "drone_count"
-    ]
-
-    if any(
-        result["drone_count"]
-        != drone_count
-        for result in reset_results
-    ):
-        raise RuntimeError(
-            "Worker drone counts differ."
-        )
-
-    slots = []
-
-    for worker_index, result in zip(
-        worker_indices,
-        reset_results,
-    ):
-        slots.append(
-            {
-                "worker_index": worker_index,
-                "packet": result["packet"],
-                "recurrent_state": (
-                    model.initial_inference_state(
-                        device=device
-                    )
-                ),
-                "transitions": [],
-                "done": False,
-                "metrics": None,
-            }
-        )
-
-    while True:
-        active_slots = [
-            slot
-            for slot in slots
-            if not slot["done"]
-        ]
-
-        if not active_slots:
-            break
-
-        # ----------------------------------------------------
-        # CPU workers already prepared these observations
-        # concurrently. Concatenate and transfer once.
-        # ----------------------------------------------------
-        observation_keys = (
-            active_slots[0]["packet"][
-                "observations"
-            ].keys()
-        )
-
-        observations = {}
-
-        for key in observation_keys:
-            array = np.concatenate(
-                [
-                    slot["packet"][
-                        "observations"
-                    ][key]
-                    for slot in active_slots
-                ],
-                axis=0,
-            )
-
-            observations[key] = (
-                torch.from_numpy(
-                    np.ascontiguousarray(
-                        array
-                    )
-                ).to(device)
-            )
-
-        # Match drone_observation_batch exactly:
-        # raw tensor -> target device -> divide on that device.
-        observations["action_history"] = (
-            observations["action_history"]
-            / action_scale
-        )
-
-        central_map_array = np.stack(
-            [
-                slot["packet"][
-                    "central_map"
-                ]
-                for slot in active_slots
-            ],
-            axis=0,
-        )
-
-        central_map = torch.from_numpy(
-            np.ascontiguousarray(
-                central_map_array
-            )
-        ).to(device)
-
-        valid_mask = torch.ones(
-            len(active_slots),
-            drone_count,
-            dtype=torch.bool,
-            device=device,
-        )
-
-        recurrent_state = (
-            _batch_rollout_state(
-                [
-                    slot["recurrent_state"]
-                    for slot in active_slots
-                ]
-            )
-        )
-
-        with torch.no_grad():
-            (
-                outputs,
-                next_recurrent_state,
-            ) = model.inference_step(
-                observations,
-                valid_mask,
-                recurrent_state,
-            )
-
-            task_skill = outputs[
-                "task_skills"
-            ]
-            observation_features = outputs[
-                "observation_features"
-            ]
-            common_skills = outputs[
-                "common_skills"
-            ]
-
-            task_context = (
-                next_recurrent_state[
-                    "task_context"
-                ]
-            )
-
-            context_adapter = (
-                getattr(
-                    model.task_skill_encoder,
-                    "context_adapter",
-                    None,
-                )
-                if model.skill_structure
-                in {"split", "task_only"}
-                else None
-            )
-
-            if skill_mode == "no_skill":
-                task_base_skill = task_skill
-                anchor_task_skill = task_skill
-
-            elif context_adapter is None:
-                task_base_skill = task_skill
-                anchor_task_skill = task_skill
-
-            else:
-                task_base_skill = (
-                    task_skill
-                    - context_adapter(
-                        task_context
-                    ).unsqueeze(1)
-                )
-
-                anchor_task_skill = (
-                    task_base_skill
-                    + anchor_context_adapter(
-                        task_context
-                    ).unsqueeze(1)
-                )
-
-            (
-                action_mean,
-                _,
-                base_action,
-            ) = online_action_mean(
-                model,
-                no_skill_policy,
-                observation_features,
-                common_skills,
-                task_skill,
-                skill_mode,
-                action_scale,
-                compute_skill_delta=False,
-            )
-
-            anchor_action_mean = (
-                base_action
-            )
-
-            stored_common_skills = (
-                common_skills
-            )
-            stored_task_skill = (
-                task_skill
-            )
-
-            if skill_mode == "no_skill":
-                stored_common_skills = (
-                    torch.zeros_like(
-                        common_skills
-                    )
-                )
-                stored_task_skill = (
-                    torch.zeros_like(
-                        task_skill
-                    )
-                )
-
-            central_embedding = (
-                model.central_state_encoder(
-                    central_map
-                )
-            )
-
-            central_per_drone = (
-                central_embedding
-                .unsqueeze(1)
-                .expand(
-                    -1,
-                    drone_count,
-                    -1,
-                )
-            )
-
-            critic_features = torch.cat(
-                (
-                    observation_features,
-                    stored_common_skills,
-                    stored_task_skill,
-                    central_per_drone,
-                ),
-                dim=-1,
-            )
-
-            pretrained_value = (
-                central_embedding.new_zeros(
-                    (
-                        len(active_slots),
-                        drone_count,
-                    )
-                )
-            )
-
-            value = (
-                pretrained_value
-                + value_head(
-                    critic_features
-                )
-            )
-
-            distribution = (
-                environment_action_distribution(
-                    action_mean,
-                    log_std,
-                    action_scale,
-                )
-            )
-
-            raw_action = (
-                distribution.sample()
-                if stochastic
-                else action_mean
-            )
-
-            old_log_prob = (
-                per_drone_gaussian_log_prob(
-                    distribution,
-                    raw_action,
-                )
-            )
-
-        raw_action_cpu = (
-            raw_action
-            .detach()
-            .cpu()
-            .numpy()
-        )
-
-        # Save the state/action side before workers advance.
-        for batch_index, slot in enumerate(
-            active_slots
-        ):
-            slot["recurrent_state"] = (
-                _slice_rollout_state(
-                    next_recurrent_state,
-                    batch_index,
-                )
-            )
-
-            if stochastic:
-                slot["transitions"].append(
-                    {
-                        "global_map": observations[
-                            "global_map"
-                        ][batch_index].detach(),
-                        "local_map": observations[
-                            "local_map"
-                        ][batch_index].detach(),
-                        "action_history": observations[
-                            "action_history"
-                        ][batch_index].detach(),
-                        "task_skill": stored_task_skill[
-                            batch_index
-                        ].detach(),
-                        "task_base_skill": task_base_skill[
-                            batch_index
-                        ].detach(),
-                        "task_context": task_context[
-                            batch_index
-                        ].detach(),
-                        "anchor_task_skill": anchor_task_skill[
-                            batch_index
-                        ].detach(),
-                        "observation_features": (
-                            observation_features[
-                                batch_index
-                            ].detach()
-                        ),
-                        "common_skills": stored_common_skills[
-                            batch_index
-                        ].detach(),
-                        "anchor_action_mean": (
-                            anchor_action_mean[
-                                batch_index
-                            ].detach()
-                        ),
-                        "raw_action": raw_action[
-                            batch_index
-                        ].detach(),
-                        "old_log_prob": old_log_prob[
-                            batch_index
-                        ].detach(),
-                        "critic_features": critic_features[
-                            batch_index
-                        ].detach(),
-                        "pretrained_value": pretrained_value[
-                            batch_index
-                        ].detach(),
-                        "value": value[
-                            batch_index
-                        ].detach(),
-                    }
-                )
-
-        active_worker_indices = [
-            slot["worker_index"]
-            for slot in active_slots
-        ]
-
-        # All env.step + next-observation work now happens
-        # concurrently across CPU worker processes.
-        step_results = worker_pool.step(
-            active_worker_indices,
-            raw_action_cpu,
-        )
-
-        for slot, result in zip(
-            active_slots,
-            step_results,
-        ):
-            if stochastic:
-                transition = (
-                    slot["transitions"][-1]
-                )
-
-                transition["agent_mask"] = (
-                    torch.from_numpy(
-                        result[
-                            "agent_mask"
-                        ].copy()
-                    )
-                )
-
-                transition["reward"] = (
-                    torch.from_numpy(
-                        result[
-                            "reward"
-                        ].copy()
-                    )
-                )
-
-            if result["done"]:
-                slot["done"] = True
-                slot["metrics"] = (
-                    result["metrics"]
-                )
-                slot["packet"] = None
-            else:
-                slot["packet"] = (
-                    result["packet"]
-                )
-
-    episodes = [
-        slot["transitions"]
-        for slot in slots
-    ]
-
-    metrics = [
-        slot["metrics"]
-        for slot in slots
-    ]
-
-    if any(
-        metric is None
-        for metric in metrics
-    ):
-        raise RuntimeError(
-            "A worker episode ended without metrics."
-        )
-
-    return episodes, metrics
-
-
 def rollout_episodes_batched(
     *,
     envs,
@@ -2291,7 +1089,6 @@ def rollout_episodes_batched(
     device: torch.device,
     stochastic: bool,
     skill_mode: str,
-    worker_pool=None,
 ):
     """Run independent HeMAC episodes with batched neural inference.
 
@@ -2299,27 +1096,6 @@ def rollout_episodes_batched(
     independent per environment. Only neural policy/value inference is
     combined across currently active environments.
     """
-    if worker_pool is not None:
-        return rollout_episodes_multiprocess(
-            worker_pool=worker_pool,
-            seeds=seeds,
-            model=model,
-            no_skill_policy=no_skill_policy,
-            value_head=value_head,
-            anchor_head=anchor_head,
-            anchor_context_adapter=anchor_context_adapter,
-            use_pretrained_value=use_pretrained_value,
-            credit_assignment=credit_assignment,
-            log_std=log_std,
-            action_scale=action_scale,
-            reward_scale=reward_scale,
-            shared_terminal_crash_penalty=shared_terminal_crash_penalty,
-            success_min_coverage_ratio=success_min_coverage_ratio,
-            device=device,
-            stochastic=stochastic,
-            skill_mode=skill_mode,
-        )
-
     if len(envs) != len(seeds):
         raise ValueError("envs and seeds must have equal lengths")
 
@@ -3127,443 +1903,12 @@ def validation_regressed(
     )
 
 
-
-def rollout_episodes_multiprocess_eval_exact(
-    *,
-    worker_pool,
-    seeds,
-    model,
-    no_skill_policy,
-    value_head,
-    anchor_head,
-    anchor_context_adapter,
-    use_pretrained_value,
-    credit_assignment,
-    log_std,
-    action_scale,
-    reward_scale,
-    shared_terminal_crash_penalty,
-    success_min_coverage_ratio,
-    device,
-    stochastic,
-    skill_mode,
-):
-    """Parallel CPU environments with original batch=1 eval inference.
-
-    Environment stepping runs concurrently in worker processes, but every
-    policy forward keeps the same batch shape as rollout_episode(). This
-    avoids changing deterministic validation trajectories merely because
-    evaluation uses a different neural-network batch size.
-    """
-    if stochastic:
-        raise ValueError(
-            "Exact multiprocess evaluation requires stochastic=False."
-        )
-
-    if use_pretrained_value:
-        raise ValueError(
-            "Exact multiprocess evaluation currently requires "
-            "--no-use-pretrained-value."
-        )
-
-    if credit_assignment != "agent":
-        raise ValueError(
-            "Exact multiprocess evaluation currently requires "
-            "--credit-assignment agent."
-        )
-
-    batch_size = len(seeds)
-
-    if batch_size == 0:
-        return [], []
-
-    worker_indices = list(range(batch_size))
-
-    reset_results = worker_pool.reset(
-        worker_indices,
-        seeds,
-        fresh=True,
-    )
-
-    drone_count = reset_results[0]["drone_count"]
-
-    if any(
-        result["drone_count"] != drone_count
-        for result in reset_results
-    ):
-        raise RuntimeError(
-            "Evaluation worker drone counts differ."
-        )
-
-    slots = []
-
-    for worker_index, result in zip(
-        worker_indices,
-        reset_results,
-    ):
-        slots.append(
-            {
-                "worker_index": worker_index,
-                "packet": result["packet"],
-                "recurrent_state": (
-                    model.initial_inference_state(
-                        device=device
-                    )
-                ),
-                "done": False,
-                "metrics": None,
-            }
-        )
-
-    valid_mask = torch.ones(
-        1,
-        drone_count,
-        dtype=torch.bool,
-        device=device,
-    )
-
-    while True:
-        active_slots = [
-            slot
-            for slot in slots
-            if not slot["done"]
-        ]
-
-        if not active_slots:
-            break
-
-        worker_ids = []
-        actions = []
-
-        # IMPORTANT:
-        # Do NOT batch neural inference here.
-        # Each forward uses exactly [1, drones, ...],
-        # matching rollout_episode().
-        for slot in active_slots:
-            packet = slot["packet"]
-
-            observations = {
-                key: torch.from_numpy(
-                    np.ascontiguousarray(value)
-                ).to(device)
-                for key, value
-                in packet["observations"].items()
-            }
-
-            # Canonical CUDA observation semantics.
-            observations["action_history"] = (
-                observations["action_history"]
-                / action_scale
-            )
-
-            with torch.no_grad():
-                outputs, next_state = (
-                    model.inference_step(
-                        observations,
-                        valid_mask,
-                        slot["recurrent_state"],
-                    )
-                )
-
-                # Exactly match rollout_episode's indexing.
-                task_skill = outputs[
-                    "task_skills"
-                ][0]
-
-                observation_features = outputs[
-                    "observation_features"
-                ][0]
-
-                common_skills = outputs[
-                    "common_skills"
-                ][0]
-
-                task_context = next_state[
-                    "task_context"
-                ][0]
-
-                context_adapter = (
-                    getattr(
-                        model.task_skill_encoder,
-                        "context_adapter",
-                        None,
-                    )
-                    if model.skill_structure
-                    in {"split", "task_only"}
-                    else None
-                )
-
-                # Context calculations are retained so the actor
-                # follows the same code path as normal rollout.
-                if skill_mode == "no_skill":
-                    task_base_skill = task_skill
-                    anchor_task_skill = task_skill
-
-                elif context_adapter is None:
-                    task_base_skill = task_skill
-                    anchor_task_skill = task_skill
-
-                else:
-                    task_base_skill = (
-                        task_skill
-                        - context_adapter(
-                            task_context
-                        ).unsqueeze(0)
-                    )
-
-                    anchor_task_skill = (
-                        task_base_skill
-                        + anchor_context_adapter(
-                            task_context
-                        ).unsqueeze(0)
-                    )
-
-                (
-                    action_mean,
-                    _,
-                    _,
-                ) = online_action_mean(
-                    model,
-                    no_skill_policy,
-                    observation_features,
-                    common_skills,
-                    task_skill,
-                    skill_mode,
-                    action_scale,
-                    compute_skill_delta=False,
-                )
-
-                # Original deterministic rollout:
-                # raw_action = action_mean
-                raw_action = action_mean
-
-            slot["recurrent_state"] = next_state
-
-            worker_ids.append(
-                slot["worker_index"]
-            )
-
-            actions.append(
-                raw_action
-                .detach()
-                .cpu()
-                .numpy()
-            )
-
-        # Environment/world work remains parallel.
-        step_results = worker_pool.step(
-            worker_ids,
-            actions,
-        )
-
-        for slot, result in zip(
-            active_slots,
-            step_results,
-        ):
-            if result["done"]:
-                slot["done"] = True
-                slot["metrics"] = (
-                    result["metrics"]
-                )
-                slot["packet"] = None
-            else:
-                slot["packet"] = (
-                    result["packet"]
-                )
-
-    metrics = [
-        slot["metrics"]
-        for slot in slots
-    ]
-
-    if any(
-        metric is None
-        for metric in metrics
-    ):
-        raise RuntimeError(
-            "An exact evaluation worker ended "
-            "without episode metrics."
-        )
-
-    return [], metrics
-
-
-
-def rollout_episode_deterministic_eval(
-    *,
-    env,
-    model,
-    no_skill_policy,
-    action_scale: float,
-    seed: int,
-    device: torch.device,
-    skill_mode: str,
-) -> dict[str, float]:
-    """Deterministic evaluation without training-only critic/reward bookkeeping."""
-
-    # Match pure HiSSD evaluation semantics.
-    model.eval()
-    no_skill_policy.eval()
-
-    env.reset(seed=seed)
-    core_env = get_core_env(env)
-
-    agent_order = list(env.possible_agents)
-    drone_ids = [
-        agent_id
-        for agent_id in agent_order
-        if agent_id.startswith("drone_")
-    ]
-
-    if len(drone_ids) != len(agent_order):
-        raise ValueError(
-            "Drone-only evaluation received a non-drone agent."
-        )
-
-    valid_mask = torch.ones(
-        1,
-        len(drone_ids),
-        dtype=torch.bool,
-        device=device,
-    )
-
-    recurrent_state = model.initial_inference_state(
-        batch_size=1,
-        device=device,
-    )
-
-    cached_actions: dict[str, np.ndarray] = {}
-    cycle_count = 0
-    episode_return = 0.0
-    last_agent_id = agent_order[-1]
-
-    for agent_id in env.agent_iter():
-        (
-            _,
-            reward,
-            termination,
-            truncation,
-            _,
-        ) = env.last()
-
-        # Read-only bookkeeping. This does not affect policy/environment state.
-        episode_return += float(reward)
-
-        if termination or truncation:
-            env.step(None)
-            continue
-
-        if not cached_actions:
-            observations = drone_observation_batch(
-                env,
-                drone_ids,
-                action_scale,
-                device,
-            )
-
-            with torch.no_grad():
-                outputs, recurrent_state = model.inference_step(
-                    observations,
-                    valid_mask,
-                    recurrent_state,
-                )
-
-                observation_features = outputs[
-                    "observation_features"
-                ][0]
-                common_skills = outputs["common_skills"][0]
-                task_skills = outputs["task_skills"][0]
-
-                # For the exact full-prior path, use the action that
-                # inference_step already produced. This is exactly the same
-                # HiSSD action path used by evaluate_hissd_pure.py.
-                if (
-                    skill_mode == "full"
-                    and getattr(
-                        no_skill_policy,
-                        "fixed_full_skill_prior",
-                        False,
-                    )
-                ):
-                    pretrained_action = (
-                        outputs["actions"][0] * action_scale
-                    )
-                    residual = no_skill_policy(
-                        observation_features,
-                        common_skills,
-                        task_skills,
-                    )
-                    action_mean = pretrained_action + residual
-                else:
-                    action_mean, _, _ = online_action_mean(
-                        model,
-                        no_skill_policy,
-                        observation_features,
-                        common_skills,
-                        task_skills,
-                        skill_mode,
-                        action_scale,
-                        compute_skill_delta=False,
-                    )
-
-            for index, drone_id in enumerate(drone_ids):
-                action_space = env.action_space(drone_id)
-
-                action = (
-                    action_mean[index]
-                    .detach()
-                    .cpu()
-                    .numpy()
-                )
-
-                cached_actions[drone_id] = np.ascontiguousarray(
-                    np.clip(
-                        action,
-                        action_space.low,
-                        action_space.high,
-                    ),
-                    dtype=np.float32,
-                )
-
-        env.step(cached_actions.pop(agent_id))
-
-        cycle_completed = (
-            agent_id == last_agent_id
-            or bool(core_env.terminate)
-            or bool(core_env.truncate)
-        )
-
-        if cycle_completed:
-            cycle_count += 1
-            cached_actions.clear()
-
-    goal_found = any(
-        agent_found_goal(core_env, drone_id)
-        for drone_id in drone_ids
-    )
-
-    return {
-        "success": float(bool(core_env.mission_success)),
-        "goal_found": float(goal_found),
-        "fatal_crash": float(bool(core_env.collided)),
-        "drone_crash": float(bool(core_env.drone_crash)),
-        "observer_crash": 0.0,
-        "coverage": float(
-            core_env.current_coverage_ratio()
-        ),
-        "reward_coverage": float(
-            core_env.current_drone_reward_coverage_ratio()
-        ),
-        "cycles": float(cycle_count),
-        "episode_return": float(episode_return),
-    }
-
 def evaluate_policy(
     *,
     checkpoint_env_config: dict[str, Any],
     model,
-    no_skill_policy,
-    value_head,
+    no_skill_policy: OnlineNoSkillResidualPolicy,
+    value_head: OnlineValueHead,
     anchor_head: nn.Module,
     anchor_context_adapter: nn.Module | None,
     use_pretrained_value: bool,
@@ -3571,44 +1916,20 @@ def evaluate_policy(
     args: argparse.Namespace,
     device: torch.device,
     seed_base: int | None = None,
-    worker_pool=None,
 ) -> dict[str, float]:
-    """Evaluate deterministic policy on the fixed validation seeds.
-
-    When supported, environments execute in parallel CPU workers while
-    neural inference remains batched on the main-process GPU.
-    """
     config = build_env_config(
         checkpoint_env_config,
         args.difficulty,
         args.success_min_coverage_ratio,
     )
-
-    seed_base = (
-        args.seed
-        if seed_base is None
-        else seed_base
-    )
-
     metrics = []
-    success_count = 0.0
-    action_scale = drone_action_scale(config)
-
-    parallel_eval = (
-        bool(args.multiprocess_rollout)
-        and int(args.eval_envs) > 1
-        and int(args.eval_episodes) > 1
-        and not use_pretrained_value
-        and args.credit_assignment == "agent"
-    )
-
-    progress = (
+    seed_base = args.seed if seed_base is None else seed_base
+    evaluation_episodes = range(args.eval_episodes)
+    evaluation_progress = (
         tqdm(
+            evaluation_episodes,
             total=args.eval_episodes,
-            desc=(
-                f"eval {args.skill_mode} "
-                f"D{args.difficulty}"
-            ),
+            desc=f"eval {args.skill_mode} D{args.difficulty}",
             unit="episode",
             dynamic_ncols=True,
             leave=False,
@@ -3616,172 +1937,39 @@ def evaluate_policy(
             file=sys.stdout,
         )
         if tqdm is not None
-        else None
+        else evaluation_episodes
     )
-
-    try:
-        if parallel_eval:
-            eval_env_count = min(
-                int(args.eval_envs),
-                int(args.eval_episodes),
+    success_count = 0.0
+    env = HeMAC_v0.env(**config)
+    for episode_index in evaluation_progress:
+        _, result = rollout_episode(
+                env=env,
+                model=model,
+                no_skill_policy=no_skill_policy,
+                value_head=value_head,
+                anchor_head=anchor_head,
+                anchor_context_adapter=anchor_context_adapter,
+                use_pretrained_value=args.use_pretrained_value,
+                credit_assignment=args.credit_assignment,
+                log_std=log_std,
+                action_scale=drone_action_scale(config),
+                reward_scale=args.reward_scale,
+                shared_terminal_crash_penalty=args.shared_terminal_crash_penalty,
+                success_min_coverage_ratio=args.success_min_coverage_ratio,
+                seed=seed_base + args.difficulty * 1_000_000 + episode_index,
+                device=device,
+                stochastic=False,
+                skill_mode=args.skill_mode,
             )
-
-            # Periodic validation can reuse the already-running
-            # training worker pool. Baseline/eval-only evaluation
-            # creates a temporary pool and closes it afterward.
-            owned_worker_pool = None
-
-            if worker_pool is None:
-                owned_worker_pool = HeMACWorkerPool(
-                    num_workers=eval_env_count,
-                    config=config,
-                    action_scale=action_scale,
-                    reward_scale=args.reward_scale,
-                    shared_terminal_crash_penalty=(
-                        args.shared_terminal_crash_penalty
-                    ),
-                )
-                active_worker_pool = owned_worker_pool
-            else:
-                active_worker_pool = worker_pool
-
-            try:
-                for wave_start in range(
-                    0,
-                    args.eval_episodes,
-                    eval_env_count,
-                ):
-                    wave_size = min(
-                        eval_env_count,
-                        args.eval_episodes
-                        - wave_start,
-                    )
-
-                    # Exact same validation seed sequence as the
-                    # original sequential evaluation.
-                    seeds = [
-                        (
-                            seed_base
-                            + args.difficulty
-                            * 100_000
-                            + episode_index
-                        )
-                        for episode_index in range(
-                            wave_start,
-                            wave_start + wave_size,
-                        )
-                    ]
-
-                    _, wave_metrics = (
-                        rollout_episodes_multiprocess_eval_exact(
-                            worker_pool=active_worker_pool,
-                            seeds=seeds,
-                            model=model,
-                            no_skill_policy=no_skill_policy,
-                            value_head=value_head,
-                            anchor_head=anchor_head,
-                            anchor_context_adapter=(
-                                anchor_context_adapter
-                            ),
-                            use_pretrained_value=(
-                                use_pretrained_value
-                            ),
-                            credit_assignment=(
-                                args.credit_assignment
-                            ),
-                            log_std=log_std,
-                            action_scale=action_scale,
-                            reward_scale=args.reward_scale,
-                            shared_terminal_crash_penalty=(
-                                args.shared_terminal_crash_penalty
-                            ),
-                            success_min_coverage_ratio=(
-                                args.success_min_coverage_ratio
-                            ),
-                            device=device,
-                            stochastic=False,
-                            skill_mode=args.skill_mode,
-                        )
-                    )
-
-                    metrics.extend(
-                        wave_metrics
-                    )
-
-                    success_count += sum(
-                        result["success"]
-                        for result in wave_metrics
-                    )
-
-                    if progress is not None:
-                        progress.update(
-                            len(wave_metrics)
-                        )
-                        progress.set_postfix(
-                            success=(
-                                f"{success_count / len(metrics):.3f}"
-                            ),
-                            envs=wave_size,
-                            refresh=False,
-                        )
-
-            finally:
-                if owned_worker_pool is not None:
-                    owned_worker_pool.close()
-
-        else:
-            # Canonical evaluation semantics:
-            # each validation seed gets a fresh HeMAC environment.
-            for episode_index in range(
-                args.eval_episodes
-            ):
-                env = HeMAC_v0.env(**config)
-
-                try:
-                    result = rollout_episode_deterministic_eval(
-                        env=env,
-                        model=model,
-                        no_skill_policy=no_skill_policy,
-                        action_scale=drone_action_scale(config),
-                        seed=(
-                            seed_base
-                            + args.difficulty * 100_000
-                            + episode_index
-                        ),
-                        device=device,
-                        skill_mode=args.skill_mode,
-                    )
-
-                finally:
-                    env.close()
-
-                metrics.append(result)
-                success_count += result[
-                    "success"
-                ]
-
-                if progress is not None:
-                    progress.update(1)
-                    progress.set_postfix(
-                        success=(
-                            f"{success_count / len(metrics):.3f}"
-                        ),
-                        envs=1,
-                        refresh=False,
-                    )
-
-    finally:
-        if progress is not None:
-            progress.close()
-
-    if len(metrics) != args.eval_episodes:
-        raise RuntimeError(
-            f"Evaluation returned {len(metrics)} episodes; "
-            f"expected {args.eval_episodes}."
-        )
-
+        metrics.append(result)
+        success_count += result["success"]
+        if tqdm is not None:
+            evaluation_progress.set_postfix(
+                success=f"{success_count / (episode_index + 1):.3f}",
+                refresh=False,
+            )
+    env.close()
     return average_metrics(metrics)
-
 
 
 def save_checkpoint(
@@ -4069,10 +2257,6 @@ def main() -> None:
         f"critic={sum(p.numel() for p in value_head.parameters()):,}"
     )
 
-    model.eval()
-    no_skill_policy.eval()
-    value_head.eval()
-
     baseline = evaluate_policy(
         checkpoint_env_config=checkpoint_env_config,
         model=model,
@@ -4128,7 +2312,6 @@ def main() -> None:
             ),
             "train_batch_joint_steps": args.train_batch_joint_steps,
             "rollout_envs": args.rollout_envs,
-            "multiprocess_rollout": args.multiprocess_rollout,
             "deterministic": args.deterministic,
             "online_adaptation": {
                 "matched_bc_initial_policy": bool(
@@ -4235,27 +2418,6 @@ def main() -> None:
         for _ in range(args.rollout_envs)
     ]
     train_env = train_envs[0]
-
-    train_worker_pool = None
-
-    if (
-        args.multiprocess_rollout
-        and args.rollout_envs > 1
-    ):
-        train_worker_pool = HeMACWorkerPool(
-            num_workers=args.rollout_envs,
-            config=config,
-            action_scale=action_scale,
-            reward_scale=args.reward_scale,
-            shared_terminal_crash_penalty=(
-                args.shared_terminal_crash_penalty
-            ),
-        )
-        progress_log(
-            "Started "
-            f"{args.rollout_envs} HeMAC CPU rollout workers."
-        )
-
 
     while (
         joint_env_steps < args.joint_step_budget
@@ -4365,7 +2527,6 @@ def main() -> None:
                     device=device,
                     stochastic=True,
                     skill_mode=args.skill_mode,
-                    worker_pool=train_worker_pool,
                 )
 
                 for (
@@ -4602,7 +2763,6 @@ def main() -> None:
             args=args,
             device=device,
             seed_base=args.eval_seed_base,
-            worker_pool=train_worker_pool,
         )
         score = evaluation_score(evaluation)
         rollback_eligible = best_success_rate >= args.rollback_min_best_success
@@ -4701,9 +2861,6 @@ def main() -> None:
                 f"score_drop={best_score - score:.4f}, "
                 f"actor_lr={optimizer.param_groups[0]['lr']:.2e}"
             )
-
-    if train_worker_pool is not None:
-        train_worker_pool.close()
 
     for train_env_instance in train_envs:
         train_env_instance.close()

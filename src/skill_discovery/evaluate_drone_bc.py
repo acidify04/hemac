@@ -89,7 +89,7 @@ def parse_args() -> argparse.Namespace:
         default=20,
         help="Number of held-out seeds evaluated per difficulty and controller.",
     )
-    parser.add_argument("--base-seed", type=int, default=100_000)
+    parser.add_argument("--base-seed", type=int, default=100_000_000)
     parser.add_argument(
         "--task-definition",
         choices=("mission", "drone"),

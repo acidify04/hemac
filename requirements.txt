@@ -211,6 +211,7 @@ tf2-tools==0.25.13
 tinyscaler==1.2.8
 topic-monitor==0.20.5
 torch==2.10.0
+tqdm>=4.66,<5
 trajectory-msgs==4.9.0
 triton==3.6.0
 turtlesim==1.4.2

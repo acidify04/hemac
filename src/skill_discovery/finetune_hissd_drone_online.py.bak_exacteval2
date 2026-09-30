@@ -363,59 +363,6 @@ def parse_args() -> argparse.Namespace:
         deterministic=True,
     )
 
-    # Default protocol for HiSSD -> online PPO adaptation.
-    # CLI arguments can still override any of these values.
-    parser.set_defaults(
-        # Policy / evaluation
-        skill_mode="full",
-        credit_assignment="agent",
-        use_pretrained_value=False,
-        deterministic=True,
-        device="cuda",
-        seed=2026,
-        method_name="hissd_fixedfull_residual_ppo",
-
-        # Collection / budget
-        train_batch_joint_steps=4_000,
-        joint_step_budget=500_000,
-        eval_every_joint_steps=25_000,
-        eval_episodes=200,
-        eval_envs=1,
-        eval_seed_base=100_000_000,
-
-        # PPO
-        ppo_epochs=5,
-        minibatch_size=1024,
-        actor_lr=3e-4,
-        gamma=0.995,
-        clip_ratio=0.2,
-        target_kl=0.02,
-        entropy_coeff=0.01,
-
-        # HiSSD adaptation
-        base_head_lr=3e-5,
-        encoder_lr=1e-5,
-        base_unfreeze_after_joint_steps=4_000,
-        encoder_unfreeze_after_joint_steps=12_000,
-
-        # Full pretrained HiSSD skill + PPO residual
-        skill_prior_init=1.0,
-        skill_prior_max=1.0,
-        skill_gate_lr=3e-5,
-        skill_residual_lr=3e-5,
-
-        # Regularization
-        anchor_coeff=0.001,
-        skill_anchor_coeff=0.001,
-        context_warmup_iterations=0,
-        shared_terminal_crash_penalty=0.0,
-
-        # Validation rollback
-        rollback_score_drop=0.15,
-        rollback_min_best_success=0.6,
-        rollback_patience=2,
-    )
-
     return parser.parse_args()
 
 
@@ -3401,10 +3348,6 @@ def rollout_episode_deterministic_eval(
 ) -> dict[str, float]:
     """Deterministic evaluation without training-only critic/reward bookkeeping."""
 
-    # Match pure HiSSD evaluation semantics.
-    model.eval()
-    no_skill_policy.eval()
-
     env.reset(seed=seed)
     core_env = get_core_env(env)
 
@@ -3474,37 +3417,16 @@ def rollout_episode_deterministic_eval(
                 common_skills = outputs["common_skills"][0]
                 task_skills = outputs["task_skills"][0]
 
-                # For the exact full-prior path, use the action that
-                # inference_step already produced. This is exactly the same
-                # HiSSD action path used by evaluate_hissd_pure.py.
-                if (
-                    skill_mode == "full"
-                    and getattr(
-                        no_skill_policy,
-                        "fixed_full_skill_prior",
-                        False,
-                    )
-                ):
-                    pretrained_action = (
-                        outputs["actions"][0] * action_scale
-                    )
-                    residual = no_skill_policy(
-                        observation_features,
-                        common_skills,
-                        task_skills,
-                    )
-                    action_mean = pretrained_action + residual
-                else:
-                    action_mean, _, _ = online_action_mean(
-                        model,
-                        no_skill_policy,
-                        observation_features,
-                        common_skills,
-                        task_skills,
-                        skill_mode,
-                        action_scale,
-                        compute_skill_delta=False,
-                    )
+                action_mean, _, _ = online_action_mean(
+                    model,
+                    no_skill_policy,
+                    observation_features,
+                    common_skills,
+                    task_skills,
+                    skill_mode,
+                    action_scale,
+                    compute_skill_delta=False,
+                )
 
             for index, drone_id in enumerate(drone_ids):
                 action_space = env.action_space(drone_id)
@@ -4003,7 +3925,7 @@ def main() -> None:
         no_skill_policy.eval()
         value_head.eval()
         test_seed_base = (
-            args.eval_seed_base
+            args.eval_seed_base + args.difficulty * 100_000 + episode_index
             if args.eval_seed_base is not None
             else 200_000_000
         )

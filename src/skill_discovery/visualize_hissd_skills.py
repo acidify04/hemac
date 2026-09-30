@@ -62,6 +62,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--within-difficulty",
+        type=int,
+        help="Difficulty whose episode-level skill variation is shown in detail.",
+    )
+    parser.add_argument("--max-within-episodes", type=int, default=12)
+    parser.add_argument(
+        "--comparison-output",
+        type=Path,
+        help="Optional path for the within/across difficulty comparison figure.",
+    )
     parser.add_argument("--show", action="store_true")
     return parser.parse_args()
 
@@ -354,6 +365,267 @@ def pca_2d(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     variance = np.square(singular_values)
     explained = variance[:2] / max(float(variance.sum()), np.finfo(float).eps)
     return coordinates.astype(np.float32), explained.astype(np.float32)
+
+
+def fit_pca_2d(
+    values: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Fit a reusable two-dimensional PCA projection."""
+    values64 = values.astype(np.float64)
+    mean = values64.mean(axis=0, keepdims=True)
+    centered = values64 - mean
+    _, singular_values, right_vectors = np.linalg.svd(
+        centered, full_matrices=False
+    )
+    components = right_vectors[:2]
+    coordinates = centered @ components.T
+    variance = np.square(singular_values)
+    explained = variance[:2] / max(
+        float(variance.sum()), np.finfo(float).eps
+    )
+    return (
+        coordinates.astype(np.float32),
+        explained.astype(np.float32),
+        mean,
+        components,
+    )
+
+
+def episode_means(
+    values: np.ndarray,
+    difficulties: np.ndarray,
+    episode_groups: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Aggregate timestep/agent skills into one vector per episode."""
+    groups = np.unique(episode_groups)
+    means = []
+    labels = []
+    for group in groups:
+        selected = episode_groups == group
+        means.append(values[selected].mean(axis=0))
+        labels.append(int(difficulties[selected][0]))
+    return np.asarray(means), np.asarray(labels), groups
+
+
+def skill_comparison_statistics(
+    embeddings: dict[str, np.ndarray],
+    within_difficulty: int,
+) -> dict[str, Any]:
+    """Quantify episode variation within tasks and separation across tasks."""
+    difficulties = sorted(int(x) for x in np.unique(embeddings["difficulty"]))
+    results: dict[str, Any] = {
+        "within_difficulty": within_difficulty,
+        "difficulties": difficulties,
+        "representations": {},
+    }
+    labels = embeddings["difficulty"]
+    groups = embeddings["episode_group"]
+    for name in ("common", "task", "contrastive"):
+        values = embeddings[name]
+        centroids = np.asarray(
+            [values[labels == difficulty].mean(axis=0) for difficulty in difficulties]
+        )
+        distance_matrix = np.linalg.norm(
+            centroids[:, None] - centroids[None, :], axis=-1
+        )
+        per_difficulty = {}
+        all_within = []
+        for index, difficulty in enumerate(difficulties):
+            selected = labels == difficulty
+            distances = np.linalg.norm(
+                values[selected] - centroids[index], axis=1
+            )
+            all_within.extend(distances.tolist())
+            per_difficulty[str(difficulty)] = {
+                "points": int(selected.sum()),
+                "episodes": int(np.unique(groups[selected]).size),
+                "mean_distance_to_difficulty_centroid": float(distances.mean()),
+            }
+        selected = labels == within_difficulty
+        within_episode_means, _, _ = episode_means(
+            values[selected], labels[selected], groups[selected]
+        )
+        within_episode_centroid = within_episode_means.mean(axis=0)
+        episode_spread = np.linalg.norm(
+            within_episode_means - within_episode_centroid, axis=1
+        )
+        off_diagonal = distance_matrix[
+            ~np.eye(len(difficulties), dtype=bool)
+        ]
+        mean_within = float(np.mean(all_within))
+        mean_between = float(off_diagonal.mean()) if off_diagonal.size else 0.0
+        results["representations"][name] = {
+            "per_difficulty": per_difficulty,
+            "centroid_distance_matrix": distance_matrix.tolist(),
+            "mean_within_difficulty_distance": mean_within,
+            "mean_between_difficulty_centroid_distance": mean_between,
+            "between_within_ratio": mean_between / max(mean_within, 1e-8),
+            "within_selected_episode_centroid_spread": float(
+                episode_spread.mean()
+            ),
+        }
+    return results
+
+
+def plot_skill_comparisons(
+    embeddings: dict[str, np.ndarray],
+    output_path: Path,
+    *,
+    within_difficulty: int,
+    max_within_episodes: int,
+    show: bool,
+) -> None:
+    """Plot episode-level and cross-difficulty views of all skill branches."""
+    os.environ.setdefault("MPLCONFIGDIR", "/tmp/hemac_matplotlib")
+    Path(os.environ["MPLCONFIGDIR"]).mkdir(parents=True, exist_ok=True)
+    import matplotlib
+
+    if not show:
+        matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    labels = embeddings["difficulty"]
+    episode_groups = embeddings["episode_group"]
+    difficulties = sorted(int(x) for x in np.unique(labels))
+    if within_difficulty not in difficulties:
+        raise ValueError(
+            f"D{within_difficulty} is unavailable; found {difficulties}."
+        )
+    colors = plt.get_cmap("tab10")
+    representation_titles = {
+        "common": "Common skill c",
+        "task": "Task skill z",
+        "contrastive": "Contrastive embedding q",
+    }
+    figure, axes = plt.subplots(
+        3, 4, figsize=(24, 17), constrained_layout=True
+    )
+
+    for row, name in enumerate(("common", "task", "contrastive")):
+        values = embeddings[name]
+        global_coordinates, explained, mean, components = fit_pca_2d(values)
+        selected_within = labels == within_difficulty
+        within_coordinates, within_explained, _, _ = fit_pca_2d(
+            values[selected_within]
+        )
+        within_groups = episode_groups[selected_within]
+        unique_groups, counts = np.unique(within_groups, return_counts=True)
+        order = np.lexsort((unique_groups, -counts))
+        shown_groups = unique_groups[order[:max_within_episodes]]
+        episode_colors = plt.get_cmap("turbo")
+        for episode_index, group in enumerate(shown_groups):
+            selected = within_groups == group
+            color = episode_colors(
+                episode_index / max(len(shown_groups) - 1, 1)
+            )
+            axes[row, 0].scatter(
+                within_coordinates[selected, 0],
+                within_coordinates[selected, 1],
+                s=18,
+                alpha=0.58,
+                color=color,
+                edgecolors="none",
+                label=f"E{episode_index + 1}",
+            )
+            center = within_coordinates[selected].mean(axis=0)
+            axes[row, 0].scatter(
+                center[0], center[1], marker="x", s=55, color=color
+            )
+
+        for difficulty in difficulties:
+            selected = labels == difficulty
+            color = colors((difficulty - 1) % 10)
+            axes[row, 1].scatter(
+                global_coordinates[selected, 0],
+                global_coordinates[selected, 1],
+                s=9,
+                alpha=0.23,
+                color=color,
+                edgecolors="none",
+                label=f"D{difficulty}",
+            )
+            center = global_coordinates[selected].mean(axis=0)
+            axes[row, 1].text(
+                center[0], center[1], f"D{difficulty}",
+                ha="center", va="center", fontweight="bold",
+            )
+
+        episode_values, episode_difficulties, _ = episode_means(
+            values, labels, episode_groups
+        )
+        episode_coordinates = (
+            episode_values.astype(np.float64) - mean
+        ) @ components.T
+        for difficulty in difficulties:
+            selected = episode_difficulties == difficulty
+            axes[row, 2].scatter(
+                episode_coordinates[selected, 0],
+                episode_coordinates[selected, 1],
+                s=30,
+                alpha=0.62,
+                color=colors((difficulty - 1) % 10),
+                edgecolors="none",
+                label=f"D{difficulty}",
+            )
+
+        centroids = np.asarray(
+            [values[labels == difficulty].mean(axis=0) for difficulty in difficulties]
+        )
+        distances = np.linalg.norm(
+            centroids[:, None] - centroids[None, :], axis=-1
+        )
+        image = axes[row, 3].imshow(distances, cmap="magma", vmin=0)
+        axes[row, 3].set_xticks(
+            range(len(difficulties)), [f"D{x}" for x in difficulties]
+        )
+        axes[row, 3].set_yticks(
+            range(len(difficulties)), [f"D{x}" for x in difficulties]
+        )
+        if len(difficulties) <= 8:
+            for y in range(len(difficulties)):
+                for x in range(len(difficulties)):
+                    axes[row, 3].text(
+                        x, y, f"{distances[y, x]:.2f}",
+                        ha="center", va="center", fontsize=8,
+                        color="white" if distances[y, x] > distances.max() * 0.5 else "black",
+                    )
+        figure.colorbar(image, ax=axes[row, 3], fraction=0.046)
+
+        axes[row, 0].set_title(
+            f"{representation_titles[name]}: within D{within_difficulty} by episode"
+        )
+        axes[row, 1].set_title(
+            f"{representation_titles[name]}: samples across difficulties"
+        )
+        axes[row, 2].set_title(
+            f"{representation_titles[name]}: episode means"
+        )
+        axes[row, 3].set_title("Difficulty centroid distance")
+        axes[row, 0].set_xlabel(
+            f"within PC1 ({within_explained[0] * 100:.1f}%)"
+        )
+        axes[row, 0].set_ylabel(
+            f"within PC2 ({within_explained[1] * 100:.1f}%)"
+        )
+        for column in (1, 2):
+            axes[row, column].set_xlabel(f"PC1 ({explained[0] * 100:.1f}%)")
+            axes[row, column].set_ylabel(f"PC2 ({explained[1] * 100:.1f}%)")
+        for column in range(3):
+            axes[row, column].grid(alpha=0.16)
+        axes[row, 0].legend(fontsize=7, ncol=3)
+        axes[row, 1].legend(fontsize=8, ncol=2)
+        axes[row, 2].legend(fontsize=8, ncol=2)
+
+    figure.suptitle(
+        f"HiSSD skill comparison: within D{within_difficulty} and across tasks",
+        fontsize=17,
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    figure.savefig(output_path, dpi=180, bbox_inches="tight")
+    print(f"Saved within/across skill comparison: {output_path}")
+    if show:
+        plt.show()
+    plt.close(figure)
 
 
 def grouped_linear_probe(
@@ -660,6 +932,8 @@ def main() -> None:
         raise ValueError("--max-points-per-difficulty must be positive.")
     if args.max_points_per_episode <= 0:
         raise ValueError("--max-points-per-episode must be positive.")
+    if args.max_within_episodes <= 0:
+        raise ValueError("--max-within-episodes must be positive.")
     device = resolve_device(args.device)
     model, payload = load_hissd_model(args.checkpoint, device)
     (
@@ -686,6 +960,44 @@ def main() -> None:
     }
     output_path = args.output.expanduser().resolve()
     plot_embeddings(embeddings, output_path, show=args.show)
+    available_difficulties = sorted(
+        int(value) for value in np.unique(embeddings["difficulty"])
+    )
+    within_difficulty = (
+        available_difficulties[0]
+        if args.within_difficulty is None
+        else args.within_difficulty
+    )
+    if within_difficulty not in available_difficulties:
+        raise ValueError(
+            f"--within-difficulty={within_difficulty} is unavailable; "
+            f"loaded difficulties are {available_difficulties}."
+        )
+    comparison_output = (
+        args.comparison_output.expanduser().resolve()
+        if args.comparison_output is not None
+        else output_path.with_name(
+            f"{output_path.stem}_within_d{within_difficulty}_comparison.png"
+        )
+    )
+    comparison_statistics = skill_comparison_statistics(
+        embeddings, within_difficulty
+    )
+    plot_skill_comparisons(
+        embeddings,
+        comparison_output,
+        within_difficulty=within_difficulty,
+        max_within_episodes=args.max_within_episodes,
+        show=args.show,
+    )
+    comparison_metrics_path = comparison_output.with_name(
+        f"{comparison_output.stem}_metrics.json"
+    )
+    comparison_metrics_path.write_text(
+        json.dumps(comparison_statistics, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    print(f"Saved skill comparison metrics: {comparison_metrics_path}")
     array_path = output_path.with_suffix(".npz")
     np.savez_compressed(array_path, **embeddings)
     print(f"Saved projected skill arrays: {array_path}")

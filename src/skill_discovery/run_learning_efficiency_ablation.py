@@ -10,6 +10,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    from tqdm.auto import tqdm
+except ImportError:
+    tqdm = None
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FINETUNE_SCRIPT = PROJECT_ROOT / "src/skill_discovery/finetune_hissd_online.py"
@@ -186,13 +191,24 @@ def analyze_command(args: argparse.Namespace, curves: list[Path]) -> list[str]:
     return command
 
 
-def execute(command: list[str], dry_run: bool) -> None:
-    print(f"$ {shlex.join(command)}", flush=True)
+def execute(command: list[str], dry_run: bool, *, label: str, progress=None) -> None:
+    message = f"[{label}] $ {shlex.join(command)}"
+    progress.write(message) if progress is not None else print(message, flush=True)
     if dry_run:
+        if progress is not None:
+            progress.update(1)
         return
     environment = os.environ.copy()
     environment.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+    environment.setdefault("PYTHONUNBUFFERED", "1")
+    environment.setdefault("LOGLEVEL", "WARNING")
+    if progress is not None:
+        progress.clear()
     subprocess.run(command, cwd=PROJECT_ROOT, env=environment, check=True)
+    if progress is not None:
+        progress.update(1)
+        progress.set_postfix(job=label, refresh=False)
+        progress.refresh()
 
 
 def main() -> None:
@@ -207,33 +223,71 @@ def main() -> None:
         for difficulty in args.difficulties
         for seed in args.seeds
     ]
-    if "online" in args.stages:
-        for ablation in args.ablations:
-            for difficulty in args.difficulties:
-                for seed in args.seeds:
-                    checkpoint = source_checkpoint(args, ablation, seed)
-                    if not checkpoint.is_file():
-                        raise FileNotFoundError(f"Source checkpoint not found: {checkpoint}")
-                    output = curve_path(args, ablation, difficulty, seed)
-                    if not args.force and curve_is_complete(
-                        output, args.iterations_per_stage
-                    ):
-                        print(f"SKIP complete curve: {output}")
-                        continue
-                    execute(
-                        finetune_command(args, ablation, difficulty, seed),
-                        args.dry_run,
-                    )
+    online_job_count = (
+        len(args.ablations) * len(args.difficulties) * len(args.seeds)
+        if "online" in args.stages
+        else 0
+    )
+    total_jobs = online_job_count + int("analyze" in args.stages)
+    overall_progress = (
+        tqdm(
+            total=total_jobs,
+            desc="learning-efficiency",
+            unit="job",
+            dynamic_ncols=True,
+            position=1,
+        )
+        if tqdm is not None
+        else None
+    )
+    try:
+        if "online" in args.stages:
+            for ablation in args.ablations:
+                for difficulty in args.difficulties:
+                    for seed in args.seeds:
+                        label = f"{ablation}/D{difficulty}/seed{seed}"
+                        if overall_progress is not None:
+                            overall_progress.set_postfix(job=label, refresh=True)
+                        checkpoint = source_checkpoint(args, ablation, seed)
+                        if not checkpoint.is_file():
+                            raise FileNotFoundError(
+                                f"Source checkpoint not found: {checkpoint}"
+                            )
+                        output = curve_path(args, ablation, difficulty, seed)
+                        if not args.force and curve_is_complete(
+                            output, args.iterations_per_stage
+                        ):
+                            message = f"SKIP complete curve: {output}"
+                            if overall_progress is not None:
+                                overall_progress.write(message)
+                                overall_progress.update(1)
+                            else:
+                                print(message)
+                            continue
+                        execute(
+                            finetune_command(args, ablation, difficulty, seed),
+                            args.dry_run,
+                            label=label,
+                            progress=overall_progress,
+                        )
 
-    if "analyze" in args.stages:
-        if not args.dry_run:
-            missing = [path for path in curves if not path.is_file()]
-            if missing:
-                raise FileNotFoundError(
-                    f"Cannot analyze before {len(missing)} curves are generated; "
-                    f"first missing path: {missing[0]}"
-                )
-        execute(analyze_command(args, curves), args.dry_run)
+        if "analyze" in args.stages:
+            if not args.dry_run:
+                missing = [path for path in curves if not path.is_file()]
+                if missing:
+                    raise FileNotFoundError(
+                        f"Cannot analyze before {len(missing)} curves are generated; "
+                        f"first missing path: {missing[0]}"
+                    )
+            execute(
+                analyze_command(args, curves),
+                args.dry_run,
+                label="analyze",
+                progress=overall_progress,
+            )
+    finally:
+        if overall_progress is not None:
+            overall_progress.close()
 
 
 if __name__ == "__main__":

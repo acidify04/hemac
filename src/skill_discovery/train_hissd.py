@@ -8,6 +8,7 @@ then an advantage-weighted high-level forward-prediction planner update.
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import math
 import random
@@ -20,6 +21,11 @@ from typing import Any
 import numpy as np
 import torch
 from torch import nn
+
+try:
+    from tqdm.auto import tqdm
+except ImportError:
+    tqdm = None
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -224,6 +230,11 @@ def parse_args() -> argparse.Namespace:
         help="Stop after this many epochs without task-validation improvement; 0 disables.",
     )
     parser.add_argument("--no-tensorboard", action="store_true")
+    parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Disable tqdm epoch/train/validation progress bars.",
+    )
     args = parser.parse_args()
     configure_ablation(args)
     return args
@@ -1039,6 +1050,35 @@ def average_metrics(
     return {name: value / batch_count for name, value in accumulator.items()}
 
 
+def progress_write(message: str) -> None:
+    """Print without corrupting active tqdm progress bars."""
+    if tqdm is not None:
+        tqdm.write(message)
+    else:
+        print(message, flush=True)
+
+
+def progress_batches(loader, maximum: int | None, *, description: str, enabled: bool):
+    """Iterate over at most ``maximum`` batches with an accurate progress total."""
+    total = len(loader)
+    if maximum is not None:
+        total = min(total, maximum)
+    batches = enumerate(loader)
+    if maximum is not None:
+        batches = itertools.islice(batches, maximum)
+    if tqdm is None or not enabled:
+        return batches
+    return tqdm(
+        batches,
+        total=total,
+        desc=description,
+        unit="batch",
+        dynamic_ncols=True,
+        leave=False,
+        position=1,
+    )
+
+
 def run_train_epoch(
     model: HeMACHISSD,
     loader,
@@ -1047,14 +1087,21 @@ def run_train_epoch(
     args: argparse.Namespace,
     *,
     task_only: bool = False,
+    epoch: int | None = None,
+    show_progress: bool = False,
 ) -> dict[str, float]:
     """Warm up task context or run all HiSSD updates in official order."""
     model.train()
     accumulator: dict[str, float] = defaultdict(float)
     batch_count = 0
-    for batch_index, raw_batch in enumerate(loader):
-        if args.max_train_batches is not None and batch_index >= args.max_train_batches:
-            break
+    phase = "warmup" if task_only else "joint"
+    batches = progress_batches(
+        loader,
+        args.max_train_batches,
+        description=f"epoch {epoch or '?'} train ({phase})",
+        enabled=show_progress,
+    )
+    for batch_index, raw_batch in batches:
         batch = prepare_batch(raw_batch, device)
 
         controller_loss, controller_metrics = controller_objective(
@@ -1099,6 +1146,14 @@ def run_train_epoch(
         accumulate_metrics(accumulator, value_metrics)
         accumulate_metrics(accumulator, planner_metrics)
         batch_count += 1
+        if tqdm is not None and hasattr(batches, "set_postfix"):
+            if batch_count == 1 or batch_count % 10 == 0:
+                batches.set_postfix(
+                    action=f"{controller_metrics['action_mse']:.4f}",
+                    value=f"{value_metrics['value_loss']:.4f}",
+                    planner=f"{planner_metrics['planner_loss']:.4f}",
+                    refresh=False,
+                )
     return average_metrics(accumulator, batch_count)
 
 
@@ -1108,6 +1163,9 @@ def run_validation(
     loader,
     device: torch.device,
     args: argparse.Namespace,
+    *,
+    epoch: int | None = None,
+    show_progress: bool = False,
 ) -> dict[str, float]:
     """Evaluate all three objectives without updating source models."""
     model.eval()
@@ -1122,9 +1180,13 @@ def run_validation(
         sampler_generator.manual_seed(args.seed + 10_000)
     accumulator: dict[str, float] = defaultdict(float)
     batch_count = 0
-    for batch_index, raw_batch in enumerate(loader):
-        if args.max_val_batches is not None and batch_index >= args.max_val_batches:
-            break
+    batches = progress_batches(
+        loader,
+        args.max_val_batches,
+        description=f"epoch {epoch or '?'} validation",
+        enabled=show_progress,
+    )
+    for batch_index, raw_batch in batches:
         batch = prepare_batch(raw_batch, device)
         _, controller_metrics = controller_objective(model, batch, args)
         _, value_metrics = value_objective(model, batch, args)
@@ -1133,6 +1195,13 @@ def run_validation(
         accumulate_metrics(accumulator, value_metrics)
         accumulate_metrics(accumulator, planner_metrics)
         batch_count += 1
+        if tqdm is not None and hasattr(batches, "set_postfix"):
+            if batch_count == 1 or batch_count % 10 == 0:
+                batches.set_postfix(
+                    action=f"{controller_metrics['action_mse']:.4f}",
+                    value=f"{value_metrics['value_loss']:.4f}",
+                    refresh=False,
+                )
     return average_metrics(accumulator, batch_count)
 
 
@@ -1186,8 +1255,8 @@ def build_model(
         hidden_dim=args.hidden_dim,
         skill_dim=args.skill_dim,
         transformer_heads=args.transformer_heads,
-        contrastive_from_action_skill=True,
-        task_context_pooling=True,
+        contrastive_from_action_skill=False,
+        task_context_pooling=False,
         task_descriptor_dim=(
             int(sample["task_descriptor"].numel())
             if args.descriptor_enabled
@@ -1604,8 +1673,20 @@ def main() -> None:
             epochs_without_task_improvement = max(
                 0, resume_epoch - best_task_validation_epoch
             )
+    show_progress = tqdm is not None and not args.no_progress
+    epoch_progress = range(resume_epoch + 1, args.epochs + 1)
+    if show_progress:
+        epoch_progress = tqdm(
+            epoch_progress,
+            total=args.epochs,
+            initial=resume_epoch,
+            desc="HiSSD training",
+            unit="epoch",
+            dynamic_ncols=True,
+            position=0,
+        )
     try:
-        for epoch in range(resume_epoch + 1, args.epochs + 1):
+        for epoch in epoch_progress:
             task_only = task_auxiliary_enabled and epoch <= args.task_warmup_epochs
             train_metrics = run_train_epoch(
                 model,
@@ -1614,8 +1695,17 @@ def main() -> None:
                 device,
                 args,
                 task_only=task_only,
+                epoch=epoch,
+                show_progress=show_progress,
             )
-            validation_metrics = run_validation(model, val_loader, device, args)
+            validation_metrics = run_validation(
+                model,
+                val_loader,
+                device,
+                args,
+                epoch=epoch,
+                show_progress=show_progress,
+            )
             validation_loss, task_validation_loss = validation_losses(
                 validation_metrics, args
             )
@@ -1624,7 +1714,7 @@ def main() -> None:
                 if task_auxiliary_enabled
                 else validation_loss
             )
-            print(
+            progress_write(
                 f"epoch={epoch:03d} "
                 f"phase={'task_warmup' if task_only else 'joint'} "
                 f"action={train_metrics['action_mse']:.5f}/"
@@ -1677,6 +1767,13 @@ def main() -> None:
                 f"c_std={validation_metrics['common_skill_std']:.4f} "
                 f"z_std={validation_metrics['task_skill_std']:.4f}"
             )
+            if show_progress and hasattr(epoch_progress, "set_postfix"):
+                epoch_progress.set_postfix(
+                    phase="warmup" if task_only else "joint",
+                    action=f"{validation_metrics['action_mse']:.4f}",
+                    task=f"{task_validation_loss:.4f}",
+                    refresh=False,
+                )
             if writer is not None:
                 for name, value in train_metrics.items():
                     writer.add_scalar(f"train/{name}", value, epoch)
@@ -1735,20 +1832,22 @@ def main() -> None:
                 and epochs_without_task_improvement
                 >= args.early_stopping_patience
             ):
-                print(
+                progress_write(
                     f"Early stopping: {selection_metric_name} did not improve for "
                     f"{args.early_stopping_patience} epochs."
                 )
                 break
     finally:
+        if show_progress and hasattr(epoch_progress, "close"):
+            epoch_progress.close()
         if writer is not None:
             writer.close()
-    print(
+    progress_write(
         f"Best combined validation loss: {best_validation_loss:.6f} "
         f"at epoch {best_validation_epoch} "
         f"({args.output_dir / 'hissd_best.pt'})"
     )
-    print(
+    progress_write(
         f"Best {selection_metric_name}: {best_task_validation_loss:.6f} "
         f"at epoch {best_task_validation_epoch} "
         f"({args.output_dir / 'hissd_best_task.pt'})"

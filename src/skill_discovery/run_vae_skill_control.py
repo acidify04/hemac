@@ -11,8 +11,10 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import json
+import math
 import os
 import shlex
+import statistics
 import subprocess
 import sys
 from pathlib import Path
@@ -38,6 +40,11 @@ DEFAULT_OUTPUT_ROOT = (
     PROJECT_ROOT
     / "src/skill_discovery/outputs/learning_efficiency/drone_d12_t34/"
     "vae_chunked_skill_control"
+)
+DEFAULT_QUICK_OUTPUT_ROOT = (
+    PROJECT_ROOT
+    / "src/skill_discovery/outputs/learning_efficiency/drone_d12_t34/"
+    "vae_skill_support_quick_check"
 )
 MODES = ("full", "no_skill")
 
@@ -88,7 +95,10 @@ def parse_args() -> argparse.Namespace:
         choices=("skill_support", "joint_finetune"),
         default="skill_support",
     )
-    parser.add_argument("--online-residual-scale", type=float, default=0.25)
+    parser.add_argument("--online-residual-scale", type=float, default=1.0)
+    parser.add_argument(
+        "--reward-mode", choices=("team", "individual"), default="team"
+    )
     parser.add_argument(
         "--shared-terminal-crash-penalty", type=float, default=300.0
     )
@@ -104,9 +114,45 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--quick-check",
+        action="store_true",
+        help=(
+            "Run a one-seed, hardest-difficulty 50k-step paired pilot and "
+            "write PPO health diagnostics before the full experiment."
+        ),
+    )
     args = parser.parse_args()
+    configure_quick_check(args)
     validate_args(args)
     return args
+
+
+def configure_quick_check(args: argparse.Namespace) -> None:
+    """Apply a short pilot with the proven RLlib baseline update density."""
+    if not args.quick_check:
+        return
+    args.stages = ("online", "analyze")
+    args.modes = MODES
+    args.seeds = (args.seeds[0],)
+    args.difficulties = (max(args.difficulties),)
+    args.joint_step_budget = 50_000
+    args.eval_every_joint_steps = 10_000
+    # The old 5k/3-epoch pilot made only about 150 minibatch updates in 50k
+    # steps.  Match the RLlib MAPPO baseline (1.2k/8/256) so a flat pilot is
+    # evidence about the actor/credit path rather than simple under-updating.
+    args.train_batch_joint_steps = 1_200
+    args.ppo_epochs = 8
+    args.minibatch_size = 256
+    args.entropy_coeff = 0.002
+    args.eval_episodes = 50
+    args.test_seed_base = None
+    args.test_episodes = 0
+    args.eval_seed_base = (
+        100_000_000 if args.eval_seed_base is None else args.eval_seed_base
+    )
+    if args.output_root == DEFAULT_OUTPUT_ROOT:
+        args.output_root = DEFAULT_QUICK_OUTPUT_ROOT
 
 
 def validate_args(args: argparse.Namespace) -> None:
@@ -255,6 +301,8 @@ def online_command(
         args.ppo_actor_mode,
         "--online-residual-scale",
         str(args.online_residual_scale),
+        "--reward-mode",
+        args.reward_mode,
         "--difficulty",
         str(difficulty),
         "--iterations",
@@ -344,6 +392,98 @@ def plot_command(args: argparse.Namespace, curves: list[Path]) -> list[str]:
         "--output",
         str(args.output_root / "success_reward_curves.png"),
     ]
+
+
+def write_quick_check_report(args: argparse.Namespace, curves: list[Path]) -> Path:
+    """Summarize whether the short run is mechanically healthy and promising."""
+    comparison_path = args.output_root / "comparison.json"
+    comparison = json.loads(comparison_path.read_text(encoding="utf-8"))
+    runs = []
+    for curve in curves:
+        payload = json.loads(curve.read_text(encoding="utf-8"))
+        points = payload.get("points", [])
+        if not points:
+            continue
+        ppo_points = [point for point in points if "ppo_approx_kl" in point]
+        approx_kl = [float(point["ppo_approx_kl"]) for point in ppo_points]
+        clip_fraction = [
+            float(point["ppo_clip_fraction"]) for point in ppo_points
+        ]
+        finite = all(
+            math.isfinite(value) for value in (*approx_kl, *clip_fraction)
+        )
+        mean_kl = statistics.fmean(approx_kl) if approx_kl else 0.0
+        mean_clip = statistics.fmean(clip_fraction) if clip_fraction else 0.0
+        mechanically_healthy = bool(
+            ppo_points
+            and finite
+            and 1e-4 <= mean_kl <= 0.05
+            and 0.005 <= mean_clip <= 0.40
+        )
+        first = points[0]
+        last = points[-1]
+        runs.append(
+            {
+                "method": first["method"],
+                "difficulty": int(first["difficulty"]),
+                "seed": int(first["seed"]),
+                "evaluation_points": len(points),
+                "initial_success_rate": float(first["success_rate"]),
+                "final_success_rate": float(last["success_rate"]),
+                "final_success_gain": float(last["success_rate"])
+                - float(first["success_rate"]),
+                "mean_ppo_approx_kl": mean_kl,
+                "mean_ppo_clip_fraction": mean_clip,
+                "mechanically_healthy": mechanically_healthy,
+            }
+        )
+
+    per_run = {
+        (row["method"], int(row["difficulty"]), int(row["seed"])): row
+        for row in comparison.get("per_run", [])
+    }
+    paired = []
+    for difficulty in args.difficulties:
+        for seed in args.seeds:
+            skill = per_run.get(("vae_skill_supported_ppo", difficulty, seed))
+            control = per_run.get(("vae_no_skill_ppo_control", difficulty, seed))
+            if skill is None or control is None:
+                continue
+            paired.append(
+                {
+                    "difficulty": difficulty,
+                    "seed": seed,
+                    "skill_success_gain_auc": skill["success_gain_auc"],
+                    "no_skill_success_gain_auc": control["success_gain_auc"],
+                    "skill_minus_no_skill_gain_auc": (
+                        skill["success_gain_auc"]
+                        - control["success_gain_auc"]
+                    ),
+                }
+            )
+    report = {
+        "purpose": "mechanical pilot, not a statistical significance test",
+        "joint_step_budget": args.joint_step_budget,
+        "runs": runs,
+        "paired_gain_auc": paired,
+        "all_runs_mechanically_healthy": bool(runs)
+        and all(run["mechanically_healthy"] for run in runs),
+        "skill_direction_promising": bool(paired)
+        and all(row["skill_minus_no_skill_gain_auc"] > 0.0 for row in paired),
+        "next_step": (
+            "run the full multi-seed experiment"
+            if runs
+            and all(run["mechanically_healthy"] for run in runs)
+            and paired
+            and all(row["skill_minus_no_skill_gain_auc"] > 0.0 for row in paired)
+            else "inspect the pilot before spending the full budget"
+        ),
+    }
+    output = args.output_root / "quick_check_report.json"
+    output.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    print("QUICK CHECK", json.dumps(report, indent=2), flush=True)
+    print(f"Saved quick-check report: {output}", flush=True)
+    return output
 
 
 def run_command(
@@ -493,6 +633,8 @@ def main() -> None:
             cpu_threads=args.torch_cpu_threads,
             log_dir=args.output_root / "logs",
         )
+        if args.quick_check and not args.dry_run:
+            write_quick_check_report(args, curves)
 
 
 if __name__ == "__main__":

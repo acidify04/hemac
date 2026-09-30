@@ -111,29 +111,29 @@ class HeMAC:
 
         """Overwrite constructor."""
         super().__init__()
-        # LOGGER.info(f"""
-        #     HeMAC Configuration:
-        #     ---------------
-        #     Time factor (seconds): {time_factor}
-        #     Max Cycles: {max_cycles}
-        #     Render Mode: {render_mode}
-        #     Observer Speed: {observer_speed}
-        #     Number of Observers: {n_observers}
-        #     Drone config: {drone_config}
-        #     Number of Drones: {n_drones}
-        #     Numover of Provisioners: {n_provisioners}
-        #     Min Obstacles: {min_obstacles}
-        #     Max Obstacles: {max_obstacles}
-        #     Static Obstacles: {n_static_obstacles}
-        #     Known Goals: {known_goals}
-        #     Geofence config: {geofence_config}
-        #     Patrol config: {patrol_config}
-        #     POI config: {poi_config}
-        #     Drone-only success min coverage ratio: {drone_only_success_min_coverage_ratio}
-        #     Drone-only success reward: {drone_only_success_reward}
-        #     Obstacle speed range: ({obstacle_min_speed}, {obstacle_max_speed})
-        #     Goal distance from base: ({goal_min_base_distance}, {goal_max_base_distance})
-        #     """)
+        LOGGER.info(f"""
+            HeMAC Configuration:
+            ---------------
+            Time factor (seconds): {time_factor}
+            Max Cycles: {max_cycles}
+            Render Mode: {render_mode}
+            Observer Speed: {observer_speed}
+            Number of Observers: {n_observers}
+            Drone config: {drone_config}
+            Number of Drones: {n_drones}
+            Numover of Provisioners: {n_provisioners}
+            Min Obstacles: {min_obstacles}
+            Max Obstacles: {max_obstacles}
+            Static Obstacles: {n_static_obstacles}
+            Known Goals: {known_goals}
+            Geofence config: {geofence_config}
+            Patrol config: {patrol_config}
+            POI config: {poi_config}
+            Drone-only success min coverage ratio: {drone_only_success_min_coverage_ratio}
+            Drone-only success reward: {drone_only_success_reward}
+            Obstacle speed range: ({obstacle_min_speed}, {obstacle_max_speed})
+            Goal distance from base: ({goal_min_base_distance}, {goal_max_base_distance})
+            """)
 
         pygame.init()
         self.randomizer = randomizer
@@ -346,8 +346,8 @@ class HeMAC:
         self.action_spaces = dict(zip(self.agents, [agent.action_space for agent in self.agents_list]))
         self.observation_spaces = dict(zip(self.agents, [agent.observation_space for agent in self.agents_list]))
 
-        # LOGGER.info(f"action spaces: {self.action_spaces}")
-        # LOGGER.info(f"observation spaces: {self.observation_spaces}")
+        LOGGER.info(f"action spaces: {self.action_spaces}")
+        LOGGER.info(f"observation spaces: {self.observation_spaces}")
 
         # define the global space of the environment or state
         self.state_space = gymnasium.spaces.MultiBinary(2)
@@ -1015,8 +1015,8 @@ class HeMAC:
                 self.terminate = True
                 reward -= 300
                 reward_dict[active_agent].append(-300)
-                # if self.render_mode == "human" or self.render_mode == "rgb_array":
-                    # LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
+                if self.render_mode == "human" or self.render_mode == "rgb_array":
+                    LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
             elif self._agent_path_intersects_warning_zone(
                 previous_agent_position,
                 (agent.x, agent.y),
@@ -1024,8 +1024,8 @@ class HeMAC:
                 self._mark_agent_crash(agent)
                 reward -= 300
                 reward_dict[active_agent].append(-300)
-                # if self.render_mode == "human" or self.render_mode == "rgb_array":
-                    # LOGGER.info(f"drone crossed a warning zone. pos: {(agent.x, agent.y)}")
+                if self.render_mode == "human" or self.render_mode == "rgb_array":
+                    LOGGER.info(f"drone crossed a warning zone. pos: {(agent.x, agent.y)}")
 
             if not self.terminate:
                 safe_radius = 75.0
@@ -1073,8 +1073,8 @@ class HeMAC:
                 self.terminate = True
                 reward -= 300  # going outside of search area
                 reward_dict[active_agent].append(-300)
-                # if self.render_mode == "human" or self.render_mode == "rgb_array":
-                    # LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
+                if self.render_mode == "human" or self.render_mode == "rgb_array":
+                    LOGGER.info(f"drone went out of search area. pos: {(agent.x, agent.y)}")
             elif self._agent_path_intersects_warning_zone(
                 previous_agent_position,
                 (agent.x, agent.y),
@@ -1082,8 +1082,8 @@ class HeMAC:
                 self._mark_agent_crash(agent)
                 reward -= 300
                 reward_dict[active_agent].append(-300)
-                # if self.render_mode == "human" or self.render_mode == "rgb_array":
-                    # LOGGER.info(f"observer crossed a warning zone. pos: {(agent.x, agent.y)}")
+                if self.render_mode == "human" or self.render_mode == "rgb_array":
+                    LOGGER.info(f"observer crossed a warning zone. pos: {(agent.x, agent.y)}")
 
             if not self.terminate:
                 closest_goal = None
@@ -1142,13 +1142,13 @@ class HeMAC:
                 self.num_frames += 1
                 self.truncate = self.num_frames >= self.max_cycles
 
-        # if self.log_step_rewards:
-            # LOGGER.info(f"reward for {active_agent} at step {self.num_frames}: {reward_dict[active_agent]}")
+        if self.log_step_rewards:
+            LOGGER.info(f"reward for {active_agent} at step {self.num_frames}: {reward_dict[active_agent]}")
         self.finalize_episode()
 
         if agent == self.agents_list[-1]:
             if self.collided and self.render_mode == "human":
-                # LOGGER.info(f"BOOM! episode length: {self.num_frames + 1}")
+                LOGGER.info(f"BOOM! episode length: {self.num_frames + 1}")
                 self.render()
                 time.sleep(2)
             if self.render_mode is not None:
