@@ -514,12 +514,18 @@ class HeMAC:
                 agent.reset()
                 
                 # Spread observers across the base so each sprite remains visible.
-                observer_spacing = self.observer_size * 1.6
-                centered_index = observer_index - (observer_count - 1) / 2.0
-                spawn_x = (
-                    self.world.base.centerx
-                    + centered_index * observer_spacing
+                margin = min(
+                    self.observer_size / 2.0,
+                    self.world.base.width / 2.0,
                 )
+                if observer_count == 1:
+                    spawn_x = self.world.base.centerx
+                else:
+                    spawn_x = np.linspace(
+                        self.world.base.left + margin,
+                        self.world.base.right - margin,
+                        observer_count,
+                    )[observer_index]
                 spawn_y = self.world.base.centery
                 agent.x, agent.y = game_ref_to_world_ref(
                     (spawn_x, spawn_y), self.area

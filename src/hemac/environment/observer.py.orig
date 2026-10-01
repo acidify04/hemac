@@ -207,30 +207,30 @@ class Observer(BaseAgent):
         drone_positions = [
             (agent.x, agent.y)
             for agent in agents
-            if agent.__class__.__name__ == "Drone"
-        ]
         other_observer_positions = [
             (agent.x, agent.y)
             for agent in agents
             if agent.__class__.__name__ == "Observer" and agent is not self
         ]
+            if agent.__class__.__name__ == "Drone"
+        ]
         goal_positions = [(goal.x, goal.y) for goal in goals]
 
         padded_channels = [
             world.padded_coverage_map,
+            self.build_padded_entity_channel(world, other_observer_positions),
             world.padded_search_mask,
             world.padded_explored_obstacle_map,
             world.padded_explored_warning_range_map,
             self.build_padded_entity_channel(world, drone_positions),
-            self.build_padded_entity_channel(world, other_observer_positions),
             self.build_padded_entity_channel(world, goal_positions),
         ]
         global_map = self.build_global_map_view(world, padded_channels)
+                other_observer_positions,
         local_map = self.build_local_map_view(
             world,
             entity_position_groups=[
                 drone_positions,
-                other_observer_positions,
                 goal_positions,
             ],
             sensing_range=self.sensing_range,

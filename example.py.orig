@@ -201,7 +201,7 @@ def adapt_observation_for_policy(observation, policy):
         ):
             observation[map_key] = np.concatenate(
                 (current_map[:, :, :5], current_map[:, :, 6:]), axis=-1
-            )
+        )
     adapted = {
         key: np.asarray(observation[key], dtype=expected_spaces[key].dtype)
         for key in expected_spaces
@@ -533,15 +533,7 @@ def _map_channel_labels(agent_id, map_kind, channel_count):
             "goal",
         ]
     else:
-        labels = [
-            "coverage",
-            "boundary",
-            "obstacle",
-            "warning",
-            "other_drones",
-            "observer",
-            "goal",
-        ]
+        labels = ["coverage", "boundary", "obstacle", "warning", "other_drones", "observer", "goal"]
 
     if channel_count > len(labels):
         labels.extend([f"channel_{idx}" for idx in range(len(labels), channel_count)])

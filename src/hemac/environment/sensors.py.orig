@@ -254,8 +254,6 @@ class RoundCamera(Sensor):
             bool: is point detected.
 
         """
-        if self.pos is None:
-            return False
         if (self.pos[0] - target_pos[0]) ** 2 + (self.pos[1] - target_pos[1]) ** 2 < self.sensing_range**2:
             return True
         else:
