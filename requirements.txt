@@ -53,7 +53,7 @@ gitdb==4.0.12
 GitPython==3.1.50
 grpcio==1.78.0
 gymnasium==1.2.2
--e git+https://github.com/acidify04/hemac.git@6e5f3fa93d1601b6ad4fd6b4bec36a936c94daa4#egg=hemac
+-e git+https://github.com/acidify04/hemac.git@f7139f749a04ba056e86096bc2be1754d76ef482#egg=hemac
 humanfriendly==10.0
 idna==3.17
 image-geometry==3.2.1
@@ -211,7 +211,7 @@ tf2-tools==0.25.13
 tinyscaler==1.2.8
 topic-monitor==0.20.5
 torch==2.10.0
-tqdm>=4.66,<5
+tqdm==4.70.1
 trajectory-msgs==4.9.0
 triton==3.6.0
 turtlesim==1.4.2

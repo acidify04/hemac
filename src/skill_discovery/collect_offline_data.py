@@ -43,8 +43,8 @@ from skill_discovery.task_descriptor import (
 
 
 # Collection settings. Edit these for repeated experiments or use CLI overrides.
-CHECKPOINT_PATH = PROJECT_ROOT / "src/train/mappo_checkpoints/checkpoint_19000"
-OUTPUT_DIR = PROJECT_ROOT / "src/skill_discovery/offline_data"
+CHECKPOINT_PATH = PROJECT_ROOT / "src/train/hemac_checkpoints-3-1/checkpoint_05000"
+OUTPUT_DIR = PROJECT_ROOT / "src/skill_discovery/offline_data-3-1"
 DRONE_COVERAGE60_CHECKPOINT_PATH = (
     PROJECT_ROOT
     / "src/train/drone_mappo_coverage60_checkpoints/checkpoint_31400"
