@@ -1162,8 +1162,16 @@ class HeMACHISSD(nn.Module):
         """Load the validated CNN and base action head from a BC checkpoint."""
         checkpoint_path = Path(checkpoint_path).expanduser().resolve()
         payload = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-        if payload.get("model_type") != "drone_behavior_cloning":
-            raise ValueError(f"Not a drone BC checkpoint: {checkpoint_path}")
+        bc_model_type = payload.get("model_type")
+        supported_bc_types = {
+            "drone_behavior_cloning",
+            "observer_behavior_cloning",
+        }
+        if bc_model_type not in supported_bc_types:
+            raise ValueError(
+                f"Unsupported BC checkpoint type {bc_model_type!r}: "
+                f"{checkpoint_path}"
+            )
         bc_policy = DroneBehaviorCloningPolicy(**payload["model_config"])
         bc_policy.load_state_dict(payload["model_state_dict"])
         self.observation_encoder.load_state_dict(bc_policy.encoder.state_dict())

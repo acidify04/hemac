@@ -49,7 +49,7 @@ GOAL_CONFIG = {
 
 TRAIN_ROOT = PROJECT_ROOT / "src/train"
 CHECKPOINT_ROOTS = (
-    PROJECT_ROOT / "hemac_checkpoints-3-1",
+    PROJECT_ROOT / "hemac_checkpoints-4-2",
     *(sorted(TRAIN_ROOT.glob("*checkpoints*")) if TRAIN_ROOT.is_dir() else ()),
 )
 
