@@ -21,6 +21,7 @@ from hemac.rllib_policy import register_hemac_rllib_models
 import time
 import pygame
 from PIL import Image
+from packaging.version import Version
 
 try:
     from pygame._sdl2.video import Renderer as SdlRenderer
@@ -65,6 +66,58 @@ OBS_PANEL_HEIGHT = 430
 OBS_PANEL_MARGIN = 12
 OBS_WINDOW_PADDING = 12
 OBS_WINDOW_HEADER_HEIGHT = 42
+
+
+class _LegacyPackagingVersion:
+    """Temporary target for Version objects pickled by older packaging releases."""
+
+    def __new__(cls, *args, **kwargs):
+        return object.__new__(cls)
+
+    def __setstate__(self, state):
+        self.state = state
+
+
+class _CheckpointUnpickler(pickle.Unpickler):
+    """Unpickle RLlib state across the packaging.Version state-format change."""
+
+    def find_class(self, module, name):
+        if module == "packaging.version" and name == "Version":
+            return _LegacyPackagingVersion
+        return super().find_class(module, name)
+
+
+def _restore_legacy_version(value):
+    if not isinstance(value, _LegacyPackagingVersion):
+        return value
+
+    state = value.state
+    if not isinstance(state, tuple) or len(state) < 2:
+        raise ValueError(f"Unsupported legacy packaging.Version state: {state!r}")
+
+    epoch, release = state[:2]
+    release_text = ".".join(str(component) for component in release)
+    version_text = f"{epoch}!{release_text}" if epoch else release_text
+    return Version(version_text)
+
+
+def _load_checkpoint_pickle(path):
+    """Load one RLlib pickle, including checkpoints made with old packaging."""
+    path = Path(path)
+    try:
+        with path.open("rb") as file_obj:
+            return pickle.load(file_obj)
+    except pickle.UnpicklingError as error:
+        if "state is not a dictionary" not in str(error):
+            raise
+
+    with path.open("rb") as file_obj:
+        state = _CheckpointUnpickler(file_obj).load()
+    if isinstance(state, dict) and "checkpoint_version" in state:
+        state["checkpoint_version"] = _restore_legacy_version(
+            state["checkpoint_version"]
+        )
+    return state
 
 
 def find_complete_checkpoints(required_policy_ids=("drone_policy",)):
@@ -264,8 +317,7 @@ def _load_policy_from_checkpoint(checkpoint_dir, policy_id):
     policy_state_path = (
         Path(checkpoint_dir) / "policies" / policy_id / "policy_state.pkl"
     )
-    with policy_state_path.open("rb") as file_obj:
-        state = pickle.load(file_obj)
+    state = _load_checkpoint_pickle(policy_state_path)
 
     weights = state.get("weights") or {}
     encoder_variant = "current"
@@ -313,8 +365,7 @@ def load_drone_policy(checkpoint_dir, env_config=None):
 def load_checkpoint_env_config(checkpoint_dir):
     """Return the environment configuration saved with an Algorithm checkpoint."""
     state_path = Path(checkpoint_dir) / "algorithm_state.pkl"
-    with state_path.open("rb") as file_obj:
-        checkpoint_state = pickle.load(file_obj)
+    checkpoint_state = _load_checkpoint_pickle(state_path)
 
     config = checkpoint_state.get("config") or {}
     env_config = config.get("env_config") if isinstance(config, dict) else None
@@ -332,8 +383,7 @@ def load_policy_weights_from_checkpoint(checkpoint_dir, policy_id):
             f"Policy checkpoint not found for {policy_id}: {policy_state_path}"
         )
 
-    with policy_state_path.open("rb") as file_obj:
-        policy_state = pickle.load(file_obj)
+    policy_state = _load_checkpoint_pickle(policy_state_path)
 
     weights = policy_state.get("weights")
     if not isinstance(weights, dict) or not weights:
