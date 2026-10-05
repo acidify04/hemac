@@ -30,6 +30,7 @@ HeMAC_v0.env(max_cycles=900)
 
 """
 
+import copy
 import os
 import time
 
@@ -106,7 +107,15 @@ class HeMAC:
         goal_max_base_distance: float | None = None,
         log_step_rewards: bool = False,
     ):
-        self.number_of_POIs = len(poi_config) if poi_config and len(poi_config) else 0
+        poi_configs = list(poi_config or [])
+        if n_observers > 1:
+            templates = poi_configs or [{}]
+            poi_configs = [
+                copy.deepcopy(templates[index % len(templates)] or {})
+                for index in range(n_observers)
+            ]
+        self.poi_configs = poi_configs
+        self.number_of_POIs = len(self.poi_configs)
         self.goals = []
 
         """Overwrite constructor."""
@@ -141,6 +150,8 @@ class HeMAC:
         self.known_goals = known_goals
         self.rescuing_targets = rescuing_targets
         self.global_reward = 0
+        self.global_reward_all_agents = False
+        self.newly_reached_observer = None
         self.observer_heading_reward_scale = observer_heading_reward_scale
         self.drone_hazard_penalty_scale = drone_hazard_penalty_scale
         # detection reward params
@@ -175,6 +186,7 @@ class HeMAC:
         self.detected = set()
         self.found_goal = False
         self.observers_reached_goal = set()
+        self.observer_goal_assignments = {}
         self.finished = False
         self.drone_crash = False
         self.observer_crash = False
@@ -257,7 +269,7 @@ class HeMAC:
             poi_spawn_range = {"x_range": (minx, maxx), "y_range": (miny, maxy)}
         self.poi_spawn_range = poi_spawn_range
         for i in range(self.number_of_POIs):
-            _poi_config = poi_config[i] if poi_config and poi_config[i] else None
+            _poi_config = self.poi_configs[i]
             self.goals.append(
                 PointOfInterest(
                     randomizer=self.randomizer,
@@ -457,6 +469,43 @@ class HeMAC:
             max_base_distance=self.goal_max_base_distance,
         )
 
+    def _spawn_all_goals(self, *, obstacles=None, warning_zone_checker=None):
+        """Spawn goals sequentially while preventing goal-goal overlap."""
+        occupied_rects = list(obstacles or [])
+        for goal in self.goals:
+            self._spawn_goal(
+                goal,
+                obstacles=occupied_rects,
+                warning_zone_checker=warning_zone_checker,
+            )
+            if goal.rect is not None:
+                occupied_rects.append(goal.rect)
+
+    def _assign_observer_goals(self):
+        """Randomly assign one distinct goal to each observer for this episode."""
+        observer_names = [
+            name for name in self.agents if name.startswith("observer_")
+        ]
+        self.observer_goal_assignments = {}
+        if not observer_names or not self.goals:
+            return
+
+        goal_indices = self.randomizer.permutation(len(self.goals))
+        for observer_name, goal_index in zip(observer_names, goal_indices):
+            goal_index = int(goal_index)
+            goal = self.goals[goal_index]
+            self.observer_goal_assignments[observer_name] = goal
+            observer = self.agents_list[self.agent_name_mapping[observer_name]]
+            observer.assigned_goal = goal
+            observer.assigned_goal_index = goal_index
+
+    def _goals_for_agent(self, agent_name):
+        """Return the private observer goal or the full shared goal list."""
+        if agent_name.startswith("observer_"):
+            assigned_goal = self.observer_goal_assignments.get(agent_name)
+            return [assigned_goal] if assigned_goal is not None else []
+        return self.goals
+
     def reset(self, seed=None, options=None):
         """Reset the environment."""
         # reset goals
@@ -474,8 +523,7 @@ class HeMAC:
             print("resetting world.")
         self.world.reset(self.goals)
         self.world.clear_obstacles()  # Clear obstacles at the start of each episode
-        for goal in self.goals:
-            self._spawn_goal(goal)
+        self._spawn_all_goals()
         self._sync_goal_position()
         self.detection_reward = 0
 
@@ -494,12 +542,10 @@ class HeMAC:
                 avoid_rects=goal_rects,
                 n_static_obstacles=self.n_static_obstacles,
             )
-            for goal in self.goals:
-                self._spawn_goal(
-                    goal,
-                    obstacles=self.world.obstacles,
-                    warning_zone_checker=self.world.game_rect_intersects_warning_zone,
-                )
+            self._spawn_all_goals(
+                obstacles=self.world.obstacles,
+                warning_zone_checker=self.world.game_rect_intersects_warning_zone,
+            )
             self._sync_goal_position()
 
         # reset agents to initial state
@@ -562,10 +608,15 @@ class HeMAC:
                 
                 drone_idx += 1
 
+        self._assign_observer_goals()
+
         self.terminate = False
         self.collided = False
         self.truncate = False
         self.found_goal = False
+        self.global_reward = 0
+        self.global_reward_all_agents = False
+        self.newly_reached_observer = None
         self.detected = set()
         self.drone_crash = False
         self.observer_crash = False
@@ -629,7 +680,11 @@ class HeMAC:
     def observe(self, agent):
         """Observe the agent."""
         current_agent = self.agents_list[self.agent_name_mapping[agent]]
-        observation = current_agent.observe(self.world, self.agents_list, self.goals)
+        observation = current_agent.observe(
+            self.world,
+            self.agents_list,
+            self._goals_for_agent(agent),
+        )
         # LOGGER.info(f"observation for {agent}: {observation}")
         return observation
 
@@ -921,7 +976,13 @@ class HeMAC:
         self._propagate_episode_state(include_global_reward=True)
 
     def _global_reward_for_agent(self, agent_name):
-        """Split shared success reward by role for clearer credit assignment."""
+        """Return event reward, excluding observers already finished at a goal."""
+        if self.global_reward_all_agents:
+            already_stopped = (
+                agent_name in self.observers_reached_goal
+                and agent_name != self.newly_reached_observer
+            )
+            return 0.0 if already_stopped else self.global_reward
         if "observer" in agent_name:
             return self.global_reward
         if "drone" in agent_name:
@@ -1007,6 +1068,8 @@ class HeMAC:
             agent_idx = int(agent_idx)
             agent = self.agents_list[agent_idx]
             agent_name = self.agents[agent_idx]
+            if agent_name in self.observers_reached_goal:
+                continue
             self._mark_agent_crash(agent)
             self.rewards[agent_name] -= 300
             reward_dict[agent_name].append(-300)
@@ -1016,8 +1079,9 @@ class HeMAC:
 
     def step(self, action, active_agent):
         """Execute a step."""
-        if active_agent == self.agents[0]:
-            self.global_reward = 0
+        self.global_reward = 0
+        self.global_reward_all_agents = False
+        self.newly_reached_observer = None
         found_goal = False
         delivered_goal = False
         reward = 0
@@ -1026,8 +1090,13 @@ class HeMAC:
 
         agent = self.agents_list[self.agent_name_mapping[active_agent]]
         previous_agent_position = (float(agent.x), float(agent.y))
-        agent.update(self.area, self.world, action, self.found_goal)
-        self.world.update_obstacle_observations_for_agent(agent)
+        stopped_observer = (
+            active_agent.startswith("observer_")
+            and active_agent in self.observers_reached_goal
+        )
+        if not stopped_observer:
+            agent.update(self.area, self.world, action, self.found_goal)
+            self.world.update_obstacle_observations_for_agent(agent)
 
         # Specific actions for UAVs
         if "drone" in active_agent:
@@ -1089,7 +1158,7 @@ class HeMAC:
                     reward_dict=reward_dict,
                 )
 
-        elif "observer" in active_agent:
+        elif "observer" in active_agent and not stopped_observer:
             reward -= 0.05  # step penalty
             reward_dict[active_agent].append(-0.05)
 
@@ -1112,44 +1181,40 @@ class HeMAC:
                     # LOGGER.info(f"observer crossed a warning zone. pos: {(agent.x, agent.y)}")
 
             if not self.terminate:
-                closest_goal = None
-                current_dist = float("inf")
-                for goal in self.goals[:]:
-                    goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
-                    if goal_dist < current_dist:
-                        current_dist = goal_dist
-                        closest_goal = goal
-
-                    if closest_goal is not None:
-                        if not np.isfinite(getattr(agent, "min_dist_record", np.inf)):
-                            agent.min_dist_record = current_dist
-                        elif current_dist < agent.min_dist_record:
-                            progress = agent.min_dist_record - current_dist
-                            progress_reward = progress * 0.01
-                            if np.isfinite(progress_reward) and progress_reward > 0:
-                                reward += progress_reward
-                                reward_dict[active_agent].append(progress_reward)
-                            agent.min_dist_record = current_dist
+                assigned_goal = self.observer_goal_assignments.get(active_agent)
+                if assigned_goal is not None:
+                    current_dist = dist(
+                        assigned_goal.x,
+                        assigned_goal.y,
+                        agent.x,
+                        agent.y,
+                    )
+                    if not np.isfinite(getattr(agent, "min_dist_record", np.inf)):
+                        agent.min_dist_record = current_dist
+                    elif current_dist < agent.min_dist_record:
+                        progress = agent.min_dist_record - current_dist
+                        progress_reward = progress * 0.01
+                        if np.isfinite(progress_reward) and progress_reward > 0:
+                            reward += progress_reward
+                            reward_dict[active_agent].append(progress_reward)
+                        agent.min_dist_record = current_dist
 
                     if (
-                        goal_dist < agent.sensing_range
+                        current_dist < agent.sensing_range
                         and active_agent not in self.observers_reached_goal
                     ):
                         agent.found_goal = True
                         self.found_goal = True
                         self.observers_reached_goal.add(active_agent)
-                        reward += 300
-                        # for agent in self.agents:
-                        #     if agent.startswith("drone"):
-                        #         self.rewards[agent] += 100
-                        self.global_reward += 300
-                        reward_dict[active_agent].append(300)
-                        success_marked = self._check_observer_mission_success(
+                        goal_reward = 300.0 / max(self.n_observers, 1)
+                        self.global_reward = goal_reward
+                        self.global_reward_all_agents = True
+                        self.newly_reached_observer = active_agent
+                        reward_dict[active_agent].append(goal_reward)
+                        self._check_observer_mission_success(
                             active_agent=active_agent,
                             reward_dict=reward_dict,
                         )
-                        if success_marked:
-                            break
 
                 if not self.terminate:
                     self._update_detected_cache(agent)
@@ -1161,7 +1226,15 @@ class HeMAC:
         if agent == self.agents_list[-1]:
             if not self.terminate:
                 previous_obstacle_centers = self.world.obstacle_warning_centers_world.copy()
-                self.world.update(self.area, self.agents_list)
+                active_world_agents = [
+                    world_agent
+                    for world_agent, world_agent_name in zip(
+                        self.agents_list,
+                        self.agents,
+                    )
+                    if world_agent_name not in self.observers_reached_goal
+                ]
+                self.world.update(self.area, active_world_agents)
                 self._apply_obstacle_motion_collisions(
                     previous_obstacle_centers,
                     reward_dict,

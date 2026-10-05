@@ -37,6 +37,8 @@ class Observer(BaseAgent):
         self.out_of_bound = False
         self.goal_in_view = False
         self.found_goal = False
+        self.assigned_goal = None
+        self.assigned_goal_index = None
         self.goal_estimation = None
         self.comm_range = comm_range
         self.detected = set()
@@ -97,6 +99,8 @@ class Observer(BaseAgent):
         self.out_of_bound = False
         self.goal_in_view = False
         self.found_goal = False
+        self.assigned_goal = None
+        self.assigned_goal_index = None
         self.goal_estimation = None
         self.orientation = 0.0
         self.detected = set()

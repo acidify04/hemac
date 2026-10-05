@@ -353,7 +353,12 @@ def load_drone_policy(checkpoint_dir, env_config=None):
     if observer_policy is None:
         print("[observer_policy] not found; observers will use zero actions.")
     n_drones = int(env_config.get("n_drones", len(DRONE_START_POSITIONS)))
-    n_goals = len(env_config.get("poi_config") or ())
+    n_observers = int(env_config.get("n_observers", 0))
+    n_goals = (
+        n_observers
+        if n_observers > 1
+        else len(env_config.get("poi_config") or ())
+    )
     return DronePolicyRunner(
         drone_policy,
         observer_policy=observer_policy,

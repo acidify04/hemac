@@ -311,6 +311,7 @@ def train_epoch(
     epoch: int,
     batches_per_source: int | None,
     task_only: bool,
+    show_progress: bool = False,
 ):
     model.train()
     total = defaultdict(float)
@@ -324,56 +325,86 @@ def train_epoch(
     )
     max_total = args.max_train_batches
     processed = 0
-    for source_name, raw_batch in iterator:
-        if max_total is not None and processed >= max_total:
-            break
-        batch = prepare_role_batch(
-            raw_batch, device, role, base_trainer=base
+    effective_bps = (
+        max(len(loader) for loader in loaders.values())
+        if batches_per_source is None
+        else batches_per_source
+    )
+    train_total = effective_bps * len(loaders)
+    if max_total is not None:
+        train_total = min(train_total, max_total)
+    progress = None
+    if tqdm is not None and show_progress:
+        progress = tqdm(
+            total=train_total,
+            desc=f"epoch {epoch} train",
+            unit="batch",
+            dynamic_ncols=True,
+            leave=False,
+            position=1,
         )
 
-        controller_loss, controller_metrics = base.controller_objective(
-            model, batch, args, task_only=task_only
-        )
-        controller_metrics["controller_grad_norm"] = base.optimize(
-            controller_loss, model, optimizer, args.grad_clip
-        )
-
-        if task_only:
-            with torch.no_grad():
-                _, value_metrics = base.value_objective(model, batch, args)
-                _, planner_metrics = base.planner_objective(model, batch, args)
-            value_metrics["value_grad_norm"] = 0.0
-            planner_metrics["planner_grad_norm"] = 0.0
-            planner_metrics["planner_update_skipped"] = 0.0
-        else:
-            value_loss, value_metrics = base.value_objective(model, batch, args)
-            value_metrics["value_grad_norm"] = base.optimize(
-                value_loss, model, optimizer, args.grad_clip
+    try:
+        for source_name, raw_batch in iterator:
+            if max_total is not None and processed >= max_total:
+                break
+            batch = prepare_role_batch(
+                raw_batch, device, role, base_trainer=base
             )
-            with base.strict_planner_math(device):
-                planner_loss, planner_metrics = base.planner_objective(
-                    model, batch, args
+
+            controller_loss, controller_metrics = base.controller_objective(
+                model, batch, args, task_only=task_only
+            )
+            controller_metrics["controller_grad_norm"] = base.optimize(
+                controller_loss, model, optimizer, args.grad_clip
+            )
+
+            if task_only:
+                with torch.no_grad():
+                    _, value_metrics = base.value_objective(model, batch, args)
+                    _, planner_metrics = base.planner_objective(model, batch, args)
+                value_metrics["value_grad_norm"] = 0.0
+                planner_metrics["planner_grad_norm"] = 0.0
+                planner_metrics["planner_update_skipped"] = 0.0
+            else:
+                value_loss, value_metrics = base.value_objective(model, batch, args)
+                value_metrics["value_grad_norm"] = base.optimize(
+                    value_loss, model, optimizer, args.grad_clip
                 )
-                planner_grad = base.optimize(
-                    planner_loss,
-                    model,
-                    optimizer,
-                    args.grad_clip,
-                    skip_nonfinite=True,
+                with base.strict_planner_math(device):
+                    planner_loss, planner_metrics = base.planner_objective(
+                        model, batch, args
+                    )
+                    planner_grad = base.optimize(
+                        planner_loss,
+                        model,
+                        optimizer,
+                        args.grad_clip,
+                        skip_nonfinite=True,
+                    )
+                planner_metrics["planner_update_skipped"] = float(
+                    not math.isfinite(planner_grad)
                 )
-            planner_metrics["planner_update_skipped"] = float(
-                not math.isfinite(planner_grad)
-            )
-            planner_metrics["planner_grad_norm"] = (
-                planner_grad if math.isfinite(planner_grad) else 0.0
-            )
-            model.update_targets(args.target_tau)
+                planner_metrics["planner_grad_norm"] = (
+                    planner_grad if math.isfinite(planner_grad) else 0.0
+                )
+                model.update_targets(args.target_tau)
 
-        merged = {**controller_metrics, **value_metrics, **planner_metrics}
-        add_metrics(total, merged)
-        add_metrics(per_source[source_name], merged)
-        counts[source_name] += 1
-        processed += 1
+            merged = {**controller_metrics, **value_metrics, **planner_metrics}
+            add_metrics(total, merged)
+            add_metrics(per_source[source_name], merged)
+            counts[source_name] += 1
+            processed += 1
+            if progress is not None:
+                progress.update(1)
+                progress.set_postfix(
+                    source=source_name,
+                    action=f"{controller_metrics['action_mse']:.4f}",
+                    refresh=False,
+                )
+    finally:
+        if progress is not None:
+            progress.close()
 
     return (
         average_metrics(total, processed),
@@ -386,7 +417,16 @@ def train_epoch(
 
 
 @torch.inference_mode()
-def validate_one_source(model, loader, device, args, role: str):
+def validate_one_source(
+    model,
+    loader,
+    device,
+    args,
+    role: str,
+    *,
+    source_name: str | None = None,
+    progress=None,
+):
     model.eval()
     acc = defaultdict(float)
     count = 0
@@ -399,15 +439,55 @@ def validate_one_source(model, loader, device, args, role: str):
         _, p = base.planner_objective(model, batch, args)
         add_metrics(acc, {**c, **v, **p})
         count += 1
+        if progress is not None:
+            progress.update(1)
+            progress.set_postfix(source=source_name or "?", refresh=False)
     return average_metrics(acc, count)
 
 
 @torch.inference_mode()
-def validate_all_sources(model, loaders, device, args, role: str):
-    by_source = {
-        name: validate_one_source(model, loader, device, args, role)
-        for name, loader in loaders.items()
-    }
+def validate_all_sources(
+    model,
+    loaders,
+    device,
+    args,
+    role: str,
+    *,
+    epoch: int | None = None,
+    show_progress: bool = False,
+):
+    validation_total = sum(
+        min(len(loader), args.max_val_batches)
+        if args.max_val_batches is not None
+        else len(loader)
+        for loader in loaders.values()
+    )
+    progress = None
+    if tqdm is not None and show_progress:
+        progress = tqdm(
+            total=validation_total,
+            desc=f"epoch {epoch or '?'} validation",
+            unit="batch",
+            dynamic_ncols=True,
+            leave=False,
+            position=1,
+        )
+
+    by_source = {}
+    try:
+        for name, loader in loaders.items():
+            by_source[name] = validate_one_source(
+                model,
+                loader,
+                device,
+                args,
+                role,
+                source_name=name,
+                progress=progress,
+            )
+    finally:
+        if progress is not None:
+            progress.close()
     keys = set.intersection(*(set(m) for m in by_source.values()))
     equal_config_average = {
         key: sum(metrics[key] for metrics in by_source.values()) / len(by_source)
