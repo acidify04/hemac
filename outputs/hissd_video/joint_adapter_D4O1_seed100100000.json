@@ -1,0 +1,212 @@
+{
+  "checkpoint": {
+    "path": "src/skill_discovery/checkpoints/hissd-joint-hetero-adapter/hissd_joint_adapter_best.pt",
+    "epoch": 57,
+    "model_type": "hemac_joint_heterogeneous_hissd_agent_conditioned_adapter",
+    "initialization": null,
+    "bc_initialization": {
+      "observer": {
+        "checkpoint": "src/skill_discovery/checkpoints/bc-source-combined/observer/observer_bc_best.pt",
+        "epoch": 47,
+        "metrics": {
+          "train": {
+            "mse": 0.002431462974534296,
+            "mae": 0.03130494692174499,
+            "zero_action_mse": 0.6145503822311456,
+            "axis_mse": [
+              0.002136089082341641,
+              0.0036415662616491318,
+              0.0015167335368460044
+            ],
+            "valid_actions": 39475
+          },
+          "validation": {
+            "mse": 0.00552919373662577,
+            "mae": 0.038846054669146104,
+            "zero_action_mse": 0.6508479046473727,
+            "axis_mse": [
+              0.0034652722533792257,
+              0.010109186172485352,
+              0.0030131220701150596
+            ],
+            "valid_actions": 4948
+          },
+          "train_by_source": {
+            "3-1": {
+              "mse": 0.0017774525190215984,
+              "mae": 0.026325221886656303,
+              "zero_action_mse": 0.7483189343003631,
+              "axis_mse": [
+                0.0018867066828534007,
+                0.0030326684936881065,
+                0.00041298216092400253
+              ],
+              "valid_actions": 13543
+            },
+            "4-2": {
+              "mse": 0.003085473430046993,
+              "mae": 0.03628467195683368,
+              "zero_action_mse": 0.48078183016192794,
+              "axis_mse": [
+                0.0023854714818298817,
+                0.004250464029610157,
+                0.0026204849127680063
+              ],
+              "valid_actions": 25932
+            }
+          },
+          "validation_by_source": {
+            "3-1": {
+              "mse": 0.0030343003617892476,
+              "mae": 0.026882023961289123,
+              "zero_action_mse": 0.804259086944772,
+              "axis_mse": [
+                0.002670722547918558,
+                0.005698781460523605,
+                0.0007333968533203006
+              ],
+              "valid_actions": 1325
+            },
+            "4-2": {
+              "mse": 0.008024087111462292,
+              "mae": 0.05081008537700308,
+              "zero_action_mse": 0.49743672234997355,
+              "axis_mse": [
+                0.004259821958839893,
+                0.014519590884447098,
+                0.005292847286909819
+              ],
+              "valid_actions": 3623
+            }
+          }
+        }
+      },
+      "drone": {
+        "checkpoint": "src/skill_discovery/checkpoints/bc-source-combined/drone/drone_bc_best.pt",
+        "epoch": 50,
+        "metrics": {
+          "train": {
+            "mse": 0.013622738459530971,
+            "mae": 0.05628158218224434,
+            "zero_action_mse": 0.7653700065638536,
+            "axis_mse": [
+              0.012756286188960075,
+              0.014202720951288939,
+              0.013909205794334412
+            ],
+            "valid_actions": 90686
+          },
+          "validation": {
+            "mse": 0.02020306539867502,
+            "mae": 0.06728834647641135,
+            "zero_action_mse": 0.7215097772700014,
+            "axis_mse": [
+              0.018451842479407787,
+              0.020389248616993427,
+              0.021768103819340467
+            ],
+            "valid_actions": 11052
+          },
+          "train_by_source": {
+            "3-1": {
+              "mse": 0.013922197243207653,
+              "mae": 0.05570246998574935,
+              "zero_action_mse": 0.79856718830838,
+              "axis_mse": [
+                0.013130451552569866,
+                0.014640754088759422,
+                0.013995381072163582
+              ],
+              "valid_actions": 39624
+            },
+            "4-2": {
+              "mse": 0.013323279675854288,
+              "mae": 0.05686069437873933,
+              "zero_action_mse": 0.7321728248193271,
+              "axis_mse": [
+                0.012382120825350285,
+                0.013764687813818455,
+                0.013823030516505241
+              ],
+              "valid_actions": 51062
+            }
+          },
+          "validation_by_source": {
+            "3-1": {
+              "mse": 0.012971917088638589,
+              "mae": 0.04766729181737874,
+              "zero_action_mse": 0.7953844778766304,
+              "axis_mse": [
+                0.011384733021259308,
+                0.01421436108648777,
+                0.013316654600203037
+              ],
+              "valid_actions": 3891
+            },
+            "4-2": {
+              "mse": 0.02743421370871145,
+              "mae": 0.08690940113544397,
+              "zero_action_mse": 0.6476350766633724,
+              "axis_mse": [
+                0.025518951937556267,
+                0.026564136147499084,
+                0.030219553038477898
+              ],
+              "valid_actions": 7161
+            }
+          }
+        }
+      }
+    }
+  },
+  "target": {
+    "difficulty": 1,
+    "n_drones": 4,
+    "n_observers": 1,
+    "drone_start_positions": [
+      [
+        130.0,
+        870.0,
+        5.0
+      ],
+      [
+        130.0,
+        830.0,
+        5.0
+      ],
+      [
+        170.0,
+        870.0,
+        5.0
+      ],
+      [
+        170.0,
+        830.0,
+        5.0
+      ]
+    ]
+  },
+  "seed": 100100000,
+  "seed_formula": "explicit --seed",
+  "template_episode": "/home/cau/Documents/hemac/src/skill_discovery/offline_data-4-2/difficulty_01/goal_found_failure/episode_000000.pt",
+  "video": "outputs/hissd_video/joint_adapter_D4O1_seed100100000.mp4",
+  "episode": {
+    "seed": 100100000,
+    "difficulty": 1,
+    "n_drones": 4,
+    "n_observers": 1,
+    "success": true,
+    "goal_found": true,
+    "observer_goal_found": true,
+    "drone_goal_found": false,
+    "fatal_crash": false,
+    "drone_crash": false,
+    "observer_crash": false,
+    "coverage": 0.44576409459114075,
+    "cycles": 66,
+    "aec_reward_sum": 1467.772846913081,
+    "video_frames": 85,
+    "video_fps": 12,
+    "video_seconds": 7.083333333333333
+  }
+}
