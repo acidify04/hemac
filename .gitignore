@@ -20,3 +20,4 @@ src/hemac/helpers/__pycache__/
 src/hemac/train/__pycache__/
 tests/__pycache__/
 hemac.tar
+outputs/hissd_video
