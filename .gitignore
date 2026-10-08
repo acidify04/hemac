@@ -21,3 +21,5 @@ src/hemac/train/__pycache__/
 tests/__pycache__/
 hemac.tar
 outputs/hissd_video
+3rdparty
+smac
