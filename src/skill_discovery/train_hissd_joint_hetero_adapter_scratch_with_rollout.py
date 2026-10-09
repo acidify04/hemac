@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train ONE heterogeneous HiSSD + cross-agent contextual adapter FROM SCRATCH.
+"""Train ONE heterogeneous HiSSD + shared agent-conditioned adapter FROM SCRATCH.
 
 Source configurations:
     D3O1 and D4O2
@@ -11,8 +11,7 @@ shared HiSSD stack, and adapter architecture, but loads NO BC checkpoint.
 Architecture:
     role-specific observation encoder E_r(o_i) -> h_i
     shared CommonSkillEncoder C(h_i)          -> raw common skill c_i
-    joint context g_i = SelfAttention([h_1,c_1],...,[h_N,c_N])_i
-    ONE shared adapter A([c_i, h_i, g_i])     -> delta_i
+    ONE shared adapter A([c_i, h_i])          -> delta_i
     adapted common skill c'_i = c_i + delta_i
     role-specific action decoder              -> a_i
 
@@ -57,9 +56,9 @@ if str(PROJECT_SRC) not in sys.path:
 from skill_discovery import train_hissd_hetero_baseline as base
 from skill_discovery import train_hissd_multisource as multi
 from skill_discovery.dataset import create_dataloader
-from skill_discovery import evaluate_hissd_joint_hetero_cross_agent_adapter_zero_shot as rollout_eval
-from skill_discovery.hissd_joint_hetero_cross_agent_adapter_models import (
-    JointHeterogeneousCrossAgentAdapterHiSSD,
+from skill_discovery import evaluate_hissd_joint_hetero_adapter_zero_shot as rollout_eval
+from skill_discovery.hissd_joint_hetero_adapter_models import (
+    JointHeterogeneousAdapterHiSSD,
 )
 from skill_discovery.multi_source_hissd import (
     SourceSpec,
@@ -110,24 +109,6 @@ def parse_args() -> argparse.Namespace:
     )
 
     p.add_argument("--adapter-hidden-dim", type=int, default=128)
-    p.add_argument(
-        "--cross-agent-context-dim",
-        type=int,
-        default=64,
-        help="Width of the projected [h_i,c_i] token used for agent self-attention.",
-    )
-    p.add_argument(
-        "--cross-agent-attention-heads",
-        type=int,
-        default=4,
-        help="Number of heads in cross-agent self-attention.",
-    )
-    p.add_argument(
-        "--cross-agent-attention-dropout",
-        type=float,
-        default=0.0,
-        help="Dropout inside cross-agent MultiheadAttention.",
-    )
     p.add_argument("--seed", type=int, default=2026)
     p.add_argument(
         "--device",
@@ -171,6 +152,52 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Fixed diagnostic seed base, separate from final zero-shot evaluation "
             "(which uses 100000000)."
+        ),
+    )
+    p.add_argument(
+        "--final-rollout-top-k",
+        type=int,
+        default=5,
+        help=(
+            "After training, re-evaluate the top-K provisional rollout "
+            "checkpoints with more held-out source rollouts."
+        ),
+    )
+    p.add_argument(
+        "--final-rollout-episodes",
+        type=int,
+        default=200,
+        help=(
+            "Episodes per source population when re-ranking the top-K "
+            "rollout checkpoints after training."
+        ),
+    )
+    p.add_argument(
+        "--final-rollout-seed-base",
+        type=int,
+        default=300_000_000,
+        help=(
+            "Held-out seed base for final top-K checkpoint re-ranking. "
+            "Keep separate from provisional rollout seeds and final test seeds."
+        ),
+    )
+
+    p.add_argument(
+        "--resume-checkpoint",
+        type=Path,
+        default=None,
+        help=(
+            "Resume model + optimizer from a scratch Joint HiSSD+Adapter checkpoint. "
+            "Training continues from checkpoint_epoch + 1; --epochs is the final total epoch."
+        ),
+    )
+    p.add_argument(
+        "--resume-lr-scale",
+        type=float,
+        default=1.0,
+        help=(
+            "Multiply every optimizer param-group learning rate after loading the resume checkpoint. "
+            "Use 0.3 for low-LR continuation."
         ),
     )
     p.add_argument("--no-progress", action="store_true")
@@ -448,7 +475,7 @@ def _sample_role_schema(
 
 def validate_joint_source_compatibility(
     datasets: Mapping[str, Any],
-    model: JointHeterogeneousCrossAgentAdapterHiSSD,
+    model: JointHeterogeneousAdapterHiSSD,
 ) -> dict[str, dict[str, int]]:
     """Validate role schemas and allow only population count to vary."""
     population_counts: dict[str, dict[str, int]] = {}
@@ -511,7 +538,7 @@ def validate_joint_source_compatibility(
 # ---------------------------------------------------------------------------
 
 def joint_controller_objective(
-    model: JointHeterogeneousCrossAgentAdapterHiSSD,
+    model: JointHeterogeneousAdapterHiSSD,
     batch: dict[str, Any],
     args: argparse.Namespace,
     *,
@@ -683,7 +710,7 @@ def joint_controller_objective(
 
 
 def joint_value_predictions(
-    model: JointHeterogeneousCrossAgentAdapterHiSSD,
+    model: JointHeterogeneousAdapterHiSSD,
     batch: dict[str, Any],
     args: argparse.Namespace,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -726,7 +753,7 @@ def joint_value_predictions(
 
 
 def joint_value_objective(
-    model: JointHeterogeneousCrossAgentAdapterHiSSD,
+    model: JointHeterogeneousAdapterHiSSD,
     batch: dict[str, Any],
     args: argparse.Namespace,
 ) -> tuple[torch.Tensor, dict[str, float]]:
@@ -787,7 +814,7 @@ def _role_balanced_local_prediction_error(
 
 
 def joint_planner_objective(
-    model: JointHeterogeneousCrossAgentAdapterHiSSD,
+    model: JointHeterogeneousAdapterHiSSD,
     batch: dict[str, Any],
     args: argparse.Namespace,
 ) -> tuple[torch.Tensor, dict[str, float]]:
@@ -979,7 +1006,7 @@ def equal_source_average(
 
 @torch.inference_mode()
 def initialization_diagnostics(
-    model: JointHeterogeneousCrossAgentAdapterHiSSD,
+    model: JointHeterogeneousAdapterHiSSD,
     raw_batch: dict[str, Any],
     device: torch.device,
 ) -> dict[str, float]:
@@ -1046,7 +1073,7 @@ def _masked_rms(
 
 @torch.inference_mode()
 def adapter_diagnostics(
-    model: JointHeterogeneousCrossAgentAdapterHiSSD,
+    model: JointHeterogeneousAdapterHiSSD,
     raw_batch: dict[str, Any],
     device: torch.device,
 ) -> dict[str, float]:
@@ -1130,7 +1157,7 @@ def progress_write(message: str) -> None:
 # ---------------------------------------------------------------------------
 
 def train_epoch(
-    model: JointHeterogeneousCrossAgentAdapterHiSSD,
+    model: JointHeterogeneousAdapterHiSSD,
     loaders: Mapping[str, Any],
     optimizer: torch.optim.Optimizer,
     device: torch.device,
@@ -1297,7 +1324,7 @@ def train_epoch(
 
 @torch.inference_mode()
 def validate_one_source(
-    model: JointHeterogeneousCrossAgentAdapterHiSSD,
+    model: JointHeterogeneousAdapterHiSSD,
     loader,
     device: torch.device,
     args: argparse.Namespace,
@@ -1348,7 +1375,7 @@ def validate_one_source(
 
 @torch.inference_mode()
 def validate_all_sources(
-    model: JointHeterogeneousCrossAgentAdapterHiSSD,
+    model: JointHeterogeneousAdapterHiSSD,
     loaders: Mapping[str, Any],
     device: torch.device,
     args: argparse.Namespace,
@@ -1398,7 +1425,7 @@ def validate_all_sources(
 
 def save_checkpoint(
     path: Path,
-    model: JointHeterogeneousCrossAgentAdapterHiSSD,
+    model: JointHeterogeneousAdapterHiSSD,
     optimizer: torch.optim.Optimizer,
     *,
     epoch: int,
@@ -1420,7 +1447,7 @@ def save_checkpoint(
             "format_version": 1,
             "model_type": (
                 "hemac_joint_heterogeneous_hissd_"
-                "cross_agent_context_adapter"
+                "agent_conditioned_adapter"
             ),
             "model_config": model.config(),
             "training_variant": "scratch_no_bc_initialization",
@@ -1437,30 +1464,14 @@ def save_checkpoint(
                 "adapter_count": 1,
                 "adapter_input": (
                     "[raw_common_skill, "
-                    "encoded_agent_observation, "
-                    "cross_agent_context]"
+                    "encoded_agent_observation]"
                 ),
-                "adapter_form": (
-                    "agent_self_attention_plus_residual_mlp"
-                ),
-                "cross_agent_attention": True,
-                "cross_agent_context_input": (
-                    "[encoded_agent_observation, raw_common_skill]"
-                ),
-                "cross_agent_context_dim": (
-                    cli.cross_agent_context_dim
-                ),
-                "cross_agent_attention_heads": (
-                    cli.cross_agent_attention_heads
-                ),
-                "cross_agent_attention_dropout": (
-                    cli.cross_agent_attention_dropout
-                ),
+                "adapter_form": "residual_mlp",
                 "adapter_hidden_dim": (
                     cli.adapter_hidden_dim
                 ),
                 "adapter_output": (
-                    "cross_agent_conditioned_common_skill"
+                    "agent_conditioned_common_skill"
                 ),
                 "role_embedding": False,
                 "agent_id_embedding": False,
@@ -1472,6 +1483,14 @@ def save_checkpoint(
             },
             "initialization": "scratch",
             "bc_initialization": None,
+            "resume": {
+                "checkpoint": (
+                    str(cli.resume_checkpoint)
+                    if cli.resume_checkpoint is not None
+                    else None
+                ),
+                "lr_scale": float(cli.resume_lr_scale),
+            },
             "adapter_metrics": dict(
                 adapter_metrics
             ),
@@ -1619,7 +1638,7 @@ def build_source_rollout_configs(
 
 @torch.inference_mode()
 def evaluate_source_rollouts(
-    model: JointHeterogeneousCrossAgentAdapterHiSSD,
+    model: JointHeterogeneousAdapterHiSSD,
     rollout_configs: Mapping[str, Mapping[str, Any]],
     *,
     device: torch.device,
@@ -1709,6 +1728,385 @@ def append_rollout_history(
         )
 
 
+
+def _rollout_selection_score(
+    results: Mapping[str, Mapping[str, float]],
+) -> tuple[float, float]:
+    """Mean source success and mean source fatal-crash rate."""
+    success = 0.5 * (
+        float(results["D3O1"]["success"])
+        + float(results["D4O2"]["success"])
+    )
+    fatal_crash = 0.5 * (
+        float(results["D3O1"]["fatal_crash"])
+        + float(results["D4O2"]["fatal_crash"])
+    )
+    return success, fatal_crash
+
+
+def _load_rollout_candidates(
+    output_dir: Path,
+) -> list[dict[str, Any]]:
+    """Load provisional rollout results and saved epoch checkpoints.
+
+    If an epoch appears multiple times in the JSONL file, the last entry wins.
+    This also works with resumed training as long as the epoch checkpoint still
+    exists.
+    """
+    history_path = (
+        output_dir
+        / "source_rollout_history.jsonl"
+    )
+
+    if not history_path.exists():
+        return []
+
+    by_epoch: dict[int, dict[str, Any]] = {}
+
+    with history_path.open(
+        "r",
+        encoding="utf-8",
+    ) as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+
+            row = json.loads(line)
+            epoch = int(row["epoch"])
+
+            checkpoint = (
+                output_dir
+                / (
+                    "hissd_joint_adapter_scratch_"
+                    f"rollout_epoch_{epoch:03d}.pt"
+                )
+            )
+
+            # task-warmup 등의 이유로 epoch checkpoint가 없으면 제외
+            if not checkpoint.exists():
+                continue
+
+            results = row["sources"]
+
+            success, fatal_crash = (
+                _rollout_selection_score(results)
+            )
+
+            payload = torch.load(
+                checkpoint,
+                map_location="cpu",
+                weights_only=False,
+            )
+
+            validation_metrics = payload.get(
+                "validation_metrics",
+                {},
+            )
+
+            action_mse = float(
+                validation_metrics.get(
+                    "action_mse",
+                    math.inf,
+                )
+            )
+
+            by_epoch[epoch] = {
+                "epoch": epoch,
+                "checkpoint": str(checkpoint),
+
+                # 1차 50-episode/source 결과
+                "provisional_success": success,
+                "provisional_fatal_crash": fatal_crash,
+
+                # 최종 동률 tie-breaker
+                "validation_action_mse": action_mse,
+
+                "provisional_results": results,
+            }
+
+    return list(by_epoch.values())
+
+
+@torch.inference_mode()
+def finalize_rollout_checkpoint_selection(
+    model: JointHeterogeneousAdapterHiSSD,
+    rollout_configs: Mapping[
+        str,
+        Mapping[str, Any],
+    ],
+    *,
+    output_dir: Path,
+    device: torch.device,
+    top_k: int,
+    episodes: int,
+    provisional_seed_base: int,
+    seed_base: int,
+    show_progress: bool,
+) -> dict[str, Any] | None:
+    """Re-evaluate top-K checkpoints and save final best_rollout.
+
+    Ranking:
+      1. higher mean source success
+      2. lower mean source fatal-crash
+      3. lower validation action MSE
+      4. earlier epoch only as deterministic final tie-break
+    """
+
+    candidates = _load_rollout_candidates(
+        output_dir
+    )
+
+    if not candidates:
+        progress_write(
+            "final_rollout_selection=SKIPPED "
+            "reason=no_saved_rollout_candidates"
+        )
+        return None
+
+    # --------------------------------------------------------
+    # Stage 1:
+    # 매 5 epoch의 provisional rollout 결과로 Top-K 선택
+    # --------------------------------------------------------
+
+    candidates.sort(
+        key=lambda row: (
+            -row["provisional_success"],
+            row["provisional_fatal_crash"],
+            row["validation_action_mse"],
+            row["epoch"],
+        )
+    )
+
+    top = candidates[
+        : min(int(top_k), len(candidates))
+    ]
+
+    progress_write(
+        "final_rollout_selection candidates="
+        + ", ".join(
+            f"e{row['epoch']}:"
+            f"succ={row['provisional_success']:.3f},"
+            f"crash={row['provisional_fatal_crash']:.3f},"
+            f"action={row['validation_action_mse']:.6f}"
+            for row in top
+        )
+    )
+
+    # --------------------------------------------------------
+    # Stage 2:
+    # Top-K만 새로운 selection seeds로 200 episodes/source
+    # --------------------------------------------------------
+
+    reranked: list[dict[str, Any]] = []
+
+    for row in top:
+
+        checkpoint_path = Path(
+            row["checkpoint"]
+        )
+
+        payload = torch.load(
+            checkpoint_path,
+            map_location=device,
+            weights_only=False,
+        )
+
+        model.load_state_dict(
+            payload["model_state_dict"]
+        )
+
+        results = evaluate_source_rollouts(
+            model,
+            rollout_configs,
+            device=device,
+            episodes=int(episodes),
+            seed_base=int(seed_base),
+            epoch=int(row["epoch"]),
+            show_progress=show_progress,
+        )
+
+        success, fatal_crash = (
+            _rollout_selection_score(results)
+        )
+
+        reranked_row = {
+            **row,
+
+            "final_success": success,
+            "final_fatal_crash": fatal_crash,
+
+            "final_results": results,
+        }
+
+        reranked.append(
+            reranked_row
+        )
+
+        progress_write(
+            f"final_rollout "
+            f"e{row['epoch']:03d} "
+            f"success={success:.4f} "
+            f"fatal_crash={fatal_crash:.4f} "
+            f"D3O1="
+            f"{results['D3O1']['success']:.4f} "
+            f"D4O2="
+            f"{results['D4O2']['success']:.4f}"
+        )
+
+    # --------------------------------------------------------
+    # Stage 3:
+    # 200-episode/source 결과로 최종 ranking
+    # --------------------------------------------------------
+
+    reranked.sort(
+        key=lambda row: (
+            -row["final_success"],
+            row["final_fatal_crash"],
+            row["validation_action_mse"],
+            row["epoch"],
+        )
+    )
+
+    best = reranked[0]
+
+    # --------------------------------------------------------
+    # 최종 best checkpoint 저장
+    # --------------------------------------------------------
+
+    best_source = Path(
+        best["checkpoint"]
+    )
+
+    best_payload = torch.load(
+        best_source,
+        map_location="cpu",
+        weights_only=False,
+    )
+
+    best_payload[
+        "rollout_checkpoint_selection"
+    ] = {
+        "criterion": (
+            "max mean(D3O1,D4O2) success; "
+            "tie-break min mean fatal_crash; "
+            "then min validation action_mse"
+        ),
+
+        "provisional_seed_base": int(
+            provisional_seed_base
+        ),
+
+        "final_seed_base": int(
+            seed_base
+        ),
+
+        "final_episodes_per_source": int(
+            episodes
+        ),
+
+        "top_k": int(
+            len(top)
+        ),
+
+        "selected_epoch": int(
+            best["epoch"]
+        ),
+
+        "selected_success": float(
+            best["final_success"]
+        ),
+
+        "selected_fatal_crash": float(
+            best["final_fatal_crash"]
+        ),
+    }
+
+    best_path = (
+        output_dir
+        / (
+            "hissd_joint_adapter_scratch_"
+            "best_rollout.pt"
+        )
+    )
+
+    torch.save(
+        best_payload,
+        best_path,
+    )
+
+    # --------------------------------------------------------
+    # 전체 selection 기록 저장
+    # --------------------------------------------------------
+
+    report = {
+        "selection_scope": {
+            "difficulty": 1,
+
+            "source_populations": [
+                "D3O1",
+                "D4O2",
+            ],
+
+            "unseen_populations_used": False,
+            "target_difficulty_used": False,
+        },
+
+        "ranking_rule": (
+            "higher mean source success, "
+            "then lower mean fatal crash, "
+            "then lower validation action MSE"
+        ),
+
+        "provisional_seed_base": int(
+            provisional_seed_base
+        ),
+
+        "final_seed_base": int(
+            seed_base
+        ),
+
+        "final_episodes_per_source": int(
+            episodes
+        ),
+
+        "provisional_top_k": top,
+        "final_rerank": reranked,
+
+        "selected": best,
+
+        "best_checkpoint": str(
+            best_path
+        ),
+    }
+
+    report_path = (
+        output_dir
+        / "rollout_checkpoint_selection.json"
+    )
+
+    report_path.write_text(
+        json.dumps(
+            report,
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    progress_write(
+        f"BEST_ROLLOUT "
+        f"epoch={best['epoch']} "
+        f"success="
+        f"{best['final_success']:.4f} "
+        f"fatal_crash="
+        f"{best['final_fatal_crash']:.4f} "
+        f"checkpoint={best_path}"
+    )
+
+    return report
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -1728,27 +2126,6 @@ def main() -> None:
         raise ValueError(
             "--adapter-hidden-dim must be positive."
         )
-    if cli.cross_agent_context_dim <= 0:
-        raise ValueError(
-            "--cross-agent-context-dim must be positive."
-        )
-    if cli.cross_agent_attention_heads <= 0:
-        raise ValueError(
-            "--cross-agent-attention-heads must be positive."
-        )
-    if (
-        cli.cross_agent_context_dim
-        % cli.cross_agent_attention_heads
-        != 0
-    ):
-        raise ValueError(
-            "--cross-agent-context-dim must be divisible by "
-            "--cross-agent-attention-heads."
-        )
-    if not 0.0 <= cli.cross_agent_attention_dropout < 1.0:
-        raise ValueError(
-            "--cross-agent-attention-dropout must be in [0, 1)."
-        )
     if cli.batches_per_source < 0:
         raise ValueError(
             "--batches-per-source cannot be negative."
@@ -1764,6 +2141,18 @@ def main() -> None:
     if cli.rollout_eval_episodes <= 0:
         raise ValueError(
             "--rollout-eval-episodes must be positive."
+        )
+    if cli.final_rollout_top_k <= 0:
+        raise ValueError(
+            "--final-rollout-top-k must be positive."
+        )
+    if cli.final_rollout_episodes <= 0:
+        raise ValueError(
+            "--final-rollout-episodes must be positive."
+        )
+    if not math.isfinite(cli.resume_lr_scale) or cli.resume_lr_scale <= 0:
+        raise ValueError(
+            "--resume-lr-scale must be finite and positive."
         )
 
     args = configure_training_args(cli)
@@ -1872,7 +2261,7 @@ def main() -> None:
     role_configs = validate_role_schemas_from_data(
         train_datasets
     )
-    model = JointHeterogeneousCrossAgentAdapterHiSSD(
+    model = JointHeterogeneousAdapterHiSSD(
             role_configs=role_configs,
             central_map_channels=int(
                 central_shape[-3]
@@ -1898,15 +2287,6 @@ def main() -> None:
             ),
             common_skill_adapter_hidden_dim=(
                 cli.adapter_hidden_dim
-            ),
-            cross_agent_context_dim=(
-                cli.cross_agent_context_dim
-            ),
-            cross_agent_attention_heads=(
-                cli.cross_agent_attention_heads
-            ),
-            cross_agent_attention_dropout=(
-                cli.cross_agent_attention_dropout
             ),
             contrastive_from_action_skill=False,
             task_context_pooling=False,
@@ -1991,6 +2371,49 @@ def main() -> None:
             f"{init_diag['adapter_identity_error']:.3e}"
         )
 
+    resume_payload = None
+    start_epoch = 1
+    loaded_resume_lrs = None
+    if cli.resume_checkpoint is not None:
+        resume_path = cli.resume_checkpoint.expanduser().resolve()
+        resume_payload = torch.load(
+            resume_path,
+            map_location=device,
+            weights_only=False,
+        )
+        expected_type = (
+            "hemac_joint_heterogeneous_hissd_"
+            "agent_conditioned_adapter"
+        )
+        if resume_payload.get("model_type") != expected_type:
+            raise ValueError(
+                "Resume checkpoint model_type mismatch: "
+                f"{resume_payload.get('model_type')!r} != {expected_type!r}"
+            )
+        if resume_payload.get("training_variant") not in (
+            None,
+            "scratch_no_bc_initialization",
+        ):
+            raise ValueError(
+                "Resume checkpoint is not a scratch Joint HiSSD+Adapter run: "
+                f"training_variant={resume_payload.get('training_variant')!r}"
+            )
+        if resume_payload.get("model_config") != model.config():
+            raise ValueError(
+                "Resume checkpoint model_config does not match the current model config."
+            )
+        model.load_state_dict(resume_payload["model_state_dict"])
+        optimizer.load_state_dict(resume_payload["optimizer_state_dict"])
+        loaded_resume_lrs = [float(g["lr"]) for g in optimizer.param_groups]
+        for group in optimizer.param_groups:
+            group["lr"] = float(group["lr"]) * float(cli.resume_lr_scale)
+        start_epoch = int(resume_payload["epoch"]) + 1
+        if start_epoch > cli.epochs:
+            raise ValueError(
+                f"Resume checkpoint is epoch {start_epoch - 1}, but --epochs={cli.epochs}. "
+                "Set --epochs to the desired final total epoch, e.g. 100 or 120."
+            )
+
     cli.output_dir.mkdir(
         parents=True, exist_ok=True
     )
@@ -2051,18 +2474,29 @@ def main() -> None:
         f"adapter_params={adapter_params:,}",
         flush=True,
     )
-    print(
-        "initialization=scratch "
-        "(NO BC checkpoint; role encoders/action decoders random-init) "
-        f"adapter_identity={init_diag['adapter_identity_error']:.3e}",
-        flush=True,
-    )
+    if resume_payload is None:
+        print(
+            "initialization=scratch "
+            "(NO BC checkpoint; role encoders/action decoders random-init) "
+            f"adapter_identity={init_diag['adapter_identity_error']:.3e}",
+            flush=True,
+        )
+    else:
+        print(
+            "resume="
+            f"{cli.resume_checkpoint} "
+            f"checkpoint_epoch={start_epoch - 1} "
+            f"next_epoch={start_epoch} final_epoch={cli.epochs} "
+            f"lr_before={loaded_resume_lrs} "
+            f"lr_scale={cli.resume_lr_scale} "
+            f"lr_after={[float(g['lr']) for g in optimizer.param_groups]}",
+            flush=True,
+        )
     print(
         "architecture="
         "role_specific_obs_encoder + "
         "shared_common_skill_encoder + "
-        "ONE cross-agent SelfAttention([h_j,c_j]) + "
-        "A([c_i,h_i,g_i]) residual adapter + "
+        "ONE A([c_i,h_i]) residual adapter + "
         "role_specific_action_decoder",
         flush=True,
     )
@@ -2091,12 +2525,16 @@ def main() -> None:
             f"every_{cli.rollout_eval_every}_epochs "
             f"episodes={cli.rollout_eval_episodes}/source "
             f"seed_base={cli.rollout_eval_seed_base} "
-            "sources=D3O1,D4O2 checkpoint_selection=OFF",
+            "sources=D3O1,D4O2 checkpoint_selection=TOPK_RERANK",
             flush=True,
         )
 
     best_combined = math.inf
     best_task = math.inf
+
+    best_action = math.inf
+    best_action_epoch = 0
+
     best_task_epoch = 0
     no_improve = 0
     aux_enabled = bool(
@@ -2104,16 +2542,40 @@ def main() -> None:
         or args.task_contrastive_enabled
     )
 
+    if resume_payload is not None:
+        best_path = cli.output_dir / "hissd_joint_adapter_scratch_best.pt"
+        best_task_path = cli.output_dir / "hissd_joint_adapter_scratch_best_task.pt"
+        if best_path.exists():
+            old_best = torch.load(best_path, map_location="cpu", weights_only=False)
+            old_val = old_best.get("validation_metrics")
+            if old_val is not None:
+                best_combined, _ = base.validation_losses(old_val, args)
+        if best_task_path.exists():
+            old_best_task = torch.load(best_task_path, map_location="cpu", weights_only=False)
+            old_val = old_best_task.get("validation_metrics")
+            if old_val is not None:
+                old_combined, old_task = base.validation_losses(old_val, args)
+                best_task = old_task if aux_enabled else old_combined
+                best_task_epoch = int(old_best_task.get("epoch", 0))
+        print(
+            f"resume_best_state: best_combined={best_combined:.6f} "
+            f"best_task={best_task:.6f}@{best_task_epoch}",
+            flush=True,
+        )
+
     # Fixed batch: adapter magnitude is comparable across epochs.
     diagnostic_raw_batch = initial_raw_batch
 
     show_progress = tqdm is not None and not cli.no_progress
-    epoch_progress = range(1, cli.epochs + 1)
+    epoch_progress = range(start_epoch, cli.epochs + 1)
     if show_progress:
         epoch_progress = tqdm(
             epoch_progress,
-            total=cli.epochs,
-            desc="joint cross-agent HiSSD scratch",
+            total=max(cli.epochs - start_epoch + 1, 0),
+            desc=(
+                "joint HiSSD scratch/resume "
+                f"({start_epoch}-{cli.epochs})"
+            ),
             unit="epoch",
             dynamic_ncols=True,
             position=0,
@@ -2139,10 +2601,7 @@ def main() -> None:
             show_progress=show_progress,
         )
 
-        (
-            val_metrics,
-            val_by_source,
-        ) = validate_all_sources(
+        val_metrics, val_by_source = validate_all_sources(
             model,
             val_loaders,
             device,
@@ -2156,6 +2615,8 @@ def main() -> None:
                 val_metrics, args
             )
         )
+
+        action_val = float(val_metrics["action_mse"])
 
         adapter_metrics = adapter_diagnostics(
             model,
@@ -2231,7 +2692,7 @@ def main() -> None:
 
         save_checkpoint(
             cli.output_dir
-            / "hissd_joint_cross_agent_adapter_scratch_last.pt",
+            / "hissd_joint_adapter_scratch_last.pt",
             model,
             optimizer,
             epoch=epoch,
@@ -2245,11 +2706,10 @@ def main() -> None:
             population_counts=population_counts,
         )
 
-        if combined_loss < best_combined:
-            best_combined = combined_loss
+        if rollout_results is not None and not task_only:
             save_checkpoint(
                 cli.output_dir
-                / "hissd_joint_cross_agent_adapter_scratch_best.pt",
+                / f"hissd_joint_adapter_scratch_rollout_epoch_{epoch:03d}.pt",
                 model,
                 optimizer,
                 epoch=epoch,
@@ -2259,7 +2719,45 @@ def main() -> None:
                 train_by_source=train_by_source,
                 val_metrics=val_metrics,
                 val_by_source=val_by_source,
-                    adapter_metrics=adapter_metrics,
+                adapter_metrics=adapter_metrics,
+                population_counts=population_counts,
+            )
+
+        if combined_loss < best_combined:
+            best_combined = combined_loss
+            save_checkpoint(
+                cli.output_dir
+                / "hissd_joint_adapter_scratch_best.pt",
+                model,
+                optimizer,
+                epoch=epoch,
+                args=args,
+                cli=cli,
+                train_metrics=train_metrics,
+                train_by_source=train_by_source,
+                val_metrics=val_metrics,
+                val_by_source=val_by_source,
+                adapter_metrics=adapter_metrics,
+                population_counts=population_counts,
+            )
+
+        if action_val < best_action:
+            best_action = action_val
+            best_action_epoch = epoch
+
+            save_checkpoint(
+                cli.output_dir
+                / "hissd_joint_adapter_scratch_best_action.pt",
+                model,
+                optimizer,
+                epoch=epoch,
+                args=args,
+                cli=cli,
+                train_metrics=train_metrics,
+                train_by_source=train_by_source,
+                val_metrics=val_metrics,
+                val_by_source=val_by_source,
+                adapter_metrics=adapter_metrics,
                 population_counts=population_counts,
             )
 
@@ -2274,7 +2772,7 @@ def main() -> None:
             no_improve = 0
             save_checkpoint(
                 cli.output_dir
-                / "hissd_joint_cross_agent_adapter_scratch_best_task.pt",
+                / "hissd_joint_adapter_scratch_best_task.pt",
                 model,
                 optimizer,
                 epoch=epoch,
@@ -2284,7 +2782,7 @@ def main() -> None:
                 train_by_source=train_by_source,
                 val_metrics=val_metrics,
                 val_by_source=val_by_source,
-                    adapter_metrics=adapter_metrics,
+                adapter_metrics=adapter_metrics,
                 population_counts=population_counts,
             )
         else:
@@ -2306,6 +2804,27 @@ def main() -> None:
 
     if show_progress and hasattr(epoch_progress, "close"):
         epoch_progress.close()
+
+    # --------------------------------------------------------
+    # Final checkpoint selection:
+    # provisional rollout Top-K -> 200 eps/source re-ranking
+    # --------------------------------------------------------
+    if rollout_configs is not None:
+        finalize_rollout_checkpoint_selection(
+            model,
+            rollout_configs,
+            output_dir=cli.output_dir,
+            device=device,
+            top_k=cli.final_rollout_top_k,
+            episodes=cli.final_rollout_episodes,
+            provisional_seed_base=(
+                cli.rollout_eval_seed_base
+            ),
+            seed_base=(
+                cli.final_rollout_seed_base
+            ),
+            show_progress=show_progress,
+        )
 
     progress_write(
         f"done best_combined={best_combined:.6f} "

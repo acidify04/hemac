@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""Train ONE heterogeneous HiSSD + one shared agent-conditioned skill adapter.
+"""Train ONE heterogeneous HiSSD + shared agent-conditioned adapter FROM SCRATCH.
 
 Source configurations:
     D3O1 and D4O2
+
+This is the initialization ablation for the BC-initialized joint HiSSD+Adapter
+trainer. It keeps the same synchronized data, objectives, role-specific I/O,
+shared HiSSD stack, and adapter architecture, but loads NO BC checkpoint.
 
 Architecture:
     role-specific observation encoder E_r(o_i) -> h_i
@@ -23,13 +27,14 @@ Important:
   trajectory distribution in the newly collected source datasets.
 - Early stopping is OFF by default. Checkpoints are still selected by validation.
 - During task warmup, encoded role features are detached before the task-skill
-  branch so the BC-initialized role observation encoders are not changed by the
-  auxiliary task loss alone.
+  branch exactly as in the matched BC-initialized trainer.
+- Role-specific observation encoders and action decoders are randomly initialized.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import sys
 from collections import defaultdict
@@ -51,6 +56,7 @@ if str(PROJECT_SRC) not in sys.path:
 from skill_discovery import train_hissd_hetero_baseline as base
 from skill_discovery import train_hissd_multisource as multi
 from skill_discovery.dataset import create_dataloader
+from skill_discovery import evaluate_hissd_joint_hetero_adapter_zero_shot as rollout_eval
 from skill_discovery.hissd_joint_hetero_adapter_models import (
     JointHeterogeneousAdapterHiSSD,
 )
@@ -74,8 +80,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--manifest-42", type=Path, required=True)
     p.add_argument("--data-root-42", type=Path, required=True)
 
-    p.add_argument("--drone-bc-checkpoint", type=Path, required=True)
-    p.add_argument("--observer-bc-checkpoint", type=Path, required=True)
     p.add_argument("--output-dir", type=Path, required=True)
 
     p.add_argument("--epochs", type=int, default=70)
@@ -97,10 +101,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--balanced-sampling",
         action=argparse.BooleanOptionalAction,
-        default=False,
+        default=True,
         help=(
-            "Outcome-balanced sampling within each source. Default=False so "
-            "natural rollout frequencies are preserved."
+            "Outcome-balanced sampling within each source. Default=True to match "
+            "the current Joint HiSSD scratch / BC-initialized comparison runs."
         ),
     )
 
@@ -126,6 +130,48 @@ def parse_args() -> argparse.Namespace:
 
     p.add_argument("--max-train-batches", type=int)
     p.add_argument("--max-val-batches", type=int)
+    p.add_argument(
+        "--rollout-eval-every",
+        type=int,
+        default=5,
+        help=(
+            "Run source-only D3O1/D4O2 mission rollouts every N epochs. "
+            "0 disables rollout diagnostics. Rollouts never affect checkpoint selection."
+        ),
+    )
+    p.add_argument(
+        "--rollout-eval-episodes",
+        type=int,
+        default=20,
+        help="Episodes per source population for each rollout diagnostic.",
+    )
+    p.add_argument(
+        "--rollout-eval-seed-base",
+        type=int,
+        default=200_000_000,
+        help=(
+            "Fixed diagnostic seed base, separate from final zero-shot evaluation "
+            "(which uses 100000000)."
+        ),
+    )
+    p.add_argument(
+        "--resume-checkpoint",
+        type=Path,
+        default=None,
+        help=(
+            "Resume model + optimizer from a scratch Joint HiSSD+Adapter checkpoint. "
+            "Training continues from checkpoint_epoch + 1; --epochs is the final total epoch."
+        ),
+    )
+    p.add_argument(
+        "--resume-lr-scale",
+        type=float,
+        default=1.0,
+        help=(
+            "Multiply every optimizer param-group learning rate after loading the resume checkpoint. "
+            "Use 0.3 for low-LR continuation."
+        ),
+    )
     p.add_argument("--no-progress", action="store_true")
     return p.parse_args()
 
@@ -1361,7 +1407,6 @@ def save_checkpoint(
     train_by_source: Mapping[str, Mapping[str, float]],
     val_metrics: Mapping[str, float],
     val_by_source: Mapping[str, Mapping[str, float]],
-    bc_reports: Mapping[str, Mapping[str, Any]],
     adapter_metrics: Mapping[str, float],
     population_counts: Mapping[str, Mapping[str, int]],
 ) -> None:
@@ -1377,6 +1422,7 @@ def save_checkpoint(
                 "agent_conditioned_adapter"
             ),
             "model_config": model.config(),
+            "training_variant": "scratch_no_bc_initialization",
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "epoch": int(epoch),
@@ -1407,21 +1453,15 @@ def save_checkpoint(
                 "role_balanced_action_loss": True,
                 "role_balanced_planner_local_loss": True,
             },
-            "bc_initialization": {
-                role: {
-                    "checkpoint": str(
-                        cli.drone_bc_checkpoint
-                        if role == "drone"
-                        else cli.observer_bc_checkpoint
-                    ),
-                    "epoch": bc_reports[
-                        role
-                    ].get("epoch"),
-                    "metrics": bc_reports[
-                        role
-                    ].get("metrics", {}),
-                }
-                for role in ROLE_ORDER
+            "initialization": "scratch",
+            "bc_initialization": None,
+            "resume": {
+                "checkpoint": (
+                    str(cli.resume_checkpoint)
+                    if cli.resume_checkpoint is not None
+                    else None
+                ),
+                "lr_scale": float(cli.resume_lr_scale),
             },
             "adapter_metrics": dict(
                 adapter_metrics
@@ -1480,6 +1520,186 @@ def save_checkpoint(
     )
 
 
+
+def role_config_from_sample(
+    sample: Mapping[str, Any],
+    role: str,
+) -> dict[str, Any]:
+    """Infer the matched role I/O architecture directly from offline data."""
+    payload = sample[role]
+    observations = payload["observations"]
+    actions = payload["actions"]
+    return {
+        "global_map_channels": int(
+            observations["global_map"].shape[-3]
+        ),
+        "local_map_channels": int(
+            observations["local_map"].shape[-3]
+        ),
+        "global_map_size": tuple(
+            int(x)
+            for x in observations["global_map"].shape[-2:]
+        ),
+        "local_map_size": tuple(
+            int(x)
+            for x in observations["local_map"].shape[-2:]
+        ),
+        "action_history_shape": tuple(
+            int(x)
+            for x in observations["action_history"].shape[-2:]
+        ),
+        # Match the role encoders used in the BC-initialized runs.
+        "hidden_sizes": (96, 96),
+        "activation": "relu",
+        "action_dim": int(actions.shape[-1]),
+    }
+
+
+def validate_role_schemas_from_data(
+    datasets: Mapping[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Require D3O1/D4O2 to expose the same per-role I/O schema."""
+    configs_by_source: dict[
+        str, dict[str, dict[str, Any]]
+    ] = {}
+    for source_name, dataset in datasets.items():
+        sample = dataset[0]
+        configs_by_source[source_name] = {
+            role: role_config_from_sample(sample, role)
+            for role in ROLE_ORDER
+        }
+
+    reference_name = next(iter(configs_by_source))
+    reference = configs_by_source[reference_name]
+    for source_name, config in configs_by_source.items():
+        if config != reference:
+            raise ValueError(
+                "D3O1/D4O2 role observation/action schemas differ: "
+                f"{reference_name}={reference}, "
+                f"{source_name}={config}"
+            )
+    return reference
+
+
+
+def build_source_rollout_configs(
+    cli: argparse.Namespace,
+) -> dict[str, dict[str, Any]]:
+    """Build canonical D1 source environments for diagnostics only."""
+    _, template31 = rollout_eval.load_env_template(
+        cli.data_root_31
+    )
+    _, template42 = rollout_eval.load_env_template(
+        cli.data_root_42
+    )
+    return {
+        "D3O1": rollout_eval.build_target_config(
+            template31,
+            difficulty=1,
+            n_drones=3,
+            n_observers=1,
+        ),
+        "D4O2": rollout_eval.build_target_config(
+            template42,
+            difficulty=1,
+            n_drones=4,
+            n_observers=2,
+        ),
+    }
+
+
+@torch.inference_mode()
+def evaluate_source_rollouts(
+    model: JointHeterogeneousAdapterHiSSD,
+    rollout_configs: Mapping[str, Mapping[str, Any]],
+    *,
+    device: torch.device,
+    episodes: int,
+    seed_base: int,
+    epoch: int | None = None,
+    show_progress: bool = False,
+) -> dict[str, dict[str, float]]:
+    """Evaluate true mission success on source populations with fixed seeds."""
+    was_training = model.training
+    model.eval()
+    progress = None
+    if tqdm is not None and show_progress:
+        progress = tqdm(
+            total=int(episodes) * len(rollout_configs),
+            desc=f"epoch {epoch or '?'} rollout",
+            unit="episode",
+            dynamic_ncols=True,
+            leave=False,
+            position=1,
+        )
+    try:
+        results: dict[str, dict[str, float]] = {}
+        for source_name, config in rollout_configs.items():
+            records = []
+            for episode_index in range(int(episodes)):
+                records.append(rollout_eval.run_episode(
+                    config,
+                    model,
+                    seed=int(seed_base)
+                    + 100_000
+                    + episode_index,
+                    difficulty=1,
+                    device=device,
+                ))
+                if progress is not None:
+                    progress.update(1)
+                    progress.set_postfix(
+                        source=source_name,
+                        refresh=False,
+                    )
+            results[source_name] = (
+                rollout_eval.aggregate(records)
+            )
+        return results
+    finally:
+        if progress is not None:
+            progress.close()
+        model.train(was_training)
+
+
+def append_rollout_history(
+    output_dir: Path,
+    *,
+    epoch: int,
+    results: Mapping[str, Mapping[str, float]],
+    episodes: int,
+    seed_base: int,
+) -> None:
+    payload = {
+        "epoch": int(epoch),
+        "episodes_per_source": int(episodes),
+        "seed_base": int(seed_base),
+        "seed_formula": (
+            "seed_base + 100000 + episode_index"
+        ),
+        "sources": {
+            name: {
+                key: float(value)
+                for key, value in metrics.items()
+            }
+            for name, metrics in results.items()
+        },
+    }
+    path = (
+        output_dir
+        / "source_rollout_history.jsonl"
+    )
+    with path.open(
+        "a", encoding="utf-8"
+    ) as handle:
+        handle.write(
+            json.dumps(
+                payload, sort_keys=True
+            )
+            + "\n"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -1506,6 +1726,18 @@ def main() -> None:
     if cli.early_stopping_patience < 0:
         raise ValueError(
             "--early-stopping-patience cannot be negative."
+        )
+    if cli.rollout_eval_every < 0:
+        raise ValueError(
+            "--rollout-eval-every cannot be negative."
+        )
+    if cli.rollout_eval_episodes <= 0:
+        raise ValueError(
+            "--rollout-eval-episodes must be positive."
+        )
+    if not math.isfinite(cli.resume_lr_scale) or cli.resume_lr_scale <= 0:
+        raise ValueError(
+            "--resume-lr-scale must be finite and positive."
         )
 
     args = configure_training_args(cli)
@@ -1611,14 +1843,11 @@ def main() -> None:
         descriptor_scale.tolist()
     )
 
-    model, bc_reports = (
-        JointHeterogeneousAdapterHiSSD.from_bc_checkpoints(
-            drone_checkpoint=(
-                cli.drone_bc_checkpoint
-            ),
-            observer_checkpoint=(
-                cli.observer_bc_checkpoint
-            ),
+    role_configs = validate_role_schemas_from_data(
+        train_datasets
+    )
+    model = JointHeterogeneousAdapterHiSSD(
+            role_configs=role_configs,
             central_map_channels=int(
                 central_shape[-3]
             ),
@@ -1670,9 +1899,7 @@ def main() -> None:
             direct_task_summary=False,
             task_action_residual=False,
             skill_structure="split",
-        )
-    )
-    model = model.to(device)
+        ).to(device)
 
     population_counts = (
         validate_joint_source_compatibility(
@@ -1728,14 +1955,48 @@ def main() -> None:
             "Adapter is not identity at initialization: "
             f"{init_diag['adapter_identity_error']:.3e}"
         )
-    for role in ROLE_ORDER:
-        error = init_diag[
-            f"{role}_bc_action_max_difference"
-        ]
-        if error > 1e-6:
-            raise RuntimeError(
-                f"{role} joint policy does not preserve BC "
-                f"actions at initialization: {error:.3e}"
+
+    resume_payload = None
+    start_epoch = 1
+    loaded_resume_lrs = None
+    if cli.resume_checkpoint is not None:
+        resume_path = cli.resume_checkpoint.expanduser().resolve()
+        resume_payload = torch.load(
+            resume_path,
+            map_location=device,
+            weights_only=False,
+        )
+        expected_type = (
+            "hemac_joint_heterogeneous_hissd_"
+            "agent_conditioned_adapter"
+        )
+        if resume_payload.get("model_type") != expected_type:
+            raise ValueError(
+                "Resume checkpoint model_type mismatch: "
+                f"{resume_payload.get('model_type')!r} != {expected_type!r}"
+            )
+        if resume_payload.get("training_variant") not in (
+            None,
+            "scratch_no_bc_initialization",
+        ):
+            raise ValueError(
+                "Resume checkpoint is not a scratch Joint HiSSD+Adapter run: "
+                f"training_variant={resume_payload.get('training_variant')!r}"
+            )
+        if resume_payload.get("model_config") != model.config():
+            raise ValueError(
+                "Resume checkpoint model_config does not match the current model config."
+            )
+        model.load_state_dict(resume_payload["model_state_dict"])
+        optimizer.load_state_dict(resume_payload["optimizer_state_dict"])
+        loaded_resume_lrs = [float(g["lr"]) for g in optimizer.param_groups]
+        for group in optimizer.param_groups:
+            group["lr"] = float(group["lr"]) * float(cli.resume_lr_scale)
+        start_epoch = int(resume_payload["epoch"]) + 1
+        if start_epoch > cli.epochs:
+            raise ValueError(
+                f"Resume checkpoint is epoch {start_epoch - 1}, but --epochs={cli.epochs}. "
+                "Set --epochs to the desired final total epoch, e.g. 100 or 120."
             )
 
     cli.output_dir.mkdir(
@@ -1788,7 +2049,7 @@ def main() -> None:
     )
     print(
         f"outcome_balanced_sampling={cli.balanced_sampling} "
-        f"(False preserves natural source rollout frequencies)",
+        f"(True matches current comparison protocol)",
         flush=True,
     )
     print(
@@ -1798,18 +2059,24 @@ def main() -> None:
         f"adapter_params={adapter_params:,}",
         flush=True,
     )
-    print(
-        "BC initialization "
-        f"drone_epoch={bc_reports['drone'].get('epoch')} "
-        f"observer_epoch={bc_reports['observer'].get('epoch')} "
-        f"drone_action_diff="
-        f"{init_diag['drone_bc_action_max_difference']:.3e} "
-        f"observer_action_diff="
-        f"{init_diag['observer_bc_action_max_difference']:.3e} "
-        f"adapter_identity="
-        f"{init_diag['adapter_identity_error']:.3e}",
-        flush=True,
-    )
+    if resume_payload is None:
+        print(
+            "initialization=scratch "
+            "(NO BC checkpoint; role encoders/action decoders random-init) "
+            f"adapter_identity={init_diag['adapter_identity_error']:.3e}",
+            flush=True,
+        )
+    else:
+        print(
+            "resume="
+            f"{cli.resume_checkpoint} "
+            f"checkpoint_epoch={start_epoch - 1} "
+            f"next_epoch={start_epoch} final_epoch={cli.epochs} "
+            f"lr_before={loaded_resume_lrs} "
+            f"lr_scale={cli.resume_lr_scale} "
+            f"lr_after={[float(g['lr']) for g in optimizer.param_groups]}",
+            flush=True,
+        )
     print(
         "architecture="
         "role_specific_obs_encoder + "
@@ -1833,8 +2100,26 @@ def main() -> None:
         flush=True,
     )
 
+    rollout_configs = None
+    if cli.rollout_eval_every > 0:
+        rollout_configs = (
+            build_source_rollout_configs(cli)
+        )
+        print(
+            "source_rollout_diagnostics="
+            f"every_{cli.rollout_eval_every}_epochs "
+            f"episodes={cli.rollout_eval_episodes}/source "
+            f"seed_base={cli.rollout_eval_seed_base} "
+            "sources=D3O1,D4O2 checkpoint_selection=OFF",
+            flush=True,
+        )
+
     best_combined = math.inf
     best_task = math.inf
+
+    best_action = math.inf
+    best_action_epoch = 0
+
     best_task_epoch = 0
     no_improve = 0
     aux_enabled = bool(
@@ -1842,16 +2127,40 @@ def main() -> None:
         or args.task_contrastive_enabled
     )
 
+    if resume_payload is not None:
+        best_path = cli.output_dir / "hissd_joint_adapter_scratch_best.pt"
+        best_task_path = cli.output_dir / "hissd_joint_adapter_scratch_best_task.pt"
+        if best_path.exists():
+            old_best = torch.load(best_path, map_location="cpu", weights_only=False)
+            old_val = old_best.get("validation_metrics")
+            if old_val is not None:
+                best_combined, _ = base.validation_losses(old_val, args)
+        if best_task_path.exists():
+            old_best_task = torch.load(best_task_path, map_location="cpu", weights_only=False)
+            old_val = old_best_task.get("validation_metrics")
+            if old_val is not None:
+                old_combined, old_task = base.validation_losses(old_val, args)
+                best_task = old_task if aux_enabled else old_combined
+                best_task_epoch = int(old_best_task.get("epoch", 0))
+        print(
+            f"resume_best_state: best_combined={best_combined:.6f} "
+            f"best_task={best_task:.6f}@{best_task_epoch}",
+            flush=True,
+        )
+
     # Fixed batch: adapter magnitude is comparable across epochs.
     diagnostic_raw_batch = initial_raw_batch
 
     show_progress = tqdm is not None and not cli.no_progress
-    epoch_progress = range(1, cli.epochs + 1)
+    epoch_progress = range(start_epoch, cli.epochs + 1)
     if show_progress:
         epoch_progress = tqdm(
             epoch_progress,
-            total=cli.epochs,
-            desc="joint heterogeneous HiSSD adapter",
+            total=max(cli.epochs - start_epoch + 1, 0),
+            desc=(
+                "joint HiSSD scratch/resume "
+                f"({start_epoch}-{cli.epochs})"
+            ),
             unit="epoch",
             dynamic_ncols=True,
             position=0,
@@ -1877,10 +2186,7 @@ def main() -> None:
             show_progress=show_progress,
         )
 
-        (
-            val_metrics,
-            val_by_source,
-        ) = validate_all_sources(
+        val_metrics, val_by_source = validate_all_sources(
             model,
             val_loaders,
             device,
@@ -1895,11 +2201,41 @@ def main() -> None:
             )
         )
 
+        action_val = float(val_metrics["action_mse"])
+
         adapter_metrics = adapter_diagnostics(
             model,
             diagnostic_raw_batch,
             device,
         )
+
+        rollout_results = None
+        should_rollout = (
+            rollout_configs is not None
+            and (
+                epoch % cli.rollout_eval_every == 0
+                or epoch == cli.epochs
+            )
+        )
+        if should_rollout:
+            rollout_results = (
+                evaluate_source_rollouts(
+                    model,
+                    rollout_configs,
+                    device=device,
+                    episodes=cli.rollout_eval_episodes,
+                    seed_base=cli.rollout_eval_seed_base,
+                    epoch=epoch,
+                    show_progress=show_progress,
+                )
+            )
+            append_rollout_history(
+                cli.output_dir,
+                epoch=epoch,
+                results=rollout_results,
+                episodes=cli.rollout_eval_episodes,
+                seed_base=cli.rollout_eval_seed_base,
+            )
 
         line = (
             f"epoch={epoch:03d} "
@@ -1916,17 +2252,32 @@ def main() -> None:
                 in val_by_source.items()
             )
         )
+        if rollout_results is not None:
+            s31 = rollout_results["D3O1"]["success"]
+            s42 = rollout_results["D4O2"]["success"]
+            source_success = 0.5 * (s31 + s42)
+            line += (
+                f" rollout[D3O1_succ={s31:.3f} "
+                f"D4O2_succ={s42:.3f} "
+                f"mean_succ={source_success:.3f} "
+                f"D3O1_crash="
+                f"{rollout_results['D3O1']['fatal_crash']:.3f} "
+                f"D4O2_crash="
+                f"{rollout_results['D4O2']['fatal_crash']:.3f}]"
+            )
         progress_write(line)
         if show_progress and hasattr(epoch_progress, "set_postfix"):
-            epoch_progress.set_postfix(
-                train=f"{train_metrics['action_mse']:.4f}",
-                val=f"{val_metrics['action_mse']:.4f}",
-                refresh=False,
-            )
+            postfix = {
+                "train": f"{train_metrics['action_mse']:.4f}",
+                "val": f"{val_metrics['action_mse']:.4f}",
+            }
+            if rollout_results is not None:
+                postfix["success"] = f"{source_success:.3f}"
+            epoch_progress.set_postfix(postfix, refresh=False)
 
         save_checkpoint(
             cli.output_dir
-            / "hissd_joint_adapter_last.pt",
+            / "hissd_joint_adapter_scratch_last.pt",
             model,
             optimizer,
             epoch=epoch,
@@ -1936,16 +2287,14 @@ def main() -> None:
             train_by_source=train_by_source,
             val_metrics=val_metrics,
             val_by_source=val_by_source,
-            bc_reports=bc_reports,
             adapter_metrics=adapter_metrics,
             population_counts=population_counts,
         )
 
-        if combined_loss < best_combined:
-            best_combined = combined_loss
+        if rollout_results is not None and not task_only:
             save_checkpoint(
                 cli.output_dir
-                / "hissd_joint_adapter_best.pt",
+                / f"hissd_joint_adapter_scratch_rollout_epoch_{epoch:03d}.pt",
                 model,
                 optimizer,
                 epoch=epoch,
@@ -1955,7 +2304,44 @@ def main() -> None:
                 train_by_source=train_by_source,
                 val_metrics=val_metrics,
                 val_by_source=val_by_source,
-                bc_reports=bc_reports,
+                adapter_metrics=adapter_metrics,
+                population_counts=population_counts,
+            )
+
+        if combined_loss < best_combined:
+            best_combined = combined_loss
+            save_checkpoint(
+                cli.output_dir
+                / "hissd_joint_adapter_scratch_best.pt",
+                model,
+                optimizer,
+                epoch=epoch,
+                args=args,
+                cli=cli,
+                train_metrics=train_metrics,
+                train_by_source=train_by_source,
+                val_metrics=val_metrics,
+                val_by_source=val_by_source,
+                adapter_metrics=adapter_metrics,
+                population_counts=population_counts,
+            )
+
+        if action_val < best_action:
+            best_action = action_val
+            best_action_epoch = epoch
+
+            save_checkpoint(
+                cli.output_dir
+                / "hissd_joint_adapter_scratch_best_action.pt",
+                model,
+                optimizer,
+                epoch=epoch,
+                args=args,
+                cli=cli,
+                train_metrics=train_metrics,
+                train_by_source=train_by_source,
+                val_metrics=val_metrics,
+                val_by_source=val_by_source,
                 adapter_metrics=adapter_metrics,
                 population_counts=population_counts,
             )
@@ -1971,7 +2357,7 @@ def main() -> None:
             no_improve = 0
             save_checkpoint(
                 cli.output_dir
-                / "hissd_joint_adapter_best_task.pt",
+                / "hissd_joint_adapter_scratch_best_task.pt",
                 model,
                 optimizer,
                 epoch=epoch,
@@ -1981,7 +2367,6 @@ def main() -> None:
                 train_by_source=train_by_source,
                 val_metrics=val_metrics,
                 val_by_source=val_by_source,
-                bc_reports=bc_reports,
                 adapter_metrics=adapter_metrics,
                 population_counts=population_counts,
             )

@@ -1,13 +1,13 @@
-"""Joint heterogeneous behavior-cloning baseline for HeMAC.
+"""Decentralized heterogeneous behavior-cloning baseline for HeMAC.
 
-Role-specific CNN encoders map Drone/Observer observations to the same feature
-width. A shared permutation-equivariant Transformer then mixes the current
-features of all active agents. Role-specific heads decode normalized actions.
+Each agent action is computed only from that agent's own actor observation:
+    h_i = E_role(o_i)
+    a_i = tanh(H_role(h_i))
 
-There is no skill encoder, value function, planner, task loss, adapter, agent ID,
-or population-size embedding.
+No cross-agent Transformer is used. Environment-provided teammate positions,
+shared explored regions, and known enemy positions already contained in o_i
+remain valid inputs.
 """
-
 from __future__ import annotations
 
 import copy
@@ -24,14 +24,10 @@ ROLE_ORDER = ("observer", "drone")
 
 def _normalise_role_config(config: Mapping[str, Any]) -> dict[str, Any]:
     required = {
-        "global_map_channels",
-        "local_map_channels",
-        "global_map_size",
-        "local_map_size",
-        "action_history_shape",
-        "hidden_sizes",
-        "activation",
-        "action_dim",
+        "global_map_channels", "local_map_channels",
+        "global_map_size", "local_map_size",
+        "action_history_shape", "hidden_sizes",
+        "activation", "action_dim",
     }
     missing = sorted(required.difference(config))
     if missing:
@@ -48,18 +44,8 @@ def _normalise_role_config(config: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-class JointBehaviorCloningPolicy(nn.Module):
-    """Joint BC with role-specific I/O and one shared agent-interaction block."""
-
-    def __init__(
-        self,
-        role_configs: Mapping[str, Mapping[str, Any]],
-        *,
-        joint_heads: int = 4,
-        joint_layers: int = 1,
-        joint_ff_dim: int | None = None,
-        dropout: float = 0.0,
-    ) -> None:
+class DecentralizedBehaviorCloningPolicy(nn.Module):
+    def __init__(self, role_configs: Mapping[str, Mapping[str, Any]]) -> None:
         super().__init__()
         self.role_configs = {
             role: _normalise_role_config(role_configs[role])
@@ -76,15 +62,6 @@ class JointBehaviorCloningPolicy(nn.Module):
         if len(set(dims.values())) != 1:
             raise ValueError(f"Role encoders must share output width, got {dims}")
         self.feature_dim = int(next(iter(dims.values())))
-        self.joint_heads = int(joint_heads)
-        self.joint_layers = int(joint_layers)
-        self.joint_ff_dim = int(joint_ff_dim or (2 * self.feature_dim))
-        self.dropout = float(dropout)
-
-        if self.feature_dim % self.joint_heads != 0:
-            raise ValueError(
-                f"feature_dim={self.feature_dim} must be divisible by joint_heads={self.joint_heads}"
-            )
 
         self.observation_encoder = nn.ModuleDict({
             role: DroneObservationEncoder(
@@ -98,22 +75,6 @@ class JointBehaviorCloningPolicy(nn.Module):
             )
             for role, cfg in self.role_configs.items()
         })
-
-        layer = nn.TransformerEncoderLayer(
-            d_model=self.feature_dim,
-            nhead=self.joint_heads,
-            dim_feedforward=self.joint_ff_dim,
-            dropout=self.dropout,
-            activation="relu",
-            batch_first=True,
-            norm_first=True,
-        )
-        self.joint_encoder = nn.TransformerEncoder(
-            layer,
-            num_layers=self.joint_layers,
-            norm=nn.LayerNorm(self.feature_dim),
-        )
-
         self.action_head = nn.ModuleDict({
             role: nn.Linear(self.feature_dim, cfg["action_dim"])
             for role, cfg in self.role_configs.items()
@@ -123,15 +84,13 @@ class JointBehaviorCloningPolicy(nn.Module):
             nn.init.zeros_(head.bias)
 
     def config(self) -> dict[str, Any]:
-        return {
-            "role_configs": copy.deepcopy(self.role_configs),
-            "joint_heads": self.joint_heads,
-            "joint_layers": self.joint_layers,
-            "joint_ff_dim": self.joint_ff_dim,
-            "dropout": self.dropout,
-        }
+        return {"role_configs": copy.deepcopy(self.role_configs)}
 
-    def encode_role(self, role: str, observations: Mapping[str, torch.Tensor]) -> torch.Tensor:
+    def encode_role(
+        self,
+        role: str,
+        observations: Mapping[str, torch.Tensor],
+    ) -> torch.Tensor:
         enc = self.observation_encoder[role]
         return enc(
             observations["global_map"],
@@ -144,7 +103,10 @@ class JointBehaviorCloningPolicy(nn.Module):
         observations_by_role: Mapping[str, Mapping[str, torch.Tensor]],
         valid_masks_by_role: Mapping[str, torch.Tensor],
     ) -> tuple[torch.Tensor, torch.Tensor, dict[str, slice]]:
-        features = {role: self.encode_role(role, observations_by_role[role]) for role in ROLE_ORDER}
+        features = {
+            role: self.encode_role(role, observations_by_role[role])
+            for role in ROLE_ORDER
+        }
         prefix = features[ROLE_ORDER[0]].shape[:-2]
         width = features[ROLE_ORDER[0]].shape[-1]
 
@@ -164,30 +126,8 @@ class JointBehaviorCloningPolicy(nn.Module):
             xs.append(x)
             ms.append(m)
 
+        # Concatenation is bookkeeping only; there is no cross-agent operation.
         return torch.cat(xs, dim=-2), torch.cat(ms, dim=-1), role_slices
-
-    def mix_agents(self, joint_features: torch.Tensor, valid_mask: torch.Tensor) -> torch.Tensor:
-        """Mix agents independently at each leading batch/time position."""
-        if joint_features.shape[:-1] != valid_mask.shape:
-            raise ValueError("joint feature/mask shape mismatch")
-        leading = joint_features.shape[:-2]
-        agent_count = joint_features.shape[-2]
-        flat_x = joint_features.reshape(-1, agent_count, self.feature_dim)
-        flat_valid = valid_mask.reshape(-1, agent_count).bool()
-
-        # Transformer softmax is undefined if every key is masked. Padded time
-        # rows are temporarily given one unmasked zero token, then zeroed again.
-        padding_mask = ~flat_valid
-        all_invalid = ~flat_valid.any(dim=1)
-        if all_invalid.any():
-            padding_mask = padding_mask.clone()
-            padding_mask[all_invalid, 0] = False
-            flat_x = flat_x.clone()
-            flat_x[all_invalid, 0] = 0.0
-
-        mixed = self.joint_encoder(flat_x, src_key_padding_mask=padding_mask)
-        mixed = mixed * flat_valid.unsqueeze(-1).to(mixed.dtype)
-        return mixed.reshape(*leading, agent_count, self.feature_dim)
 
     def forward_joint(
         self,
@@ -197,30 +137,37 @@ class JointBehaviorCloningPolicy(nn.Module):
         features, valid_mask, role_slices = self.encode_joint(
             observations_by_role, valid_masks_by_role
         )
-        mixed = self.mix_agents(features, valid_mask)
         actions = {
-            role: torch.tanh(self.action_head[role](mixed[..., sl, :]))
+            role: torch.tanh(self.action_head[role](features[..., sl, :]))
             for role, sl in role_slices.items()
         }
         return {
             "actions": actions,
             "observation_features": features,
-            "joint_features": mixed,
+            "joint_features": features,  # compatibility; not mixed
             "valid_mask": valid_mask,
             "role_slices": role_slices,
         }
 
 
-def load_joint_bc_checkpoint(
+def load_decentralized_bc_checkpoint(
     checkpoint_path: str | Path,
     device: torch.device,
-) -> tuple[JointBehaviorCloningPolicy, dict[str, Any]]:
+) -> tuple[DecentralizedBehaviorCloningPolicy, dict[str, Any]]:
     checkpoint_path = Path(checkpoint_path).expanduser().resolve()
-    payload = torch.load(checkpoint_path, map_location=device, weights_only=False)
-    if payload.get("model_type") != "hemac_joint_behavior_cloning":
+    payload = torch.load(
+        checkpoint_path,
+        map_location=device,
+        weights_only=False,
+    )
+    expected = "hemac_decentralized_behavior_cloning"
+    if payload.get("model_type") != expected:
         raise ValueError(
-            f"Not a joint BC checkpoint: model_type={payload.get('model_type')!r}"
+            f"Not a decentralized BC checkpoint: "
+            f"model_type={payload.get('model_type')!r}, expected={expected!r}"
         )
-    model = JointBehaviorCloningPolicy(**payload["model_config"]).to(device)
+    model = DecentralizedBehaviorCloningPolicy(
+        **payload["model_config"]
+    ).to(device)
     model.load_state_dict(payload["model_state_dict"])
     return model, payload
