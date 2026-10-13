@@ -1,10 +1,10 @@
 """
-새 학습: python src/train/train.py --num-iterations 1000
-Drone-only MAPPO: python src/train/train.py --drone-only --drone-success-coverage-ratio 0.6
+새 heterogeneous drone 학습: python src/train/train.py --num-iterations 1000
 최신 체크포인트 재개: python src/train/train.py --resume-from latest
-특정 체크포인트 재개: python src/train/train.py --load-checkpoint src/train/hemac_checkpoints/checkpoint_07300
+특정 체크포인트 재개: python src/train/train.py --load-checkpoint <checkpoint_dir>
 """
 import argparse
+import importlib
 import logging
 import pickle
 from collections import deque
@@ -21,7 +21,6 @@ from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.utils.checkpoints import get_checkpoint_info
 from ray.rllib.utils.schedules import PiecewiseSchedule
-import wandb
 from PIL import Image
 
 PROJECT_SRC = Path(__file__).resolve().parents[1]
@@ -44,11 +43,22 @@ from hemac.rllib_policy import (
 
 DRONE_START_POSITIONS = [
     [130.0, 870.0, 5.0],
-    [130.0, 830.0, 5.0],
     [170.0, 870.0, 5.0],
-    [170.0, 830.0, 5.0],
-    # [150.0, 830.0, 5.0],
+    [150.0, 830.0, 5.0],
 ]
+DRONE_TYPES = ["A", "B", "B"]
+DRONE_TYPE_CONFIGS = {
+    "A": {
+        "max_speed": 10.0,
+        "sensing_range": 100.0,
+        "icon": "drone_A.png",
+    },
+    "B": {
+        "max_speed": 25.0,
+        "sensing_range": 40.0,
+        "icon": "drone_B.png",
+    },
+}
 
 GOAL_CONFIG = {
     "speed": 0,
@@ -84,14 +94,92 @@ CURRICULUM_COVERAGE_LEVELS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 CURRICULUM_PROMOTION_SUCCESS_RATE = 0.8
 CURRICULUM_STABILITY_WINDOW = 3
 CURRENT_DRONE_SUCCESS_MIN_COVERAGE_RATIO = CURRICULUM_COVERAGE_LEVELS[0]
-DEFAULT_CHECKPOINT_DIR = TRAIN_DIR / "hemac_checkpoints-4-2"
+DEFAULT_CHECKPOINT_DIR = TRAIN_DIR / "hetero_drone_checkpoints"
 DEFAULT_WANDB_PROJECT = "HeMAC-RL"
-DEFAULT_WANDB_RUN_NAME = "MAPPO-Agent-Training-4-2"
+DEFAULT_WANDB_RUN_NAME = "MAPPO-Hetero-Drone-A1-B2"
 DEFAULT_NUM_ITERATIONS = 10_000_000_000
 DEFAULT_CHECKPOINT_INTERVAL = 100
 DEFAULT_NUM_GPUS = 1
 DEFAULT_DRONE_SUCCESS_COVERAGE_RATIO = 0.6
 CURRENT_OBSTACLE_DIFFICULTY = dict(OBSTACLE_CURRICULUM_LEVELS[0])
+KNOWN_POLICY_IDS = (
+    "observer_policy",
+    "drone_policy",
+    "drone_a_policy",
+    "drone_b_policy",
+)
+
+
+def resolve_num_gpus(requested_num_gpus):
+    """Use CUDA only when PyTorch can initialize the requested devices."""
+    requested_num_gpus = max(int(requested_num_gpus), 0)
+    if requested_num_gpus == 0:
+        return 0
+
+    try:
+        import torch
+    except (ImportError, OSError) as exc:
+        print(
+            "[warn] PyTorch CUDA detection failed; falling back to CPU "
+            f"({exc})."
+        )
+        return 0
+
+    try:
+        cuda_available = torch.cuda.is_available()
+        available_num_gpus = torch.cuda.device_count() if cuda_available else 0
+    except (RuntimeError, OSError) as exc:
+        print(
+            "[warn] CUDA initialization failed; falling back to CPU "
+            f"({exc})."
+        )
+        return 0
+
+    if available_num_gpus <= 0:
+        print(
+            "[warn] --num-gpus requested CUDA, but no usable GPU was found; "
+            "falling back to CPU. Check nvidia-smi to restore GPU training."
+        )
+        return 0
+
+    if requested_num_gpus > available_num_gpus:
+        print(
+            f"[warn] Requested {requested_num_gpus} GPU(s), but only "
+            f"{available_num_gpus} are available; using {available_num_gpus}."
+        )
+    return min(requested_num_gpus, available_num_gpus)
+
+
+def load_wandb(*, allow_disabled=False):
+    """Import WandB only when logging starts so env/model utilities remain usable."""
+    try:
+        return importlib.import_module("wandb")
+    except (ImportError, AttributeError) as exc:
+        if allow_disabled:
+            print(
+                "[warn] WandB import failed; training will continue without WandB "
+                f"logging ({exc})."
+            )
+            return DisabledWandb
+        raise RuntimeError(
+            "WandB could not be imported. Reinstall compatible wandb/protobuf "
+            "versions in the active environment before starting training."
+        ) from exc
+
+
+def drone_policy_id_for_agent(agent_id, env_config):
+    """Return the type-specific policy id for one configured drone."""
+    try:
+        drone_index = int(str(agent_id).rsplit("_", 1)[1])
+    except (IndexError, ValueError):
+        return "drone_policy"
+
+    drone_config = (env_config or {}).get("drone_config", {}) or {}
+    drone_types = list(drone_config.get("drone_types", []))
+    if not 0 <= drone_index < len(drone_types):
+        return "drone_policy"
+    drone_type = str(drone_types[drone_index]).strip().lower()
+    return f"drone_{drone_type}_policy"
 
 
 class CoverageCurriculum:
@@ -147,6 +235,25 @@ class CoverageCurriculum:
         self.stage_index += 1
         self.recent_success_rates.clear()
         return True
+
+
+class DisabledWandb:
+    """Minimal WandB-compatible sink for local runs without tracking."""
+
+    disabled = True
+
+    @staticmethod
+    def init(*args, **kwargs):
+        del args, kwargs
+        return None
+
+    @staticmethod
+    def log(*args, **kwargs):
+        del args, kwargs
+
+    @staticmethod
+    def finish(*args, **kwargs):
+        del args, kwargs
 
 
 class ObstacleDifficultyCurriculum:
@@ -466,7 +573,7 @@ def reset_policy_training_parameters(policy, start_timestep):
 def reset_curriculum_training_parameters(algo):
     """Reset trainable policy hyperparameters after a difficulty promotion."""
     policies = {}
-    for policy_id in ("observer_policy", "drone_policy"):
+    for policy_id in KNOWN_POLICY_IDS:
         try:
             policy = algo.get_policy(policy_id)
         except Exception:
@@ -587,6 +694,8 @@ def build_env_config(
             "drone_max_speed": 25,
             "drone_max_thrust": 8,
             "drones_starting_pos": DRONE_START_POSITIONS,
+            "drone_types": DRONE_TYPES,
+            "drone_type_configs": DRONE_TYPE_CONFIGS,
         },
         "min_obstacles": obstacle_difficulty["min_obstacles"],
         "max_obstacles": obstacle_difficulty["max_obstacles"],
@@ -596,7 +705,16 @@ def build_env_config(
         "goal_max_base_distance": obstacle_difficulty["goal_max_base_distance"],
         "poi_config": [GOAL_CONFIG],
         "drone_only_success_min_coverage_ratio": float(drone_success_coverage_ratio),
-        "drone_only_success_reward": 300.0,
+        "drone_only_success_reward": 200.0,
+        "drone_only_task_mode": (
+            "maximize_coverage" if drone_only else "threshold"
+        ),
+        "drone_exploration_reward_per_pixel": 1.0 / 5000.0,
+        "drone_exploration_reward_scale": 300.0,
+        "drone_goal_found_reward": 100.0,
+        "drone_step_penalty": 0.02,
+        "drone_proximity_penalty_scale": 0.2,
+        "drone_proximity_safe_radius": 75.0,
     }
     if render_mode is not None:
         env_config["render_mode"] = render_mode
@@ -658,10 +776,15 @@ def run_rollout(
 ):
     """Run one rollout and return its final info plus optional frames."""
     owns_env = env is None
+    algorithm_env_config = getattr(getattr(algo, "config", None), "env_config", {})
+    rollout_env_config = dict(env_config or algorithm_env_config or {})
     if env is None:
-        rollout_env_config = build_env_config(render_mode=render_mode)
-        if env_config:
-            rollout_env_config.update(env_config)
+        base_env_config = build_env_config(
+            render_mode=render_mode,
+            drone_only=True,
+        )
+        base_env_config.update(rollout_env_config)
+        rollout_env_config = base_env_config
         if render_mode is not None:
             rollout_env_config["render_mode"] = render_mode
         env = HeMAC_v0.env(**rollout_env_config)
@@ -686,7 +809,10 @@ def run_rollout(
                 if "observer" in agent_id:
                     policy_id = "observer_policy"
                 elif "drone" in agent_id:
-                    policy_id = "drone_policy"
+                    policy_id = drone_policy_id_for_agent(
+                        agent_id,
+                        env_config or rollout_env_config,
+                    )
                 else:
                     policy_id = None
 
@@ -747,7 +873,7 @@ def collect_visualization_video(algo, iteration, seed=VIDEO_SEED, env_config=Non
         return None
 
     gif_path = save_frames_as_gif(frames, iteration)
-    return wandb.Video(str(gif_path), format="gif")
+    return load_wandb().Video(str(gif_path), format="gif")
 
 
 def collect_eval_success_rate(
@@ -780,10 +906,12 @@ def collect_eval_metrics(
     """Run each evaluation rollout once and collect all episode-level rates."""
     successes = []
     crash_flags = []
+    goal_found_flags = []
+    coverage_ratios = []
     rollout_seeds = seeds if seeds is not None else [seed + episode_idx for episode_idx in range(num_episodes)]
-    rollout_env_config = build_env_config(render_mode=None)
-    if env_config:
-        rollout_env_config.update(env_config)
+    algorithm_env_config = getattr(getattr(algo, "config", None), "env_config", {})
+    rollout_env_config = build_env_config(render_mode=None, drone_only=True)
+    rollout_env_config.update(env_config or algorithm_env_config or {})
     rollout_env_config.pop("render_mode", None)
     env = HeMAC_v0.env(**rollout_env_config)
     try:
@@ -795,14 +923,19 @@ def collect_eval_metrics(
                 capture_frames=False,
                 explore=explore,
                 env=env,
+                env_config=rollout_env_config,
             )
             successes.append(1.0 if final_info.get("success", False) else 0.0)
             crash_flags.append(1.0 if final_info.get("drone_crash", False) else 0.0)
+            goal_found_flags.append(1.0 if final_info.get("goal_found", False) else 0.0)
+            coverage_ratios.append(float(final_info.get("coverage_ratio", 0.0)))
     finally:
         env.close()
     return {
         "success_rate": float(np.mean(successes)) if successes else 0.0,
         "drone_crash_rate": float(np.mean(crash_flags)) if crash_flags else 0.0,
+        "goal_found_rate": float(np.mean(goal_found_flags)) if goal_found_flags else 0.0,
+        "coverage_ratio": float(np.mean(coverage_ratios)) if coverage_ratios else 0.0,
     }
 
 
@@ -924,32 +1057,38 @@ def restore_algorithm_with_sampling_config(checkpoint_dir, args):
         raise TypeError(f"Checkpoint does not contain a valid config: {state_path}")
 
     policies = getattr(checkpoint_config, "policies", {}) or {}
-    drone_policy_spec = policies.get("drone_policy")
-    if isinstance(drone_policy_spec, (tuple, list)) and len(drone_policy_spec) >= 4:
-        drone_policy_config = drone_policy_spec[3] or {}
-    else:
-        drone_policy_config = getattr(drone_policy_spec, "config", {}) or {}
-    checkpoint_drone_model = (
-        drone_policy_config.get("model", {}).get("custom_model")
-        if isinstance(drone_policy_config, dict)
-        else None
-    )
-    checkpoint_model_version = (
-        drone_policy_config.get("model", {})
-        .get("custom_model_config", {})
-        .get("mappo_model_version")
-        if isinstance(drone_policy_config, dict)
-        else None
-    )
-    if (
-        checkpoint_drone_model != DRONE_MAPPO_CUSTOM_MODEL_NAME
-        or checkpoint_model_version != DRONE_MAPPO_MODEL_VERSION
-    ):
-        raise ValueError(
-            "This checkpoint uses an incompatible drone model or central-map shape. "
-            "Start a new run, or use --restore-observer-from to reuse only a "
-            "compatible observer policy."
+    drone_policy_specs = {
+        policy_id: policy_spec
+        for policy_id, policy_spec in policies.items()
+        if str(policy_id).startswith("drone_")
+    }
+    if not drone_policy_specs:
+        raise ValueError("Checkpoint does not contain a drone policy.")
+    for policy_id, policy_spec in drone_policy_specs.items():
+        if isinstance(policy_spec, (tuple, list)) and len(policy_spec) >= 4:
+            policy_config = policy_spec[3] or {}
+        else:
+            policy_config = getattr(policy_spec, "config", {}) or {}
+        checkpoint_drone_model = (
+            policy_config.get("model", {}).get("custom_model")
+            if isinstance(policy_config, dict)
+            else None
         )
+        checkpoint_model_version = (
+            policy_config.get("model", {})
+            .get("custom_model_config", {})
+            .get("mappo_model_version")
+            if isinstance(policy_config, dict)
+            else None
+        )
+        if (
+            checkpoint_drone_model != DRONE_MAPPO_CUSTOM_MODEL_NAME
+            or checkpoint_model_version != DRONE_MAPPO_MODEL_VERSION
+        ):
+            raise ValueError(
+                f"Checkpoint policy {policy_id!r} uses an incompatible drone "
+                "model or central-map shape. Start a new run."
+            )
 
     checkpoint_config.env_runners(
         num_env_runners=int(args.num_env_runners),
@@ -957,6 +1096,7 @@ def restore_algorithm_with_sampling_config(checkpoint_dir, args):
         rollout_fragment_length=int(args.rollout_fragment_length),
         sample_timeout_s=float(args.sample_timeout_s),
     )
+    checkpoint_config.resources(num_gpus=int(args.num_gpus))
     checkpoint_config.training(minibatch_size=PPO_MINIBATCH_SIZE)
     state["config"] = checkpoint_config
     return Algorithm.from_state(state)
@@ -986,8 +1126,16 @@ def parse_args():
     )
     parser.add_argument(
         "--drone-only",
+        dest="drone_only",
         action="store_true",
-        help="Remove the observer and train only the shared MAPPO drone policy.",
+        default=True,
+        help="Train the A/B heterogeneous drone-only task (default).",
+    )
+    parser.add_argument(
+        "--with-observers",
+        dest="drone_only",
+        action="store_false",
+        help="Use the legacy joint observer/drone task instead.",
     )
     parser.add_argument(
         "--drone-success-coverage-ratio",
@@ -1033,6 +1181,11 @@ def parse_args():
         "--wandb-run-name",
         default=DEFAULT_WANDB_RUN_NAME,
         help="Weights & Biases run name.",
+    )
+    parser.add_argument(
+        "--no-wandb",
+        action="store_true",
+        help="Disable WandB logging and visualization uploads.",
     )
     parser.add_argument(
         "--num-env-runners",
@@ -1207,6 +1360,7 @@ def initialize_curricula_from_env_config(
         coverage_curriculum_enabled
         and env_config.get("n_observers", 0) == 0
         and env_config.get("n_drones", 0) > 0
+        and env_config.get("drone_only_task_mode") == "threshold"
     )
     if curriculum_enabled:
         coverage_curriculum = CoverageCurriculum(
@@ -1241,6 +1395,13 @@ def initialize_curricula_from_env_config(
 
 def main():
     args = parse_args()
+    args.num_gpus = resolve_num_gpus(args.num_gpus)
+    wandb = (
+        DisabledWandb
+        if args.no_wandb
+        else load_wandb(allow_disabled=True)
+    )
+    wandb_enabled = not getattr(wandb, "disabled", False)
     LOGGER.setLevel(logging.WARNING)
     ray.init()
     register_hemac_rllib_models()
@@ -1294,20 +1455,25 @@ def main():
                 act_space["observer_0"],
                 {"model": observer_policy_model_config()},
             )
-        if env_config.get("n_drones", 0) > 0:
-            policies["drone_policy"] = (
-                None,
-                obs_space["drone_0"],
-                act_space["drone_0"],
-                {"model": drone_policy_model_config()},
-            )
+        drone_policy_mapping = {}
+        for drone_idx in range(int(env_config.get("n_drones", 0))):
+            agent_id = f"drone_{drone_idx}"
+            policy_id = drone_policy_id_for_agent(agent_id, env_config)
+            drone_policy_mapping[agent_id] = policy_id
+            if policy_id not in policies:
+                policies[policy_id] = (
+                    None,
+                    obs_space[agent_id],
+                    act_space[agent_id],
+                    {"model": drone_policy_model_config()},
+                )
 
         def policy_mapping_fn(agent_id, episode, **kwargs):
             del episode, kwargs
             if "observer" in agent_id and "observer_policy" in policies:
                 return "observer_policy"
-            if "drone" in agent_id and "drone_policy" in policies:
-                return "drone_policy"
+            if "drone" in agent_id and agent_id in drone_policy_mapping:
+                return drone_policy_mapping[agent_id]
             raise ValueError(f"No policy configured for agent_id={agent_id}")
 
         config = (
@@ -1388,29 +1554,41 @@ def main():
 
     coverage_updated_envs = 0
     if is_drone_only_run:
-        current_coverage_target = float(
-            env_config["drone_only_success_min_coverage_ratio"]
-        )
-        if coverage_curriculum is not None:
-            current_coverage_target = coverage_curriculum.current_coverage_ratio
-        coverage_updated_envs = apply_curriculum_to_algo(
-            algo, current_coverage_target
-        )
-        if coverage_updated_envs <= 0:
-            print("[warn] coverage target was not applied to any live env at startup.")
-        if coverage_curriculum is not None:
+        if env_config.get("drone_only_task_mode") == "maximize_coverage":
             print(
-                "[curriculum] start stage "
-                f"{coverage_curriculum.stage_number}/{coverage_curriculum.num_stages} "
-                f"(coverage >= {current_coverage_target:.1f}, "
-                f"updated_envs={coverage_updated_envs})"
+                "[task] heterogeneous drone-only maximize-coverage task: "
+                "A=1 (speed=10, sensing=100), B=2 (speed=25, sensing=40); "
+                "run to max_cycles and count success when the goal was found"
             )
+            if args.coverage_curriculum:
+                print(
+                    "[warn] --coverage-curriculum is ignored because maximize-coverage "
+                    "has no success threshold."
+                )
         else:
-            print(
-                "[task] drone-only fixed success condition: "
-                f"coverage >= {current_coverage_target:.1f} and goal found "
-                f"(updated_envs={coverage_updated_envs})"
+            current_coverage_target = float(
+                env_config["drone_only_success_min_coverage_ratio"]
             )
+            if coverage_curriculum is not None:
+                current_coverage_target = coverage_curriculum.current_coverage_ratio
+            coverage_updated_envs = apply_curriculum_to_algo(
+                algo, current_coverage_target
+            )
+            if coverage_updated_envs <= 0:
+                print("[warn] coverage target was not applied to any live env at startup.")
+            if coverage_curriculum is not None:
+                print(
+                    "[curriculum] start stage "
+                    f"{coverage_curriculum.stage_number}/{coverage_curriculum.num_stages} "
+                    f"(coverage >= {current_coverage_target:.1f}, "
+                    f"updated_envs={coverage_updated_envs})"
+                )
+            else:
+                print(
+                    "[task] drone-only fixed success condition: "
+                    f"coverage >= {current_coverage_target:.1f} and goal found "
+                    f"(updated_envs={coverage_updated_envs})"
+                )
     else:
         print("[curriculum] disabled because this run includes an observer.")
 
@@ -1468,7 +1646,21 @@ def main():
         policy_rewards = result.get('policy_reward_mean', {})
         if not policy_rewards:
             policy_rewards = result.get('env_runners', {}).get('policy_reward_mean', {})
-        drone_log_std_stats = get_policy_log_std_stats(algo, "drone_policy") or {}
+        configured_drone_policy_ids = sorted(
+            {
+                drone_policy_id_for_agent(f"drone_{drone_idx}", env_config)
+                for drone_idx in range(int(env_config.get("n_drones", 0)))
+            }
+        )
+        drone_log_std_by_policy = {
+            policy_id: get_policy_log_std_stats(algo, policy_id) or {}
+            for policy_id in configured_drone_policy_ids
+        }
+        drone_log_std_means = [
+            stats["mean"]
+            for stats in drone_log_std_by_policy.values()
+            if "mean" in stats
+        ]
         rollout_success_rate = float(custom_metrics.get("success_rate_mean", 0.0))
 
         print(f">>> [디버깅] custom_metrics: {visible_custom_metrics}")
@@ -1479,7 +1671,9 @@ def main():
             "reward/mean_reward": mean_reward,
             "reward/observer_policy": policy_rewards.get("observer_policy", 0),
             "reward/drone_policy": policy_rewards.get("drone_policy", 0),
-            "model/drone_log_std_mean": drone_log_std_stats.get("mean", 0.0),
+            "model/drone_log_std_mean": (
+                float(np.mean(drone_log_std_means)) if drone_log_std_means else 0.0
+            ),
             # "model/drone_log_std_min": drone_log_std_stats.get("min", 0.0),
             # "model/drone_log_std_max": drone_log_std_stats.get("max", 0.0),
             "model/entropy_coeff": PPO_ENTROPY_COEFF,
@@ -1544,9 +1738,14 @@ def main():
                 obstacle_curriculum.current_level["goal_max_base_distance"]
             ),
         }
+        for policy_id in configured_drone_policy_ids:
+            log_payload[f"reward/{policy_id}"] = policy_rewards.get(policy_id, 0.0)
+            log_payload[f"model/{policy_id}_log_std_mean"] = (
+                drone_log_std_by_policy.get(policy_id, {}).get("mean", 0.0)
+            )
 
 
-        if iteration % args.video_log_interval == 0:
+        if wandb_enabled and iteration % args.video_log_interval == 0:
             try:
                 visualization_seed = int(np.random.randint(0, 100000))
                 video = collect_visualization_video(
@@ -1576,6 +1775,8 @@ def main():
                 eval_success_rate = deterministic_eval["success_rate"]
                 log_payload["metrics/eval_success_rate"] = eval_success_rate
                 log_payload["metrics/eval_drone_crash_rate"] = deterministic_eval["drone_crash_rate"]
+                log_payload["metrics/eval_goal_found_rate"] = deterministic_eval["goal_found_rate"]
+                log_payload["metrics/eval_coverage_ratio"] = deterministic_eval["coverage_ratio"]
 
                 if iteration % STOCHASTIC_EVAL_LOG_INTERVAL == 0:
                     stochastic_eval = collect_eval_metrics(
@@ -1587,6 +1788,8 @@ def main():
                     )
                     log_payload["metrics/eval_success_rate_stochastic"] = stochastic_eval["success_rate"]
                     log_payload["metrics/eval_drone_crash_rate_stochastic"] = stochastic_eval["drone_crash_rate"]
+                    log_payload["metrics/eval_goal_found_rate_stochastic"] = stochastic_eval["goal_found_rate"]
+                    log_payload["metrics/eval_coverage_ratio_stochastic"] = stochastic_eval["coverage_ratio"]
             except Exception as exc:
                 print(f"[warn] evaluation logging skipped at iteration {iteration}: {exc}")
 

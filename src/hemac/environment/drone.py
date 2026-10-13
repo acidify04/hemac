@@ -81,6 +81,23 @@ class Drone(BaseAgent):
         """Overwrite constructor."""
         super().__init__()
 
+        drone_config = dict(drone_config or {})
+        configured_types = list(drone_config.get("drone_types", []))
+        configured_type = (
+            configured_types[drone_id]
+            if 0 <= drone_id < len(configured_types)
+            else drone_config.get("drone_type", "B")
+        )
+        self.drone_type = str(configured_type).strip().upper() or "B"
+        type_configs = drone_config.get("drone_type_configs", {}) or {}
+        type_config = dict(
+            type_configs.get(
+                self.drone_type,
+                type_configs.get(self.drone_type.lower(), {}),
+            )
+            or {}
+        )
+
         self.id = drone_id
         self.out_of_bound = False
         self.time_factor = time_factor
@@ -93,17 +110,40 @@ class Drone(BaseAgent):
 
         if drone_config:
             pixel_to_meter_ref = 1  # how many game pixel to represent a meter
-            ui_dims = drone_config.get("drone_ui_dimension", 40)
+            ui_dims = type_config.get(
+                "drone_ui_dimension",
+                drone_config.get("drone_ui_dimension", 40),
+            )
             # dims_meters = [drone_config.get("drone_dimension")[0] / 100, drone_config.get("drone_dimension")[1] / 100]
             dims_meters = [
                 drone_config.get("drone_dimension", [40, 40])[0] / 100,
                 drone_config.get("drone_dimension", [40, 40])[1] / 100,
             ]
             dims = [math.ceil(pixel_to_meter_ref * dims_meters[0]), math.ceil(pixel_to_meter_ref * dims_meters[1])]
-            self.max_speed = drone_config.get("drone_max_speed", 16)
-            self.max_thrust = drone_config.get("drone_max_thrust", 4)
-            self.altitude = drone_config.get("drone_altitude", 30)
-            self.max_charge = drone_config.get("drone_max_charge", 9999)
+            self.max_speed = float(
+                type_config.get(
+                    "max_speed",
+                    type_config.get("drone_max_speed", drone_config.get("drone_max_speed", 16)),
+                )
+            )
+            self.max_thrust = float(
+                type_config.get(
+                    "max_thrust",
+                    type_config.get("drone_max_thrust", drone_config.get("drone_max_thrust", 4)),
+                )
+            )
+            self.altitude = float(
+                type_config.get(
+                    "altitude",
+                    type_config.get("drone_altitude", drone_config.get("drone_altitude", 30)),
+                )
+            )
+            self.max_charge = float(
+                type_config.get(
+                    "max_charge",
+                    type_config.get("drone_max_charge", drone_config.get("drone_max_charge", 9999)),
+                )
+            )
             if len(drone_config.get("drones_starting_pos", [])) >= drone_id + 1:
                 # print("starting pos set")
                 self.has_custom_starting_pos = True
@@ -129,8 +169,16 @@ class Drone(BaseAgent):
             self.altitude = 30
             self.max_charge = 60 * 32
 
-        self.img = pygame.transform.scale(
-            pygame.image.load(f"{os.path.dirname(__file__)}/img/drone.png"), [ui_dims, ui_dims]
+        default_icon = f"drone_{self.drone_type}.png" if self.drone_type in {"A", "B"} else "drone_B.png"
+        icon_name = str(type_config.get("icon", default_icon))
+        icon_path = icon_name if os.path.isabs(icon_name) else os.path.join(
+            os.path.dirname(__file__), "img", icon_name
+        )
+        if not os.path.isfile(icon_path):
+            icon_path = os.path.join(os.path.dirname(__file__), "img", "drone_old.png")
+        self.icon_path = icon_path
+        self.img = pygame.transform.smoothscale(
+            pygame.image.load(icon_path), [int(ui_dims), int(ui_dims)]
         )
         self.drone_color = (randrange(0, 255), randrange(0, 255), randrange(0, 255))
         self.rect = pygame.Rect(0, 0, dims[0], dims[1])
@@ -145,8 +193,10 @@ class Drone(BaseAgent):
         self.UWB = UWB(randomizer, max_range=200)
         self.randomizer = randomizer
         self.sensor = sensor
-        self.sensing_range = 100
-        if isinstance(self.sensor, RoundCamera):
+        self.sensing_range = float(
+            type_config.get("sensing_range", drone_config.get("drone_sensing_range", 100))
+        )
+        if hasattr(self.sensor, "sensing_range"):
             self.sensor.sensing_range = self.sensing_range
         self.orientation = 0.0
         self.carried_targets = 0

@@ -41,6 +41,7 @@ class World(pygame.sprite.Sprite):
     OBSTACLE_WARNING_FILL = (255, 80, 80, 55)
     OBSTACLE_WARNING_OUTLINE = (255, 120, 120, 150)
     OBSTACLE_SENSING_OUTLINE = (255, 205, 80, 130)
+    OBSTACLE_ICON_SIZE = 40
     OBSERVED_OBSTACLE_DECAY = 0.9
 
     def __init__(
@@ -57,7 +58,17 @@ class World(pygame.sprite.Sprite):
         """Overwrite constructor."""
         self.area = game_area
         self.bg_image = pygame.transform.scale(
-            pygame.image.load(f"{os.path.dirname(__file__)}/img/world_forest.jpg"), self.area.size
+            pygame.image.load(f"{os.path.dirname(__file__)}/img/world_forest.png"), self.area.size
+        )
+        image_dir = os.path.join(os.path.dirname(__file__), "img")
+        obstacle_icon_size = (self.OBSTACLE_ICON_SIZE, self.OBSTACLE_ICON_SIZE)
+        self.static_obstacle_image = pygame.transform.smoothscale(
+            pygame.image.load(os.path.join(image_dir, "cannon.png")),
+            obstacle_icon_size,
+        )
+        self.dynamic_obstacle_image = pygame.transform.smoothscale(
+            pygame.image.load(os.path.join(image_dir, "fighter-plane.png")),
+            obstacle_icon_size,
         )
         self.spawn_max_tries = 10000
         self.obstacles = []
@@ -1739,19 +1750,14 @@ class World(pygame.sprite.Sprite):
         self.obstacle_is_static = np.asarray(static_flags, dtype=bool)
         self._rebuild_obstacle_map()
 
-    def draw(self, screen):
+    def draw(self, screen, *, draw_obstacles=True, draw_timestamp=True):
         """Draw world."""
         screen.blit(self.bg_image, (0, 0))
-        font = pygame.font.SysFont("Trebuchet MS", 25)
-        # find the simulation date
-        simulation_current_time = self.simulation_start_time + self.timestep * self.time_factor
-        simulation_current_date = datetime.fromtimestamp(simulation_current_time).astimezone().isoformat()
-        date_font = font.render(simulation_current_date, True, (0, 51, 0))
-        screen.blit(date_font, [5, 5])
+        if draw_timestamp:
+            self.draw_timestamp(screen)
 
         if self.geofence_area:
             pygame.draw.polygon(screen, (78, 0, 200), self.geofence_area, 2)
-        pygame.draw.polygon(screen, (30, 30, 0), self.displayed_search_area)
         pygame.draw.polygon(screen, (222, 0, 0), self.displayed_search_area, 2)
 
         # Base
@@ -1763,7 +1769,19 @@ class World(pygame.sprite.Sprite):
             end = world_ref_to_game_ref(self.roads["nodes"][end_id], self.area)
             draw_road(start, end, screen)
 
-        # Obstacles
+        if draw_obstacles:
+            self.draw_obstacles(screen)
+
+    def draw_timestamp(self, screen):
+        """Draw simulation time as a screen-space HUD element."""
+        font = pygame.font.SysFont("Trebuchet MS", 25)
+        simulation_current_time = self.simulation_start_time + self.timestep * self.time_factor
+        simulation_current_date = datetime.fromtimestamp(simulation_current_time).astimezone().isoformat()
+        date_font = font.render(simulation_current_date, True, (0, 51, 0))
+        screen.blit(date_font, [5, 5])
+
+    def draw_obstacles(self, screen):
+        """Draw obstacle ranges, icons, and confidence above the exploration mask."""
         confidence_font = pygame.font.SysFont("Trebuchet MS", 14)
         obstacle_warning_overlay = pygame.Surface(self.area.size, pygame.SRCALPHA)
         for obstacle_idx, obstacle in enumerate(self.obstacles):
@@ -1791,12 +1809,20 @@ class World(pygame.sprite.Sprite):
         screen.blit(obstacle_warning_overlay, (0, 0))
 
         for obstacle_idx, obstacle in enumerate(self.obstacles):
-            pygame.draw.rect(screen, (150, 0, 0), obstacle)
+            is_static = (
+                obstacle_idx < len(self.obstacle_is_static)
+                and bool(self.obstacle_is_static[obstacle_idx])
+            )
+            obstacle_image = (
+                self.static_obstacle_image if is_static else self.dynamic_obstacle_image
+            )
+            icon_rect = obstacle_image.get_rect(center=obstacle.center)
+            screen.blit(obstacle_image, icon_rect)
             confidence = 0.0
             if obstacle_idx < self.actual_obstacle_confidences.shape[0]:
                 confidence = float(self.actual_obstacle_confidences[obstacle_idx])
             confidence_text = confidence_font.render(f"{confidence:.2f}", True, (255, 245, 245))
-            label_rect = confidence_text.get_rect(midbottom=(obstacle.centerx, obstacle.top - 4))
+            label_rect = confidence_text.get_rect(midbottom=(obstacle.centerx, icon_rect.top - 4))
             background_rect = label_rect.inflate(6, 2)
             pygame.draw.rect(screen, (35, 10, 10), background_rect, border_radius=4)
             screen.blit(confidence_text, label_rect)

@@ -101,6 +101,13 @@ class HeMAC:
         detection_max_total: float = 3.0,
         drone_only_success_min_coverage_ratio: float = 0.7,
         drone_only_success_reward: float = 300.0,
+        drone_only_task_mode: str = "threshold",
+        drone_exploration_reward_per_pixel: float = 1.0 / 50000.0,
+        drone_exploration_reward_scale: float = 300.0,
+        drone_goal_found_reward: float = 70.0,
+        drone_step_penalty: float = 0.05,
+        drone_proximity_penalty_scale: float = 0.5,
+        drone_proximity_safe_radius: float = 75.0,
         obstacle_min_speed: int | None = None,
         obstacle_max_speed: int | None = None,
         goal_min_base_distance: float = 0.0,
@@ -162,6 +169,30 @@ class HeMAC:
             max(0.0, min(drone_only_success_min_coverage_ratio, 1.0))
         )
         self.drone_only_success_reward = float(drone_only_success_reward)
+        self.drone_only_task_mode = str(drone_only_task_mode).strip().lower()
+        if self.drone_only_task_mode not in {"threshold", "maximize_coverage"}:
+            raise ValueError(
+                "drone_only_task_mode must be 'threshold' or 'maximize_coverage', "
+                f"got {drone_only_task_mode!r}."
+            )
+        self.drone_exploration_reward_per_pixel = max(
+            float(drone_exploration_reward_per_pixel),
+            0.0,
+        )
+        self.drone_exploration_reward_scale = max(
+            float(drone_exploration_reward_scale),
+            0.0,
+        )
+        self.drone_goal_found_reward = float(drone_goal_found_reward)
+        self.drone_step_penalty = max(float(drone_step_penalty), 0.0)
+        self.drone_proximity_penalty_scale = max(
+            float(drone_proximity_penalty_scale),
+            0.0,
+        )
+        self.drone_proximity_safe_radius = max(
+            float(drone_proximity_safe_radius),
+            0.0,
+        )
         self.goal_min_base_distance = max(float(goal_min_base_distance), 0.0)
         self.goal_max_base_distance = (
             None
@@ -290,10 +321,7 @@ class HeMAC:
             obstacle_max_speed=obstacle_max_speed,
         )
         self.search_grid_rects = self._build_search_grid_cache()
-        self.drone_reward_sector_mask = np.ones(
-            (self.world.coverage_grid_size, self.world.coverage_grid_size),
-            dtype=bool,
-        )
+        self.drone_reward_sector_mask = self.world.search_mask > 0.0
         active_rows = np.flatnonzero(np.any(self.world.search_mask > 0.0, axis=1))
         active_columns = np.flatnonzero(np.any(self.world.search_mask > 0.0, axis=0))
         # Coverage y increases upward, so the final active rows are visually at the top.
@@ -318,8 +346,9 @@ class HeMAC:
 
         # init drones
         if drone_config is not None:
-            if self.n_drones > len(drone_config.get("drones_starting_pos", 0)):
-                LOGGER.warning(f"""Error in Drone Config, found {len(drone_config.get("drones_starting_pos", 0))}
+            starting_positions = drone_config.get("drones_starting_pos", [])
+            if self.n_drones > len(starting_positions):
+                LOGGER.warning(f"""Error in Drone Config, found {len(starting_positions)}
                 starting coordinates for {self.n_drones} drones""")
                 drone_config["drones_starting_pos"] = []
         for i in range(self.n_drones):
@@ -370,6 +399,7 @@ class HeMAC:
 
         self.render_mode = render_mode
         self.screen = None
+        self.render_scene = pygame.Surface(self.area.size)
 
         self.max_cycles = max_cycles
         self.num_frames = 0
@@ -624,6 +654,16 @@ class HeMAC:
         self.observer_crash_to_obstacle = False
         self.max_coverage_ratio = 0.0
 
+        if self.is_drone_only_mode() and self.drone_only_task_mode == "maximize_coverage":
+            # Initial visibility belongs to the initial state, not to any action.
+            for agent in self.agents_list:
+                if isinstance(agent, Drone):
+                    agent.update_detected_area(agent.sensing_range)
+                    self._update_detected_cache(
+                        agent,
+                        counted_sector_mask=self.drone_reward_sector_mask,
+                    )
+
         self.num_frames = 0
         self.old_dist_to_goal = None
 
@@ -759,51 +799,116 @@ class HeMAC:
                 )
         return grid_rects
 
-    def draw_exploration_overlay(self):
-        """Draw explored vs unexplored search cells."""
-        overlay = pygame.Surface(self.area.size, pygame.SRCALPHA)
-        unexplored_color = (38, 57, 84, 70)
-        explored_base = (76, 196, 120)
-        outline_color = (220, 235, 255, 25)
+    def draw_exploration_overlay(self, screen=None, *, draw_legend=True):
+        """Render pixel-resolution exploration without changing observation maps."""
+        screen = self.screen if screen is None else screen
+        dark_overlay = pygame.Surface(self.area.size, pygame.SRCALPHA)
+        light_overlay = pygame.Surface(self.area.size, pygame.SRCALPHA)
+        unexplored_color = (5, 8, 12)
+        explored_light_color = (245, 245, 235)
+        max_dark_alpha = 215
+        max_light_alpha = 70
+        dark_overlay.fill((*unexplored_color, 0))
+        light_overlay.fill((*explored_light_color, 0))
 
-        for grid_key, rect in self.search_grid_rects.items():
-            search_ratio = float(self.world.search_mask[grid_key])
-            coverage_value = float(self.world.observation_coverage_map[grid_key])
-            if search_ratio <= 0.0:
-                cell_color = (0, 0, 0, 0)
-            elif coverage_value > 0.0:
-                explored_alpha = 80 + int(140 * min(coverage_value, 1.0))
-                cell_color = (*explored_base, explored_alpha)
-            else:
-                unexplored_alpha = int(unexplored_color[-1] * search_ratio)
-                cell_color = (*unexplored_color[:3], unexplored_alpha)
-            pygame.draw.rect(overlay, cell_color, rect)
-            pygame.draw.rect(overlay, outline_color, rect, width=1)
+        pixel_shape = (self.area.height, self.area.width)
+        search_pixel_mask = getattr(self.world, "search_pixel_mask", None)
+        detected_pixel_mask = getattr(self.world, "detected_search_mask", None)
+        use_pixel_masks = (
+            isinstance(search_pixel_mask, np.ndarray)
+            and isinstance(detected_pixel_mask, np.ndarray)
+            and search_pixel_mask.shape == pixel_shape
+            and detected_pixel_mask.shape == pixel_shape
+        )
 
-        self.screen.blit(overlay, (0, 0))
+        if use_pixel_masks:
+            # World masks use bottom-up world coordinates; pygame surfaces use top-down y.
+            search_pixels = np.flipud(search_pixel_mask > 0.0).T
+            explored_pixels = np.flipud(detected_pixel_mask).T
+            dark_alpha = pygame.surfarray.pixels_alpha(dark_overlay)
+            light_alpha = pygame.surfarray.pixels_alpha(light_overlay)
+            dark_alpha[search_pixels] = max_dark_alpha
+            dark_alpha[explored_pixels] = 0
+            light_alpha[explored_pixels] = max_light_alpha
+            del dark_alpha, light_alpha
+        else:
+            # Keep lightweight test/custom worlds renderable when pixel masks are absent.
+            for grid_key, rect in self.search_grid_rects.items():
+                search_ratio = max(0.0, min(float(self.world.search_mask[grid_key]), 1.0))
+                coverage_value = max(
+                    0.0,
+                    min(float(self.world.observation_coverage_map[grid_key]), 1.0),
+                )
+                dark_alpha = int(max_dark_alpha * search_ratio * (1.0 - coverage_value))
+                light_alpha = int(max_light_alpha * search_ratio * coverage_value)
+                if dark_alpha > 0:
+                    pygame.draw.rect(dark_overlay, (*unexplored_color, dark_alpha), rect)
+                if light_alpha > 0:
+                    pygame.draw.rect(light_overlay, (*explored_light_color, light_alpha), rect)
 
+        screen.blit(dark_overlay, (0, 0))
+        screen.blit(light_overlay, (0, 0))
+
+        if draw_legend:
+            self.draw_exploration_legend(screen)
+
+    @staticmethod
+    def draw_exploration_legend(screen):
+        """Draw exploration colors in screen coordinates after camera scaling."""
+        unexplored_color = (5, 8, 12)
+        explored_light_color = (245, 245, 235)
         legend_font = pygame.font.SysFont("Trebuchet MS", 16)
-        legend_bg = pygame.Surface((190, 80), pygame.SRCALPHA)
+        legend_bg = pygame.Surface((220, 80), pygame.SRCALPHA)
         legend_bg.fill((8, 12, 16, 150))
-        self.screen.blit(legend_bg, (12, 40))
+        screen.blit(legend_bg, (12, 40))
 
-        pygame.draw.rect(self.screen, (*explored_base, 220), pygame.Rect(22, 50, 18, 18))
-        pygame.draw.rect(self.screen, unexplored_color, pygame.Rect(22, 74, 18, 18))
+        pygame.draw.rect(screen, explored_light_color, pygame.Rect(22, 50, 18, 18))
+        pygame.draw.rect(screen, unexplored_color, pygame.Rect(22, 74, 18, 18))
 
-        explored_label = legend_font.render("explored", True, (240, 248, 255))
-        unexplored_label = legend_font.render("unexplored", True, (240, 248, 255))
-        self.screen.blit(explored_label, (48, 50))
-        self.screen.blit(unexplored_label, (48, 74))
+        explored_label = legend_font.render("explored: bright", True, (240, 248, 255))
+        unexplored_label = legend_font.render("unexplored: dark", True, (240, 248, 255))
+        screen.blit(explored_label, (48, 50))
+        screen.blit(unexplored_label, (48, 74))
+
+    def search_render_rect(self):
+        """Return the screen-space bounds of the active search area."""
+        points = self.world.displayed_search_area
+        if not points:
+            return self.area.copy()
+        x_values = [point[0] for point in points]
+        y_values = [point[1] for point in points]
+        left = max(int(math.floor(min(x_values))), self.area.left)
+        top = max(int(math.floor(min(y_values))), self.area.top)
+        right = min(int(math.ceil(max(x_values))), self.area.right)
+        bottom = min(int(math.ceil(max(y_values))), self.area.bottom)
+        if right <= left or bottom <= top:
+            return self.area.copy()
+        return pygame.Rect(left, top, right - left, bottom - top)
 
     def draw(self):
         """Draw the environment."""
         pygame.event.pump()
-        self.world.draw(self.screen)
-        self.draw_exploration_overlay()
+        self.world.draw(
+            self.render_scene,
+            draw_obstacles=False,
+            draw_timestamp=False,
+        )
+        self.draw_exploration_overlay(self.render_scene, draw_legend=False)
+        self.world.draw_obstacles(self.render_scene)
         for agent in self.agents_list:
-            agent.draw(self.screen)
+            agent.draw(self.render_scene)
         for goal in self.goals:
-            goal.draw(self.screen)
+            goal.draw(self.render_scene)
+
+        viewport = self.search_render_rect()
+        pygame.transform.smoothscale(
+            self.render_scene.subsurface(viewport),
+            self.area.size,
+            self.screen,
+        )
+        pygame.draw.rect(self.screen, (222, 0, 0), self.screen.get_rect(), width=2)
+        self.world.draw_timestamp(self.screen)
+        self.draw_exploration_legend(self.screen)
     
     def current_explored_area(self):
         """Return explored area inside the active search area for this episode."""
@@ -860,6 +965,8 @@ class HeMAC:
         """Succeed once drones have found the goal and explored enough area."""
         if not self.is_drone_only_mode():
             return False
+        if self.drone_only_task_mode != "threshold":
+            return False
         if self.terminate or self.mission_success or not self.found_goal:
             return False
 
@@ -872,6 +979,23 @@ class HeMAC:
             reward_dict=reward_dict,
             reward_bonus=self.drone_only_success_reward,
         )
+
+    def _finalize_maximize_coverage_task(self):
+        """Record time-limit success after maximizing coverage for the full episode."""
+        if (
+            not self.is_drone_only_mode()
+            or self.drone_only_task_mode != "maximize_coverage"
+            or self.mission_success
+            or self.collided
+            or not self.found_goal
+        ):
+            return False
+
+        self.mission_success = True
+        self.success_step = self.num_frames
+        self.global_reward += self.drone_only_success_reward
+        self.global_reward_all_agents = True
+        return True
 
     def _check_observer_mission_success(self, active_agent=None, reward_dict=None):
         """Succeed only after every configured observer has reached the goal."""
@@ -940,7 +1064,9 @@ class HeMAC:
             "goal_found": bool(self.found_goal),
             # "goal_known": bool(self.world.goal_known),
             "fatal_crash": bool(self.collided),
-            "timeout": bool(self.truncate and not self.terminate),
+            "timeout": bool(
+                self.truncate and not self.terminate and not self.mission_success
+            ),
             "drone_crash": bool(self.drone_crash),
             "observer_crash": bool(self.observer_crash),
             "drone_crash_to_obstacle": bool(self.drone_crash_to_obstacle),
@@ -1101,8 +1227,8 @@ class HeMAC:
         # Specific actions for UAVs
         if "drone" in active_agent:
             # Collision check and map limits
-            reward -= 0.05  # Step penalty
-            reward_dict[active_agent].append(-0.05)
+            reward -= self.drone_step_penalty
+            reward_dict[active_agent].append(-self.drone_step_penalty)
 
             if not self.world.point_in_search_area(agent.x, agent.y):  # 맵 밖으로 나간 경우
                 self.collided = True
@@ -1123,15 +1249,19 @@ class HeMAC:
                     # LOGGER.info(f"drone crossed a warning zone. pos: {(agent.x, agent.y)}")
 
             if not self.terminate:
-                safe_radius = 75.0
+                safe_radius = self.drone_proximity_safe_radius
                 drone_proximity_penalty = 0.0
-                for other_agent in self.agents_list:
-                    if other_agent is agent or not isinstance(other_agent, Drone):
-                        continue
-                    drone_distance = dist(other_agent.x, other_agent.y, agent.x, agent.y)
-                    if drone_distance < safe_radius:
-                        normalized_gap = (safe_radius - drone_distance) / safe_radius
-                        drone_proximity_penalty += 0.5 * (normalized_gap ** 2)
+                if safe_radius > 0.0:
+                    for other_agent in self.agents_list:
+                        if other_agent is agent or not isinstance(other_agent, Drone):
+                            continue
+                        drone_distance = dist(other_agent.x, other_agent.y, agent.x, agent.y)
+                        if drone_distance < safe_radius:
+                            normalized_gap = (safe_radius - drone_distance) / safe_radius
+                            drone_proximity_penalty += (
+                                self.drone_proximity_penalty_scale
+                                * (normalized_gap ** 2)
+                            )
                 if drone_proximity_penalty > 0:
                     reward -= drone_proximity_penalty
                     reward_dict[active_agent].append(-drone_proximity_penalty)
@@ -1141,16 +1271,32 @@ class HeMAC:
                     if goal_dist < agent.sensing_range and not self.found_goal:
                         agent.found_goal = True
                         self.found_goal = True
-                        reward += 70
-                        reward_dict[active_agent].append(70)
+                        reward += self.drone_goal_found_reward
+                        reward_dict[active_agent].append(self.drone_goal_found_reward)
 
+                coverage_ratio_before = self.current_drone_reward_coverage_ratio()
                 newly_detected_count = self._update_detected_cache(
                     agent,
                     counted_sector_mask=self.drone_reward_sector_mask,
                 )
                 if newly_detected_count > 0:
-                    total_detection_reward = newly_detected_count / 50000
-                    reward += total_detection_reward
+                    if self.drone_only_task_mode == "maximize_coverage":
+                        newly_explored_ratio = max(
+                            self.current_drone_reward_coverage_ratio()
+                            - coverage_ratio_before,
+                            0.0,
+                        )
+                        total_detection_reward = (
+                            newly_explored_ratio
+                            * self.drone_exploration_reward_scale
+                        )
+                        reward += total_detection_reward
+                    else:
+                        total_detection_reward = (
+                            newly_detected_count
+                            * self.drone_exploration_reward_per_pixel
+                        )
+                        reward += total_detection_reward
                     reward_dict[active_agent].append(total_detection_reward)
 
                 self._check_drone_only_mission_success(
@@ -1244,6 +1390,8 @@ class HeMAC:
             if not self.terminate:
                 self.num_frames += 1
                 self.truncate = self.num_frames >= self.max_cycles
+                if self.truncate:
+                    self._finalize_maximize_coverage_task()
 
         # if self.log_step_rewards:
             # LOGGER.info(f"reward for {active_agent} at step {self.num_frames}: {reward_dict[active_agent]}")
