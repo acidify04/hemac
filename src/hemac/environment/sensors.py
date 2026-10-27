@@ -193,14 +193,15 @@ class ForwardFacingCamera(Sensor):
         """
         self.pos = pos
         self.theta = theta
+        half_hfov = self.hfov / 2.0
 
         left_dx, left_dy = (
-            self.sensing_range * cos(theta + self.hfov),
-            self.sensing_range * sin(theta + self.hfov),
+            self.sensing_range * cos(theta + half_hfov),
+            self.sensing_range * sin(theta + half_hfov),
         )
         right_dx, right_dy = (
-            self.sensing_range * cos(theta - self.hfov),
-            self.sensing_range * sin(theta - self.hfov),
+            self.sensing_range * cos(theta - half_hfov),
+            self.sensing_range * sin(theta - half_hfov),
         )
 
         self.vertices_pos = (
@@ -219,8 +220,8 @@ class ForwardFacingCamera(Sensor):
             (222, 200, 0),
             self.vertices_pos[0],
             self.sensing_range,
-            self.theta - self.hfov,
-            self.theta + self.hfov,
+            self.theta - self.hfov / 2.0,
+            self.theta + self.hfov / 2.0,
         )
 
     def _draw_arc(self, surface, color, center, radius, start_angle, end_angle):

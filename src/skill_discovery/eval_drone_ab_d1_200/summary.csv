@@ -1,0 +1,3 @@
+policy,episodes,goal_found_rate,goal_step_reached_mean,goal_step_reached_median,final_coverage_mean,final_reward_coverage_mean,coverage60_rate,coverage60_step_reached_mean,full_coverage60_rate,full_coverage60_step_reached_mean,fatal_crash_rate,goal_and_coverage60_no_crash_rate,env_success_rate,episode_steps_mean,runtime_sec_mean
+rl,200,0.835,69.2814371257485,48.0,0.8330113844573498,0.8222009325027466,0.91,127.76923076923077,0.91,120.23076923076923,0.185,0.72,0.72,273.245,1.9182777192880167
+hissd,200,0.83,69.43975903614458,50.0,0.8345572631061077,0.8237615797519683,0.91,129.8901098901099,0.92,121.4836956521739,0.145,0.715,0.72,278.665,1.7117373114201473

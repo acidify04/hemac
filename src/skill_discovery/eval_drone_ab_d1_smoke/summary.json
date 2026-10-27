@@ -1,0 +1,63 @@
+{
+  "rl": {
+    "episodes": 5,
+    "goal_found_rate": 0.8,
+    "goal_step_reached_mean": 73.25,
+    "goal_step_reached_median": 44.0,
+    "final_coverage_mean": 0.8216262698173523,
+    "final_reward_coverage_mean": 0.8105143229166668,
+    "coverage60_rate": 0.8,
+    "coverage60_step_reached_mean": 117.25,
+    "full_coverage60_rate": 0.8,
+    "full_coverage60_step_reached_mean": 112.75,
+    "fatal_crash_rate": 0.6,
+    "goal_and_coverage60_no_crash_rate": 0.4,
+    "env_success_rate": 0.4,
+    "episode_steps_mean": 241.4,
+    "runtime_sec_mean": 1.713816964183934
+  },
+  "hissd": {
+    "episodes": 5,
+    "goal_found_rate": 0.8,
+    "goal_step_reached_mean": 53.0,
+    "goal_step_reached_median": 48.5,
+    "final_coverage_mean": 0.7352171838283539,
+    "final_reward_coverage_mean": 0.7190393257141114,
+    "coverage60_rate": 0.6,
+    "coverage60_step_reached_mean": 123.33333333333333,
+    "full_coverage60_rate": 0.6,
+    "full_coverage60_step_reached_mean": 115.33333333333333,
+    "fatal_crash_rate": 0.4,
+    "goal_and_coverage60_no_crash_rate": 0.6,
+    "env_success_rate": 0.6,
+    "episode_steps_mean": 212.4,
+    "runtime_sec_mean": 1.3450410505756736
+  },
+  "paired": {
+    "seeds": 5,
+    "mean_hissd_minus_rl": {
+      "goal_found": 0.0,
+      "final_coverage": -0.08640908598899841,
+      "final_reward_coverage": -0.09147499720255531,
+      "coverage60_reached": -0.2,
+      "fatal_crash": -0.2,
+      "goal_and_coverage60_no_crash": 0.2,
+      "goal_step": 3.0,
+      "coverage60_step": 10.0,
+      "full_coverage60_step": 6.333333333333333
+    },
+    "both_reached_goal_step": 3,
+    "both_reached_coverage60_step": 3,
+    "both_reached_full_coverage60_step": 3
+  },
+  "metric_definitions": {
+    "goal_found_rate": "Number of episodes where goal ever detected / N; crash after detection does not remove goal detection",
+    "goal_step": "First goal detection joint timestep (one A1+B1+B2 cycle), null if not detected",
+    "coverage60_step": "First joint timestep reward-eligible coverage >= 0.600, null if not reached",
+    "full_coverage60_step": "First joint timestep entire-search-area coverage >= 0.600, null if not reached",
+    "final_coverage": "Terminal core.current_coverage_ratio() over entire search area",
+    "final_reward_coverage": "Terminal core.current_drone_reward_coverage_ratio(), excludes reward-ineligible base sectors",
+    "missing_steps": "Time means condition on reaching the goal/coverage; null failures are excluded. Reach rates are always reported.",
+    "paired": "Same environment and seed; method-specific trajectories with deterministic policy inference"
+  }
+}

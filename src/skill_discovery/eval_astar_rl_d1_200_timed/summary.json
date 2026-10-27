@@ -1,0 +1,91 @@
+{
+  "rl": {
+    "episodes": 200,
+    "goal_found_rate": 0.835,
+    "goal_step_reached_mean": 69.2814371257485,
+    "goal_step_reached_median": 48.0,
+    "goal_step_penalized_mean": 107.515,
+    "final_coverage_mean": 0.8330113844573498,
+    "final_reward_coverage_mean": 0.8222009325027466,
+    "coverage60_rate": 0.91,
+    "coverage60_step_reached_mean": 127.76923076923077,
+    "coverage60_step_penalized_mean": 143.36,
+    "full_coverage60_rate": 0.91,
+    "full_coverage60_step_reached_mean": 120.23076923076923,
+    "fatal_crash_rate": 0.185,
+    "goal_and_coverage60_no_crash_rate": 0.72,
+    "env_success_rate": 0.72,
+    "episode_steps_mean": 273.245,
+    "runtime_sec_mean": 1.9538561769400258,
+    "runtime_sec_total": 390.77123538800515,
+    "episode_steps_total": 54649,
+    "runtime_ms_per_step": 7.150565159252779,
+    "decision_sec_total": 202.26631215808447,
+    "decision_ms_per_step": 3.701189631248229,
+    "env_step_sec_total": 110.56913022650406,
+    "env_step_ms_per_step": 2.0232598991107626,
+    "joint_steps_per_second": 139.8490857335951,
+    "astar_replans_mean": 0.0,
+    "astar_failed_plans_mean": 0.0
+  },
+  "astar": {
+    "episodes": 200,
+    "goal_found_rate": 0.54,
+    "goal_step_reached_mean": 52.138888888888886,
+    "goal_step_reached_median": 47.0,
+    "goal_step_penalized_mean": 166.615,
+    "final_coverage_mean": 0.5323531618714332,
+    "final_reward_coverage_mean": 0.5012989275455475,
+    "coverage60_rate": 0.305,
+    "coverage60_step_reached_mean": 88.31147540983606,
+    "coverage60_step_penalized_mean": 236.13,
+    "full_coverage60_rate": 0.33,
+    "full_coverage60_step_reached_mean": 83.42424242424242,
+    "fatal_crash_rate": 0.975,
+    "goal_and_coverage60_no_crash_rate": 0.02,
+    "env_success_rate": 0.02,
+    "episode_steps_mean": 84.65,
+    "runtime_sec_mean": 0.2911394329572795,
+    "runtime_sec_total": 58.2278865914559,
+    "episode_steps_total": 16930,
+    "runtime_ms_per_step": 3.4393317537776666,
+    "decision_sec_total": 7.6254988588625565,
+    "decision_ms_per_step": 0.4504133998146814,
+    "env_step_sec_total": 28.11244853248354,
+    "env_step_ms_per_step": 1.660510840666482,
+    "joint_steps_per_second": 290.75415562968817,
+    "astar_replans_mean": 255.12,
+    "astar_failed_plans_mean": 0.23
+  },
+  "paired": {
+    "seeds": 200,
+    "astar_minus_rl": {
+      "goal_found": -0.295,
+      "final_coverage": -0.3006582225859165,
+      "final_reward_coverage": -0.3209020049571991,
+      "coverage60_reached": -0.605,
+      "fatal_crash": 0.79,
+      "goal_and_coverage60_no_crash": -0.7,
+      "runtime_ms_per_step": {
+        "mean_astar_minus_rl_paired": -3.7983704704451617,
+        "paired_count": 200
+      },
+      "decision_ms_per_step": {
+        "mean_astar_minus_rl_paired": -3.232052249892504,
+        "paired_count": 200
+      },
+      "goal_step": {
+        "mean_astar_minus_rl_both_reached": -0.9560439560439561,
+        "both_reached_count": 91
+      },
+      "coverage60_step": {
+        "mean_astar_minus_rl_both_reached": -44.016949152542374,
+        "both_reached_count": 59
+      },
+      "full_coverage60_step": {
+        "mean_astar_minus_rl_both_reached": -39.666666666666664,
+        "both_reached_count": 63
+      }
+    }
+  }
+}

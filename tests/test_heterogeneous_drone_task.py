@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from hemac import HeMAC_v0
+from hemac.environment.sensors import ForwardFacingCamera, RoundCamera
 from src.train.train import build_env_config, drone_policy_id_for_agent
 
 
@@ -24,14 +25,40 @@ def _make_env(*, max_cycles=3):
 
 
 def test_drone_types_use_role_specific_motion_sensing_and_icons():
-    env, _ = _make_env()
+    env, config = _make_env()
     try:
         raw_env = env.unwrapped.env
         drones = raw_env.agents_list
+        type_configs = config["drone_config"]["drone_type_configs"]
 
         assert [drone.drone_type for drone in drones] == ["A", "B", "B"]
         assert [drone.max_speed for drone in drones] == [10.0, 25.0, 25.0]
-        assert [drone.sensing_range for drone in drones] == [100.0, 40.0, 40.0]
+        assert [drone.sensing_range for drone in drones] == [
+            type_configs["A"]["sensing_range"],
+            type_configs["B"]["sensing_range"],
+            type_configs["B"]["sensing_range"],
+        ]
+        assert isinstance(drones[0].sensor, RoundCamera)
+        assert all(
+            isinstance(drone.sensor, ForwardFacingCamera)
+            for drone in drones[1:]
+        )
+        assert all(
+            np.isclose(
+                drone.sensor.hfov,
+                type_configs["B"]["sensor"]["params"]["hfov"],
+            )
+            for drone in drones[1:]
+        )
+        assert (
+            drones[0].sensing_range
+            > raw_env.world.OBSTACLE_WARNING_RADIUS + drones[0].max_speed
+        )
+        assert all(
+            drone.sensing_range
+            > raw_env.world.OBSTACLE_WARNING_RADIUS + drone.max_speed
+            for drone in drones[1:]
+        )
         assert [Path(drone.icon_path).name for drone in drones] == [
             "drone_A.png",
             "drone_B.png",
@@ -51,6 +78,56 @@ def test_drone_types_use_role_specific_motion_sensing_and_icons():
         env.close()
 
 
+def test_type_b_uses_the_configured_forward_field_of_view():
+    env, _ = _make_env()
+    try:
+        drone_b = env.unwrapped.env.agents_list[1]
+        sensor = drone_b.sensor
+        sensor.update_poly_points((0.0, 0.0), 0.0)
+
+        assert sensor.is_point_detected((100.0, 0.0))
+        outside_angle = (sensor.hfov / 2.0) + 0.1
+        outside_point = (
+            100.0 * np.cos(outside_angle),
+            -100.0 * np.sin(outside_angle),
+        )
+        assert not sensor.is_point_detected(outside_point)
+    finally:
+        env.close()
+
+
+def test_type_b_sensor_heading_and_local_map_follow_motion_direction():
+    env, _ = _make_env()
+    try:
+        raw_env = env.unwrapped.env
+        drone_b = raw_env.agents_list[1]
+        drone_b.update(
+            raw_env.area,
+            raw_env.world,
+            np.asarray([0.0, drone_b.max_speed, 0.0], dtype=np.float32),
+            False,
+        )
+
+        assert np.isclose(drone_b.orientation, np.pi / 2.0, atol=0.15)
+        assert np.isclose(drone_b.sensor.theta, drone_b.orientation)
+
+        observation = env.observe("drone_1")
+        rel_x, rel_y, circular_mask = drone_b._local_sampling_template(
+            drone_b.LOCAL_MAP_SIZE,
+            drone_b.sensing_range,
+        )
+        angles = np.arctan2(rel_y, rel_x)
+        relative_angles = (
+            angles - drone_b.orientation + np.pi
+        ) % (2 * np.pi) - np.pi
+        visible = circular_mask & (
+            np.abs(relative_angles) <= drone_b.sensor.hfov / 2.0
+        )
+        assert np.all(observation["local_map"][~visible] == 0.0)
+    finally:
+        env.close()
+
+
 def test_type_a_and_type_b_use_separate_shared_policies():
     env, config = _make_env()
     try:
@@ -61,14 +138,14 @@ def test_type_a_and_type_b_use_separate_shared_policies():
         env.close()
 
 
-def test_reward_config_matches_individual_shaping_and_shared_success():
+def test_reward_config_matches_shared_shaping_without_terminal_bonus():
     env, config = _make_env()
     try:
         assert config["drone_step_penalty"] == 0.02
         assert config["drone_proximity_penalty_scale"] == 0.2
         assert config["drone_goal_found_reward"] == 100.0
         assert config["drone_exploration_reward_scale"] == 300.0
-        assert config["drone_only_success_reward"] == 200.0
+        assert config["drone_only_success_reward"] == 0.0
     finally:
         env.close()
 
@@ -84,25 +161,25 @@ def test_initial_sensing_is_registered_without_reward():
         env.close()
 
 
-def test_goal_discovery_reward_is_individual():
+def test_goal_discovery_reward_is_shared_by_all_drones():
     env, _ = _make_env()
     try:
         raw_env = env.unwrapped.env
         active_drone = raw_env.agents_list[0]
+        raw_env.drone_proximity_penalty_scale = 0.0
         raw_env.goals[0].x = active_drone.x
         raw_env.goals[0].y = active_drone.y
 
         raw_env.step(np.zeros(3, dtype=np.float32), "drone_0")
 
         assert raw_env.found_goal
-        assert raw_env.rewards["drone_0"] > 99.0
-        assert raw_env.rewards["drone_1"] == 0.0
-        assert raw_env.rewards["drone_2"] == 0.0
+        for reward in raw_env.rewards.values():
+            assert reward >= raw_env.drone_goal_found_reward
     finally:
         env.close()
 
 
-def test_new_coverage_reward_is_individual_and_ratio_normalized():
+def test_new_coverage_reward_is_shared_and_ratio_normalized():
     env, _ = _make_env()
     try:
         raw_env = env.unwrapped.env
@@ -117,12 +194,10 @@ def test_new_coverage_reward_is_individual_and_ratio_normalized():
         expected_reward = (
             raw_env.drone_exploration_reward_scale
             * (coverage_after - coverage_before)
-            - raw_env.drone_step_penalty
         )
         assert coverage_after > coverage_before
-        np.testing.assert_allclose(raw_env.rewards["drone_0"], expected_reward)
-        assert raw_env.rewards["drone_1"] == 0.0
-        assert raw_env.rewards["drone_2"] == 0.0
+        for reward in raw_env.rewards.values():
+            np.testing.assert_allclose(reward, expected_reward)
     finally:
         env.close()
 
@@ -146,10 +221,7 @@ def test_goal_discovery_does_not_end_maximize_coverage_episode_early():
         assert raw_env.mission_success
         assert not raw_env.terminate
         assert raw_env.success_step == raw_env.max_cycles
-        assert all(
-            reward == raw_env.drone_only_success_reward
-            for reward in raw_env.rewards.values()
-        )
+        assert all(reward == 0.0 for reward in raw_env.rewards.values())
     finally:
         env.close()
 

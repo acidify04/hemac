@@ -50,12 +50,19 @@ DRONE_TYPES = ["A", "B", "B"]
 DRONE_TYPE_CONFIGS = {
     "A": {
         "max_speed": 10.0,
-        "sensing_range": 100.0,
+        "sensing_range": 130.0,
         "icon": "drone_A.png",
     },
     "B": {
         "max_speed": 25.0,
-        "sensing_range": 40.0,
+        "sensing_range": 130.0,
+        "sensor": {
+            "model": "ForwardFacingCamera",
+            "params": {
+                "hfov": 0.7,
+                # "sensing_range": 200.0,
+            },
+        },
         "icon": "drone_B.png",
     },
 }
@@ -705,7 +712,7 @@ def build_env_config(
         "goal_max_base_distance": obstacle_difficulty["goal_max_base_distance"],
         "poi_config": [GOAL_CONFIG],
         "drone_only_success_min_coverage_ratio": float(drone_success_coverage_ratio),
-        "drone_only_success_reward": 200.0,
+        "drone_only_success_reward": 0.0,
         "drone_only_task_mode": (
             "maximize_coverage" if drone_only else "threshold"
         ),
@@ -1557,7 +1564,8 @@ def main():
         if env_config.get("drone_only_task_mode") == "maximize_coverage":
             print(
                 "[task] heterogeneous drone-only maximize-coverage task: "
-                "A=1 (speed=10, sensing=100), B=2 (speed=25, sensing=40); "
+                "A=1 (speed=10, sensing=100, fov=360), "
+                "B=2 (speed=25, sensing=120, fov=60); "
                 "run to max_cycles and count success when the goal was found"
             )
             if args.coverage_curriculum:

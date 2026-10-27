@@ -1,0 +1,67 @@
+{
+  "rl": {
+    "episodes": 5,
+    "goal_found_rate": 0.8,
+    "goal_step_reached_mean": 73.25,
+    "goal_step_reached_median": 44.0,
+    "goal_step_penalized_mean": 118.8,
+    "final_coverage_mean": 0.8216262698173523,
+    "final_reward_coverage_mean": 0.8105143229166668,
+    "coverage60_rate": 0.8,
+    "coverage60_step_reached_mean": 117.25,
+    "coverage60_step_penalized_mean": 154.0,
+    "full_coverage60_rate": 0.8,
+    "full_coverage60_step_reached_mean": 112.75,
+    "fatal_crash_rate": 0.6,
+    "goal_and_coverage60_no_crash_rate": 0.4,
+    "env_success_rate": 0.4,
+    "episode_steps_mean": 241.4,
+    "runtime_sec_mean": 1.7683236409910024,
+    "astar_replans_mean": 0.0,
+    "astar_failed_plans_mean": 0.0
+  },
+  "astar": {
+    "episodes": 5,
+    "goal_found_rate": 0.4,
+    "goal_step_reached_mean": 49.0,
+    "goal_step_reached_median": 49.0,
+    "goal_step_penalized_mean": 200.2,
+    "final_coverage_mean": 0.5328709423542023,
+    "final_reward_coverage_mean": 0.5018570200602214,
+    "coverage60_rate": 0.2,
+    "coverage60_step_reached_mean": 88.0,
+    "coverage60_step_penalized_mean": 258.4,
+    "full_coverage60_rate": 0.2,
+    "full_coverage60_step_reached_mean": 85.0,
+    "fatal_crash_rate": 1.0,
+    "goal_and_coverage60_no_crash_rate": 0.0,
+    "env_success_rate": 0.0,
+    "episode_steps_mean": 77.4,
+    "runtime_sec_mean": 0.24176474779378623,
+    "astar_replans_mean": 233.2,
+    "astar_failed_plans_mean": 0.2
+  },
+  "paired": {
+    "seeds": 5,
+    "astar_minus_rl": {
+      "goal_found": -0.4,
+      "final_coverage": -0.28875532746315,
+      "final_reward_coverage": -0.3086573028564453,
+      "coverage60_reached": -0.6,
+      "fatal_crash": 0.4,
+      "goal_and_coverage60_no_crash": -0.4,
+      "goal_step": {
+        "mean_astar_minus_rl_both_reached": 24.5,
+        "both_reached_count": 2
+      },
+      "coverage60_step": {
+        "mean_astar_minus_rl_both_reached": -34.0,
+        "both_reached_count": 1
+      },
+      "full_coverage60_step": {
+        "mean_astar_minus_rl_both_reached": -32.0,
+        "both_reached_count": 1
+      }
+    }
+  }
+}

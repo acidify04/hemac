@@ -11,7 +11,7 @@ from pymap3d import geodetic2enu
 
 from hemac.environment.base_agent import BaseAgent
 from hemac.helpers.helper import world_ref_to_game_ref, game_ref_to_world_ref
-from hemac.environment.sensors import DownwardFacingCamera, Sensor, RoundCamera
+from hemac.environment.sensors import DownwardFacingCamera, ForwardFacingCamera, Sensor, RoundCamera
 
 
 class UWB:
@@ -295,6 +295,17 @@ class Drone(BaseAgent):
         self.trajectory = [(self.x, self.y)] * self.trajectory_len
         self.sensor.update_poly_points((self.rect.centerx, self.rect.centery), self.orientation, self.altitude)
 
+    def update_sensor_detected_area(self) -> None:
+        """Update coverage using this drone's circular or directional sensor."""
+        if isinstance(self.sensor, ForwardFacingCamera):
+            self.update_detected_sector(
+                self.sensing_range,
+                self.orientation,
+                self.sensor.hfov,
+            )
+            return
+        self.update_detected_area(self.sensing_range)
+
     def draw(self, screen):
         """Draw drone."""
         # draw drone UI representation (not necessary accurate to real drone dimensions)
@@ -401,7 +412,6 @@ class Drone(BaseAgent):
                 self.y += dy
                 newpos = self.rect.copy()
                 rect_pos = world_ref_to_game_ref([self.x, self.y], world.area)
-                self.update_detected_area(self.sensing_range)
                 newpos.centerx = rect_pos[0]
                 newpos.centery = rect_pos[1]
 
@@ -415,6 +425,9 @@ class Drone(BaseAgent):
                 # update velocity
                 self.vx = self.vx + self.accel_x * self.time_factor
                 self.vy = self.vy + self.accel_y * self.time_factor
+                if not np.isclose(self.vx, 0.0) or not np.isclose(self.vy, 0.0):
+                    self.orientation = math.atan2(self.vy, self.vx) % (2 * np.pi)
+                self.update_sensor_detected_area()
                 # LOGGER.info(f"Velocity: {round((self.vx ** 2 + self.vy ** 2) ** 0.5)} m/s, Pos: {[self.x, self.y]}")
             else:
                 # print("drone has no energy!")
@@ -562,6 +575,12 @@ class Drone(BaseAgent):
                 goal_positions,
             ],
             sensing_range=self.sensing_range,
+            field_of_view=(
+                self.sensor.hfov
+                if isinstance(self.sensor, ForwardFacingCamera)
+                else None
+            ),
+            orientation=self.orientation,
         )
 
         return {

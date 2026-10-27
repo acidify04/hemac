@@ -1,0 +1,33 @@
+{
+  "rl_checkpoint": "/home/cau/Documents/hemac/src/train/hetero_drone_checkpoints/checkpoint_09100",
+  "difficulty": 1,
+  "episodes": 5,
+  "seed_base": 300000000,
+  "seed_formula": "seed_base+episode_index",
+  "max_cycles": 300,
+  "drone_types": [
+    "A",
+    "B",
+    "B"
+  ],
+  "coverage_threshold": 0.6,
+  "astar_config": {
+    "obstacle_threshold": 0.35,
+    "warning_threshold": 0.25,
+    "inflation_cells": 0,
+    "soft_warning_cost": 6.0,
+    "soft_obstacle_cost": 2.0,
+    "teammate_cost": 2.0,
+    "max_candidates": 6,
+    "progress_weight": 0.55,
+    "target_stickiness": 0.16,
+    "min_unexplored": 0.045,
+    "separation": 68.0,
+    "kp_position": 0.24,
+    "kd_velocity": 0.75,
+    "min_action_speed_fraction": 0.0
+  },
+  "astar_observation_access": "shared observed world maps + perfect self and teammate pose/velocity; NO hidden goal/true obstacles",
+  "evaluation": "same environment config, seed, 300-step max, independent online rollout; no early stopping at goal or coverage60",
+  "time_reached": "conditional on reaching; also report censored max_cycles+1"
+}

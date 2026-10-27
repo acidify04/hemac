@@ -39,11 +39,54 @@ class BaseAgent(pygame.sprite.Sprite):
         offsets.setflags(write=False)
         return offsets
 
+    @staticmethod
+    @lru_cache(maxsize=512)
+    def _detected_sector_offsets(
+        radius: int,
+        field_of_view_key: int,
+        heading_bin: int,
+        heading_bins: int = 72,
+    ) -> np.ndarray:
+        """Cache offsets for a directional sensor using five-degree headings."""
+        offsets = BaseAgent._detected_offsets(radius)
+        field_of_view = float(field_of_view_key) / 1_000_000.0
+        orientation = (2.0 * np.pi * int(heading_bin)) / int(heading_bins)
+        angles = np.arctan2(offsets[:, 1], offsets[:, 0])
+        relative_angles = (angles - orientation + np.pi) % (2 * np.pi) - np.pi
+        visible_offsets = offsets[np.abs(relative_angles) <= field_of_view / 2.0]
+        visible_offsets.setflags(write=False)
+        return visible_offsets
+
     def update_detected_area(self, sensing_range: float) -> None:
         """Record a sensing disk; materialize its coordinates only if requested."""
         self.latest_detection_center = (int(self.x), int(self.y))
         self.latest_detection_radius = max(0, int(sensing_range))
         self._latest_detected = None
+
+    def update_detected_sector(
+        self,
+        sensing_range: float,
+        orientation: float,
+        field_of_view: float,
+    ) -> None:
+        """Record a forward-facing sensing sector in world coordinates."""
+        radius = max(0, int(sensing_range))
+        heading_bins = 72
+        normalized_orientation = float(orientation) % (2.0 * np.pi)
+        heading_bin = int(
+            np.round(normalized_orientation * heading_bins / (2.0 * np.pi))
+        ) % heading_bins
+        field_of_view_key = int(np.round(float(field_of_view) * 1_000_000.0))
+        visible_offsets = self._detected_sector_offsets(
+            radius,
+            field_of_view_key,
+            heading_bin,
+            heading_bins,
+        )
+        center = np.asarray((int(self.x), int(self.y)), dtype=np.int32)
+        self.latest_detection_center = None
+        self.latest_detection_radius = 0
+        self._latest_detected = visible_offsets + center
 
     @property
     def latest_detected(self) -> np.ndarray:
@@ -267,6 +310,8 @@ class BaseAgent(pygame.sprite.Sprite):
         world,
         entity_position_groups: list[list[tuple[float, float]]] | None = None,
         sensing_range: float | None = None,
+        field_of_view: float | None = None,
+        orientation: float = 0.0,
     ) -> np.ndarray:
         """Return a 20x20 agent-centered view over the agent's sensing range."""
         if sensing_range is None:
@@ -281,7 +326,21 @@ class BaseAgent(pygame.sprite.Sprite):
         for positions in entity_position_groups or []:
             local_channels.append(self.build_local_entity_channel(positions, sensing_range))
 
-        return np.stack(local_channels, axis=-1).astype(np.float32, copy=False)
+        local_map = np.stack(local_channels, axis=-1).astype(np.float32, copy=False)
+        if field_of_view is not None and float(field_of_view) < 2.0 * np.pi:
+            rel_x, rel_y, circular_mask = self._local_sampling_template(
+                self.LOCAL_MAP_SIZE,
+                sensing_range,
+            )
+            angles = np.arctan2(rel_y, rel_x)
+            relative_angles = (
+                angles - float(orientation) + np.pi
+            ) % (2 * np.pi) - np.pi
+            fov_mask = circular_mask & (
+                np.abs(relative_angles) <= float(field_of_view) / 2.0
+            )
+            local_map[~fov_mask] = 0.0
+        return local_map
 
     def build_sector_features(self, world) -> np.ndarray:
         """Build flattened sector coverage and sector-position features."""

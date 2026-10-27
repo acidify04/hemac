@@ -1,6 +1,7 @@
 import argparse
 import copy
 import os
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 import pickle
@@ -17,6 +18,7 @@ from ray.rllib.policy.policy import Policy
 from ray.rllib.utils.spaces.space_utils import unsquash_action
 import numpy as np
 from hemac import HeMAC_v0
+from hemac.environment.world import World
 from hemac.rllib_policy import register_hemac_rllib_models
 import time
 import pygame
@@ -50,11 +52,12 @@ GOAL_CONFIG = {
 
 TRAIN_ROOT = PROJECT_ROOT / "src/train"
 CHECKPOINT_ROOTS = (
-    PROJECT_ROOT / "hemac_checkpoints-4-2",
+    PROJECT_ROOT / "hetero_drone_checkpoints",
     *(sorted(TRAIN_ROOT.glob("*checkpoints*")) if TRAIN_ROOT.is_dir() else ()),
 )
 
 NUM_EVAL_SEEDS = 10
+DEFAULT_EVAL_MAX_CYCLES = 300
 VISUALIZATION_DIR = Path("./visualization")
 GLOBAL_MAP_SIZE = 40
 LOCAL_MAP_SIZE = 20
@@ -66,6 +69,39 @@ OBS_PANEL_HEIGHT = 430
 OBS_PANEL_MARGIN = 12
 OBS_WINDOW_PADDING = 12
 OBS_WINDOW_HEADER_HEIGHT = 42
+
+SENSOR_VARIATIONS = {
+    "v1": {
+        "name": "dual_omni_balanced",
+        "description": "A: 360deg/125, B: 360deg/135",
+        "A": {"range": 125.0, "model": "RoundCamera"},
+        "B": {"range": 135.0, "model": "RoundCamera"},
+    },
+    "v2": {
+        "name": "wide_b_scout",
+        "description": "A: 360deg/125, B: forward 90deg/140",
+        "A": {"range": 125.0, "model": "RoundCamera"},
+        "B": {"range": 140.0, "model": "ForwardFacingCamera", "fov_deg": 90.0},
+    },
+    "v3": {
+        "name": "dual_omni_wide_a",
+        "description": "A: 360deg/140, B: 360deg/125",
+        "A": {"range": 140.0, "model": "RoundCamera"},
+        "B": {"range": 125.0, "model": "RoundCamera"},
+    },
+    "v4": {
+        "name": "b_omni_a_forward",
+        "description": "A: forward 180deg/130, B: 360deg/145",
+        "A": {"range": 130.0, "model": "ForwardFacingCamera", "fov_deg": 180.0},
+        "B": {"range": 145.0, "model": "RoundCamera"},
+    },
+    "v5": {
+        "name": "complementary_sectors",
+        "description": "A: forward 200deg/125, B: forward 75deg/140",
+        "A": {"range": 125.0, "model": "ForwardFacingCamera", "fov_deg": 200.0},
+        "B": {"range": 140.0, "model": "ForwardFacingCamera", "fov_deg": 75.0},
+    },
+}
 
 
 class _LegacyPackagingVersion:
@@ -120,8 +156,27 @@ def _load_checkpoint_pickle(path):
     return state
 
 
-def find_complete_checkpoints(required_policy_ids=("drone_policy",)):
-    """Return complete checkpoints and their creation timestamps."""
+def checkpoint_policy_ids(checkpoint_dir):
+    """Return policy IDs that have a complete standalone policy state."""
+    policies_dir = Path(checkpoint_dir) / "policies"
+    if not policies_dir.is_dir():
+        return set()
+    return {
+        policy_dir.name
+        for policy_dir in policies_dir.iterdir()
+        if policy_dir.is_dir() and (policy_dir / "policy_state.pkl").is_file()
+    }
+
+
+def _has_supported_drone_policy(policy_ids):
+    return "drone_policy" in policy_ids or {
+        "drone_a_policy",
+        "drone_b_policy",
+    }.issubset(policy_ids)
+
+
+def find_complete_checkpoints(required_policy_ids=None):
+    """Return complete legacy or type-specific drone checkpoints."""
     checkpoints = []
     for root in CHECKPOINT_ROOTS:
         if not root.exists():
@@ -130,22 +185,26 @@ def find_complete_checkpoints(required_policy_ids=("drone_policy",)):
             checkpoint_dir = state_path.parent
             if not checkpoint_dir.name.startswith("checkpoint_"):
                 continue
-            if all(
-                (checkpoint_dir / "policies" / policy_id / "policy_state.pkl").is_file()
-                for policy_id in required_policy_ids
-            ):
+            policy_ids = checkpoint_policy_ids(checkpoint_dir)
+            has_required_policies = (
+                _has_supported_drone_policy(policy_ids)
+                if required_policy_ids is None
+                else set(required_policy_ids).issubset(policy_ids)
+            )
+            if has_required_policies:
                 checkpoints.append((state_path.stat().st_mtime_ns, checkpoint_dir))
 
     if not checkpoints:
         roots = ", ".join(str(root) for root in CHECKPOINT_ROOTS)
         raise FileNotFoundError(
-            f"No complete checkpoint containing {required_policy_ids} found under: {roots}"
+            "No complete legacy drone_policy or heterogeneous "
+            f"drone_a_policy/drone_b_policy checkpoint found under: {roots}"
         )
 
     return checkpoints
 
 
-def find_latest_checkpoint(required_policy_ids=("drone_policy",)):
+def find_latest_checkpoint(required_policy_ids=None):
     """Return the newest complete checkpoint found below the checkpoint roots."""
     checkpoints = find_complete_checkpoints(required_policy_ids)
 
@@ -154,7 +213,7 @@ def find_latest_checkpoint(required_policy_ids=("drone_policy",)):
 
 def find_checkpoint_by_iteration(
     iteration,
-    required_policy_ids=("drone_policy",),
+    required_policy_ids=None,
 ):
     """Return the newest complete checkpoint matching one training iteration."""
     target_iteration = int(iteration)
@@ -185,14 +244,18 @@ def resolve_checkpoint(checkpoint):
     candidate = Path(str(checkpoint)).expanduser()
     if candidate.exists():
         candidate = candidate.resolve()
-        if candidate.name == "drone_policy" and candidate.parent.name == "policies":
+        if candidate.parent.name == "policies":
             candidate = candidate.parent.parent
         if not (candidate / "algorithm_state.pkl").is_file():
             raise FileNotFoundError(
                 f"Checkpoint directory has no algorithm_state.pkl: {candidate}"
             )
-        if not (candidate / "policies/drone_policy/policy_state.pkl").is_file():
-            raise FileNotFoundError(f"Checkpoint has no drone_policy: {candidate}")
+        policy_ids = checkpoint_policy_ids(candidate)
+        if not _has_supported_drone_policy(policy_ids):
+            raise FileNotFoundError(
+                "Checkpoint has neither a shared drone_policy nor both "
+                f"drone_a_policy/drone_b_policy: {candidate}"
+            )
         return candidate
 
     try:
@@ -270,14 +333,19 @@ def adapt_observation_for_policy(observation, policy):
 
 
 class DronePolicyRunner:
-    """Minimal Algorithm-compatible wrapper around restored shared policies."""
+    """Minimal Algorithm-compatible wrapper around restored policy states."""
 
-    def __init__(self, policy, observer_policy=None, n_drones=None, n_goals=1):
-        self.policy = policy
-        self.observer_policy = observer_policy
+    def __init__(self, policies, env_config, n_drones=None, n_goals=1):
+        self.policies = dict(policies)
+        self.env_config = copy.deepcopy(env_config)
         if n_drones is None:
             n_drones = len(DRONE_START_POSITIONS)
-        original_space = _policy_original_space(policy)
+        drone_policy = next(
+            policy
+            for policy_id, policy in self.policies.items()
+            if policy_id.startswith("drone_")
+        )
+        original_space = _policy_original_space(drone_policy)
         spaces = getattr(original_space, "spaces", {})
         central_vector_space = spaces.get("central_vector")
         if central_vector_space is None:
@@ -292,15 +360,49 @@ class DronePolicyRunner:
                 0,
             )
 
-    def compute_single_action(self, observation, policy_id=None, explore=False):
-        if policy_id == "observer_policy":
-            if self.observer_policy is None:
+    def policy_id_for_agent(self, agent_id):
+        if str(agent_id).startswith("observer_"):
+            return "observer_policy"
+        if not str(agent_id).startswith("drone_"):
+            return None
+
+        if "drone_policy" in self.policies:
+            return "drone_policy"
+
+        try:
+            drone_index = int(str(agent_id).rsplit("_", 1)[1])
+        except (IndexError, ValueError) as error:
+            raise ValueError(f"Cannot determine drone index from {agent_id!r}.") from error
+        drone_config = self.env_config.get("drone_config", {}) or {}
+        drone_types = list(drone_config.get("drone_types", []))
+        if not 0 <= drone_index < len(drone_types):
+            raise ValueError(
+                f"No drone type configured for {agent_id!r}; types={drone_types}."
+            )
+        policy_id = f"drone_{str(drone_types[drone_index]).lower()}_policy"
+        if policy_id not in self.policies:
+            raise ValueError(
+                f"Checkpoint has no {policy_id!r}; available={sorted(self.policies)}."
+            )
+        return policy_id
+
+    def compute_single_action(
+        self,
+        observation,
+        policy_id=None,
+        agent_id=None,
+        explore=False,
+    ):
+        if policy_id is None and agent_id is not None:
+            policy_id = self.policy_id_for_agent(agent_id)
+        policy = self.policies.get(policy_id)
+        if policy is None:
+            if policy_id == "observer_policy":
                 return np.zeros((3,), dtype=np.float32)
-            policy = self.observer_policy
-        elif policy_id == "drone_policy":
-            policy = self.policy
-        else:
-            raise ValueError(f"Unsupported policy ID: {policy_id!r}.")
+            raise ValueError(
+                f"Unsupported policy ID {policy_id!r}; "
+                f"available={sorted(self.policies)}."
+            )
 
         action, _, _ = policy.compute_single_action(
             adapt_observation_for_policy(observation, policy),
@@ -338,19 +440,21 @@ def _load_policy_from_checkpoint(checkpoint_dir, policy_id):
 
 
 def load_drone_policy(checkpoint_dir, env_config=None):
-    """Restore drone and optional observer policies from one checkpoint."""
+    """Restore shared or heterogeneous drone policies from one checkpoint."""
     if env_config is None:
         env_config = load_checkpoint_env_config(checkpoint_dir)
-    drone_policy = _load_policy_from_checkpoint(checkpoint_dir, "drone_policy")
-    observer_state_path = (
-        Path(checkpoint_dir) / "policies/observer_policy/policy_state.pkl"
-    )
-    observer_policy = (
-        _load_policy_from_checkpoint(checkpoint_dir, "observer_policy")
-        if observer_state_path.is_file()
-        else None
-    )
-    if observer_policy is None:
+    available_policy_ids = checkpoint_policy_ids(checkpoint_dir)
+    if "drone_policy" in available_policy_ids:
+        policy_ids = ["drone_policy"]
+    else:
+        policy_ids = ["drone_a_policy", "drone_b_policy"]
+    if "observer_policy" in available_policy_ids:
+        policy_ids.append("observer_policy")
+    policies = {
+        policy_id: _load_policy_from_checkpoint(checkpoint_dir, policy_id)
+        for policy_id in policy_ids
+    }
+    if "observer_policy" not in policies and int(env_config.get("n_observers", 0)) > 0:
         print("[observer_policy] not found; observers will use zero actions.")
     n_drones = int(env_config.get("n_drones", len(DRONE_START_POSITIONS)))
     n_observers = int(env_config.get("n_observers", 0))
@@ -360,8 +464,8 @@ def load_drone_policy(checkpoint_dir, env_config=None):
         else len(env_config.get("poi_config") or ())
     )
     return DronePolicyRunner(
-        drone_policy,
-        observer_policy=observer_policy,
+        policies,
+        env_config,
         n_drones=n_drones,
         n_goals=n_goals,
     )
@@ -373,11 +477,81 @@ def load_checkpoint_env_config(checkpoint_dir):
     checkpoint_state = _load_checkpoint_pickle(state_path)
 
     config = checkpoint_state.get("config") or {}
-    env_config = config.get("env_config") if isinstance(config, dict) else None
-    if not isinstance(env_config, dict):
+    if isinstance(config, Mapping):
+        env_config = config.get("env_config")
+    else:
+        env_config = getattr(config, "env_config", None)
+    if not isinstance(env_config, Mapping):
         raise ValueError(f"Checkpoint has no valid env_config: {state_path}")
 
-    return copy.deepcopy(env_config)
+    return copy.deepcopy(dict(env_config))
+
+
+def load_current_drone_env_config():
+    """Build the current drone-only environment without duplicating train config."""
+    from train.train import build_env_config
+
+    return build_env_config(drone_only=True)
+
+
+def apply_sensor_variation(env_config, variation):
+    """Apply a visualization-only A/B sensor preset without changing spaces."""
+    config = copy.deepcopy(env_config)
+    if variation == "original":
+        return config, "original checkpoint/current sensor configuration"
+
+    preset = SENSOR_VARIATIONS[variation]
+    drone_config = copy.deepcopy(config.get("drone_config", {}) or {})
+    type_configs = copy.deepcopy(drone_config.get("drone_type_configs", {}) or {})
+    obstacle_max_speed = max(float(config.get("obstacle_max_speed", 0.0)), 0.0)
+
+    for drone_type in ("A", "B"):
+        sensor_spec = preset[drone_type]
+        config_key = (
+            drone_type
+            if drone_type in type_configs
+            else drone_type.lower()
+            if drone_type.lower() in type_configs
+            else drone_type
+        )
+        role_config = copy.deepcopy(type_configs.get(config_key, {}) or {})
+        sensing_range = float(sensor_spec["range"])
+        max_speed = float(
+            role_config.get("max_speed", drone_config.get("drone_max_speed", 0.0))
+        )
+        safety_buffer = sensing_range - float(World.OBSTACLE_WARNING_RADIUS)
+        minimum_buffer = max_speed + obstacle_max_speed
+        if safety_buffer <= minimum_buffer:
+            raise ValueError(
+                f"Unsafe {variation}/{drone_type} sensor: range={sensing_range}, "
+                f"warning_radius={World.OBSTACLE_WARNING_RADIUS}, "
+                f"max_closing_step={minimum_buffer}."
+            )
+
+        sensor_params = {"sensing_range": sensing_range}
+        if sensor_spec["model"] == "ForwardFacingCamera":
+            sensor_params["hfov"] = math.radians(float(sensor_spec["fov_deg"]))
+        role_config["sensing_range"] = sensing_range
+        role_config["sensor"] = {
+            "model": sensor_spec["model"],
+            "params": sensor_params,
+        }
+        type_configs[config_key] = role_config
+
+    drone_config["drone_type_configs"] = type_configs
+    config["drone_config"] = drone_config
+    return config, f"{variation}/{preset['name']}: {preset['description']}"
+
+
+def print_sensor_variations():
+    """Print visualization sensor presets and their safety interpretation."""
+    print("original: use the environment sensor configuration without overrides")
+    for variation, preset in SENSOR_VARIATIONS.items():
+        print(f"{variation}: {preset['name']} | {preset['description']}")
+    print(
+        "All presets keep range 125-145 and leave at least 60 units between "
+        "detection range and the obstacle warning-zone boundary."
+    )
 
 
 def load_policy_weights_from_checkpoint(checkpoint_dir, policy_id):
@@ -423,15 +597,22 @@ def capture_pygame_frame():
     return frame.transpose((1, 0, 2)).copy()
 
 
-def save_gif(frames, eval_seed):
+def save_gif(frames, eval_seed, filename_prefix="example"):
     """Save rollout frames as a GIF under visualization/."""
     if not frames:
         return None
 
     VISUALIZATION_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    gif_path = VISUALIZATION_DIR / f"example_seed_{eval_seed}_{timestamp}.gif"
-    pil_frames = [Image.fromarray(frame.astype("uint8")) for frame in frames]
+    gif_path = VISUALIZATION_DIR / (
+        f"{filename_prefix}_seed_{eval_seed}_{timestamp}.gif"
+    )
+    pil_frames = [
+        frame.copy()
+        if isinstance(frame, Image.Image)
+        else Image.fromarray(frame.astype("uint8"))
+        for frame in frames
+    ]
     pil_frames[0].save(
         gif_path,
         save_all=True,
@@ -440,6 +621,43 @@ def save_gif(frames, eval_seed):
         loop=0,
     )
     return gif_path
+
+
+def prepare_comparison_gif_frame(frame, max_width=640):
+    """Downsample and palette-compress a frame for a multi-rollout GIF."""
+    image = Image.fromarray(frame.astype("uint8"))
+    max_width = max(int(max_width), 1)
+    if image.width > max_width:
+        ratio = max_width / image.width
+        target_size = (max_width, max(1, round(image.height * ratio)))
+        resampling = getattr(Image, "Resampling", Image).LANCZOS
+        image = image.resize(target_size, resampling)
+    adaptive_palette = getattr(getattr(Image, "Palette", Image), "ADAPTIVE", 1)
+    return image.convert("P", palette=adaptive_palette, colors=128)
+
+
+def draw_sensor_variation_banner(label):
+    """Identify the active sensor preset in the recorded main window."""
+    if not label:
+        return
+    surface = pygame.display.get_surface()
+    if surface is None:
+        return
+    font = pygame.font.SysFont("Trebuchet MS", 22, bold=True)
+    text_surface = font.render(label, True, (255, 255, 255))
+    padding_x = 14
+    padding_y = 8
+    banner = pygame.Surface(
+        (
+            text_surface.get_width() + padding_x * 2,
+            text_surface.get_height() + padding_y * 2,
+        ),
+        pygame.SRCALPHA,
+    )
+    banner.fill((5, 10, 14, 220))
+    banner.blit(text_surface, (padding_x, padding_y))
+    surface.blit(banner, (12, 12))
+    pygame.display.flip()
 
 
 def wait_for_playback(
@@ -956,7 +1174,19 @@ def draw_observation_overlays(agent_debug_state, active_agent, playback_mode, ob
     pygame.display.flip()
 
 
-def run_single_episode(env, algo, eval_seed, playback_state, observation_window=None):
+def run_single_episode(
+    env,
+    algo,
+    eval_seed,
+    playback_state,
+    observation_window=None,
+    visualization_label=None,
+    shared_gif_frames=None,
+    gif_frame_stride=1,
+    gif_max_width=None,
+    save_episode_gif=True,
+    gif_filename_prefix="example",
+):
     """Run one evaluation episode and return the final info."""
     env.reset(seed=eval_seed)
 
@@ -964,6 +1194,8 @@ def run_single_episode(env, algo, eval_seed, playback_state, observation_window=
     last_info = {}
     total_agent_turns = 0
     frames = []
+    rendered_steps = 0
+    captured_frames = 0
     possible_agents = list(getattr(env, "possible_agents", []))
     agent_debug_state = {
         agent_id: {
@@ -976,13 +1208,6 @@ def run_single_episode(env, algo, eval_seed, playback_state, observation_window=
         for agent_id in possible_agents
     }
     agents_per_step = max(len(possible_agents), 1)
-
-    def get_policy_id(agent_id):
-        if "observer" in agent_id:
-            return "observer_policy"
-        if "drone" in agent_id:
-            return "drone_policy"
-        return None
 
     def refresh_agent_debug_state():
         rewards = getattr(env, "rewards", {})
@@ -1001,7 +1226,9 @@ def run_single_episode(env, algo, eval_seed, playback_state, observation_window=
                 state["truncation"] = truncations.get(agent_id, state["truncation"])
 
     def render_step_state(capture_frame=True):
+        nonlocal rendered_steps, captured_frames
         env.render()
+        draw_sensor_variation_banner(visualization_label)
         draw_observation_overlays(
             agent_debug_state,
             getattr(env, "agent_selection", None),
@@ -1009,9 +1236,19 @@ def run_single_episode(env, algo, eval_seed, playback_state, observation_window=
             observation_window=observation_window,
         )
         if capture_frame:
+            rendered_steps += 1
+            if (rendered_steps - 1) % max(int(gif_frame_stride), 1) != 0:
+                return
             frame = capture_pygame_frame()
             if frame is not None:
-                frames.append(frame)
+                if gif_max_width is not None:
+                    frame = prepare_comparison_gif_frame(frame, gif_max_width)
+                destination = shared_gif_frames if shared_gif_frames is not None else frames
+                # Hold the first labeled frame briefly between comparison rollouts.
+                if shared_gif_frames is not None and captured_frames == 0:
+                    destination.extend(frame.copy() for _ in range(8))
+                destination.append(frame)
+                captured_frames += 1
 
     refresh_agent_debug_state()
     render_step_state()
@@ -1019,9 +1256,14 @@ def run_single_episode(env, algo, eval_seed, playback_state, observation_window=
         playback_state,
         on_mode_change=lambda: render_step_state(capture_frame=False),
     ):
-        gif_path = save_gif(frames, eval_seed)
-        if gif_path is not None:
-            print(f"Saved GIF: {gif_path}")
+        if save_episode_gif:
+            gif_path = save_gif(
+                frames,
+                eval_seed,
+                filename_prefix=gif_filename_prefix,
+            )
+            if gif_path is not None:
+                print(f"Saved GIF: {gif_path}")
         return last_info
 
     for agent in env.agent_iter():
@@ -1033,11 +1275,12 @@ def run_single_episode(env, algo, eval_seed, playback_state, observation_window=
         if termination or truncation:
             action = None
         else:
-            policy_id = get_policy_id(agent)
+            policy_id = algo.policy_id_for_agent(agent)
             if policy_id:
                 action = algo.compute_single_action(
                     observation=observation,
                     policy_id=policy_id,
+                    agent_id=agent,
                     explore=False,
                 )
             else:
@@ -1081,22 +1324,50 @@ def run_single_episode(env, algo, eval_seed, playback_state, observation_window=
             },
         )
 
-    gif_path = save_gif(frames, eval_seed)
-    if gif_path is not None:
-        print(f"Saved GIF: {gif_path}")
+    if save_episode_gif:
+        gif_path = save_gif(
+            frames,
+            eval_seed,
+            filename_prefix=gif_filename_prefix,
+        )
+        if gif_path is not None:
+            print(f"Saved GIF: {gif_path}")
 
     return last_info
 
 
-def run_trained_model_simulation(playback_mode="step", checkpoint_iteration=None):
+def run_trained_model_simulation(
+    playback_mode="step",
+    checkpoint_iteration=None,
+    environment_mode="auto",
+    max_cycles=DEFAULT_EVAL_MAX_CYCLES,
+    sensor_variation="original",
+    eval_episodes=NUM_EVAL_SEEDS,
+    seed_base=None,
+):
     # Standalone policy restoration avoids rebuilding training-time Ray workers.
     register_hemac_rllib_models()
     checkpoint_path = resolve_checkpoint(checkpoint_iteration)
     print(f"드론 체크포인트를 불러오는 중: {checkpoint_path}")
     checkpoint_env_config = load_checkpoint_env_config(checkpoint_path)
-    algo = load_drone_policy(checkpoint_path, checkpoint_env_config)
+    policy_ids = checkpoint_policy_ids(checkpoint_path)
+    use_current_environment = environment_mode == "current" or (
+        environment_mode == "auto"
+        and {"drone_a_policy", "drone_b_policy"}.issubset(policy_ids)
+    )
+    if use_current_environment:
+        env_config = load_current_drone_env_config()
+        env_config_source = "current train.py drone-only config"
+    else:
+        env_config = copy.deepcopy(checkpoint_env_config)
+        env_config_source = "checkpoint env_config"
+    env_config, sensor_description = apply_sensor_variation(
+        env_config,
+        sensor_variation,
+    )
+    algo = load_drone_policy(checkpoint_path, env_config)
 
-    env_config = copy.deepcopy(checkpoint_env_config)
+    env_config["max_cycles"] = max(int(max_cycles), 1)
     env_config["render_mode"] = "human"
     env_config["log_step_rewards"] = True
     configured_observers = int(env_config.get("n_observers", 0))
@@ -1106,22 +1377,26 @@ def run_trained_model_simulation(playback_mode="step", checkpoint_iteration=None
             f"count: env={configured_observers}, vector={algo.required_observer_count}"
         )
     print(
-        f"Environment from checkpoint: drones={env_config.get('n_drones')}, "
-        f"observers={configured_observers}"
+        f"Environment config: drones={env_config.get('n_drones')}, "
+        f"observers={configured_observers}, "
+        f"max_cycles={env_config['max_cycles']}, "
+        f"policies={sorted(algo.policies)}, source={env_config_source}"
     )
+    print(f"Sensor variation: {sensor_description}")
     # 환경 생성
     env = HeMAC_v0.env(**env_config)
     observation_window = ObservationDebugWindow()
     playback_state = {"mode": playback_mode}
     print(f"시뮬레이션을 시작합니다. 재생 모드: {playback_state['mode']} (F1로 전환)")
 
-    seed_base = random.randint(0, 9999)
-    eval_seeds = [seed_base + offset for offset in range(NUM_EVAL_SEEDS)]
-    print(f"Running {NUM_EVAL_SEEDS} evaluation seeds: {eval_seeds}")
+    eval_episodes = max(int(eval_episodes), 1)
+    seed_base = random.randint(0, 9999) if seed_base is None else int(seed_base)
+    eval_seeds = [seed_base + offset for offset in range(eval_episodes)]
+    print(f"Running {eval_episodes} evaluation seeds: {eval_seeds}")
 
     results = []
     for idx, eval_seed in enumerate(eval_seeds, start=1):
-        print(f"\n=== Evaluation {idx}/{NUM_EVAL_SEEDS} ===")
+        print(f"\n=== Evaluation {idx}/{eval_episodes} ===")
         last_info = run_single_episode(
             env,
             algo,
@@ -1138,15 +1413,100 @@ def run_trained_model_simulation(playback_mode="step", checkpoint_iteration=None
     observer_crash_count = sum(1 for info in results if info.get("observer_crash", False))
 
     print("\n=== Summary ===")
-    print(f"Success: {success_count}/{NUM_EVAL_SEEDS}")
-    print(f"Goal found: {goal_found_count}/{NUM_EVAL_SEEDS}")
-    print(f"Drone crash: {drone_crash_count}/{NUM_EVAL_SEEDS}")
-    print(f"Observer crash: {observer_crash_count}/{NUM_EVAL_SEEDS}")
+    print(f"Success: {success_count}/{eval_episodes}")
+    print(f"Goal found: {goal_found_count}/{eval_episodes}")
+    print(f"Drone crash: {drone_crash_count}/{eval_episodes}")
+    print(f"Observer crash: {observer_crash_count}/{eval_episodes}")
 
     hold_window_open(seconds=5.0)
     observation_window.close()
     env.close()
     # ray.shutdown()
+
+
+def run_sensor_variation_comparison(
+    playback_mode="auto",
+    checkpoint_iteration=None,
+    environment_mode="auto",
+    max_cycles=DEFAULT_EVAL_MAX_CYCLES,
+    seed=None,
+    gif_frame_stride=3,
+    gif_max_width=640,
+):
+    """Play original and v1-v5 sequentially and save one GIF per preset."""
+    register_hemac_rllib_models()
+    checkpoint_path = resolve_checkpoint(checkpoint_iteration)
+    print(f"드론 체크포인트를 불러오는 중: {checkpoint_path}")
+    checkpoint_env_config = load_checkpoint_env_config(checkpoint_path)
+    policy_ids = checkpoint_policy_ids(checkpoint_path)
+    use_current_environment = environment_mode == "current" or (
+        environment_mode == "auto"
+        and {"drone_a_policy", "drone_b_policy"}.issubset(policy_ids)
+    )
+    if use_current_environment:
+        base_env_config = load_current_drone_env_config()
+        env_config_source = "current train.py drone-only config"
+    else:
+        base_env_config = copy.deepcopy(checkpoint_env_config)
+        env_config_source = "checkpoint env_config"
+
+    algo = load_drone_policy(checkpoint_path, base_env_config)
+    comparison_seed = random.randint(0, 9999) if seed is None else int(seed)
+    variations = ("original", *SENSOR_VARIATIONS)
+    results = []
+    playback_state = {"mode": playback_mode}
+
+    print(
+        f"Sensor comparison: {' -> '.join(variations)}, seed={comparison_seed}, "
+        f"source={env_config_source}"
+    )
+    for index, variation in enumerate(variations, start=1):
+        env_config, sensor_description = apply_sensor_variation(
+            base_env_config,
+            variation,
+        )
+        env_config["max_cycles"] = max(int(max_cycles), 1)
+        env_config["render_mode"] = "human"
+        env_config["log_step_rewards"] = True
+        configured_observers = int(env_config.get("n_observers", 0))
+        if configured_observers != algo.required_observer_count:
+            raise ValueError(
+                "Checkpoint env_config and drone central_vector disagree on observer "
+                f"count: env={configured_observers}, "
+                f"vector={algo.required_observer_count}"
+            )
+
+        print(f"\n=== Sensor comparison {index}/{len(variations)} ===")
+        print(f"Sensor variation: {sensor_description}")
+        env = HeMAC_v0.env(**env_config)
+        observation_window = ObservationDebugWindow()
+        try:
+            last_info = run_single_episode(
+                env,
+                algo,
+                comparison_seed,
+                playback_state=playback_state,
+                observation_window=observation_window,
+                visualization_label=f"{index}/6  {sensor_description}",
+                gif_frame_stride=gif_frame_stride,
+                gif_max_width=gif_max_width,
+                save_episode_gif=True,
+                gif_filename_prefix=f"sensor_variation_{variation}",
+            )
+            results.append((variation, last_info))
+            hold_window_open(seconds=0.5)
+        finally:
+            observation_window.close()
+            env.close()
+
+    print("\n=== Sensor comparison summary ===")
+    for variation, info in results:
+        print(
+            f"{variation}: success={info.get('success')}, "
+            f"goal_found={info.get('goal_found')}, "
+            f"explored_area={info.get('explored_area')}"
+        )
+    print(f"Saved 6 individual GIFs under: {VISUALIZATION_DIR.resolve()}")
 
 def parse_args():
     """Parse CLI arguments for example playback."""
@@ -1164,15 +1524,102 @@ def parse_args():
         metavar="ITERATION_OR_PATH",
         help=(
             "Load a drone checkpoint by iteration or explicit checkpoint path. "
-            "If omitted, load the newest checkpoint containing drone_policy."
+            "If omitted, load the newest checkpoint containing either the legacy "
+            "drone_policy or both drone_a_policy/drone_b_policy."
         ),
+    )
+    parser.add_argument(
+        "--environment",
+        choices=("auto", "current", "checkpoint"),
+        default="auto",
+        help=(
+            "Environment config source. auto uses the current train.py drone-only "
+            "config for A/B checkpoints and the saved config for legacy checkpoints."
+        ),
+    )
+    parser.add_argument(
+        "--max-cycles",
+        type=int,
+        default=DEFAULT_EVAL_MAX_CYCLES,
+        help=(
+            "Maximum environment cycles per visualization episode "
+            f"(default: {DEFAULT_EVAL_MAX_CYCLES})."
+        ),
+    )
+    parser.add_argument(
+        "--sensor-variation",
+        choices=("original", *SENSOR_VARIATIONS),
+        default="original",
+        help=(
+            "Visualization-only A/B sensor preset. It preserves observation "
+            "tensor shapes so existing heterogeneous checkpoints can be loaded."
+        ),
+    )
+    parser.add_argument(
+        "--eval-episodes",
+        type=int,
+        default=NUM_EVAL_SEEDS,
+        help=(
+            "Number of visualization episodes "
+            f"(default: {NUM_EVAL_SEEDS}; use 1 for quick preset comparison)."
+        ),
+    )
+    parser.add_argument(
+        "--seed-base",
+        type=int,
+        default=None,
+        help="First evaluation seed; omit for a random seed base.",
+    )
+    parser.add_argument(
+        "--list-sensor-variations",
+        action="store_true",
+        help="Print all sensor presets and exit.",
+    )
+    parser.add_argument(
+        "--compare-sensor-variations",
+        action="store_true",
+        help=(
+            "Play original and v1-v5 in order on the same seed and save one "
+            "GIF for each preset."
+        ),
+    )
+    parser.add_argument(
+        "--gif-frame-stride",
+        type=int,
+        default=3,
+        help="Capture every Nth rendered step in comparison GIF mode (default: 3).",
+    )
+    parser.add_argument(
+        "--gif-max-width",
+        type=int,
+        default=640,
+        help="Maximum comparison GIF width in pixels (default: 640).",
     )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    run_trained_model_simulation(
-        playback_mode=args.playback,
-        checkpoint_iteration=args.checkpoint,
-    )
+    if args.list_sensor_variations:
+        print_sensor_variations()
+        raise SystemExit(0)
+    if args.compare_sensor_variations:
+        run_sensor_variation_comparison(
+            playback_mode=args.playback,
+            checkpoint_iteration=args.checkpoint,
+            environment_mode=args.environment,
+            max_cycles=args.max_cycles,
+            seed=args.seed_base,
+            gif_frame_stride=args.gif_frame_stride,
+            gif_max_width=args.gif_max_width,
+        )
+    else:
+        run_trained_model_simulation(
+            playback_mode=args.playback,
+            checkpoint_iteration=args.checkpoint,
+            environment_mode=args.environment,
+            max_cycles=args.max_cycles,
+            sensor_variation=args.sensor_variation,
+            eval_episodes=args.eval_episodes,
+            seed_base=args.seed_base,
+        )

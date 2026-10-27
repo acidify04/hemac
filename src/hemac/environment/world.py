@@ -1750,7 +1750,14 @@ class World(pygame.sprite.Sprite):
         self.obstacle_is_static = np.asarray(static_flags, dtype=bool)
         self._rebuild_obstacle_map()
 
-    def draw(self, screen, *, draw_obstacles=True, draw_timestamp=True):
+    def draw(
+        self,
+        screen,
+        *,
+        draw_obstacles=True,
+        draw_timestamp=True,
+        draw_roads=False,
+    ):
         """Draw world."""
         screen.blit(self.bg_image, (0, 0))
         if draw_timestamp:
@@ -1763,11 +1770,11 @@ class World(pygame.sprite.Sprite):
         # Base
         pygame.draw.rect(screen, (50, 50, 150), self.base)
 
-        # Roads
-        for start_id, end_id in self.roads["edges"]:
-            start = world_ref_to_game_ref(self.roads["nodes"][start_id], self.area)
-            end = world_ref_to_game_ref(self.roads["nodes"][end_id], self.area)
-            draw_road(start, end, screen)
+        if draw_roads:
+            for start_id, end_id in self.roads["edges"]:
+                start = world_ref_to_game_ref(self.roads["nodes"][start_id], self.area)
+                end = world_ref_to_game_ref(self.roads["nodes"][end_id], self.area)
+                draw_road(start, end, screen)
 
         if draw_obstacles:
             self.draw_obstacles(screen)

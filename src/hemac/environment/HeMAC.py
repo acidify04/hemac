@@ -95,7 +95,7 @@ class HeMAC:
         poi_config: list = None,
         poi_spawn_range: dict = None,
         observer_heading_reward_scale: float = 0.07,
-        drone_hazard_penalty_scale: float = 0.2,
+        drone_hazard_penalty_scale: float = 50,
         detection_distance_scale: float = 200.0,
         detection_per_point_base: float = 0.5,
         detection_max_total: float = 3.0,
@@ -352,9 +352,18 @@ class HeMAC:
                 starting coordinates for {self.n_drones} drones""")
                 drone_config["drones_starting_pos"] = []
         for i in range(self.n_drones):
-            in_drone_sensor = self._get_sensor(drone_sensor)
             if drone_config is None:
                 drone_config = {}
+            drone_types = list(drone_config.get("drone_types", []))
+            drone_type = drone_types[i] if i < len(drone_types) else None
+            type_configs = drone_config.get("drone_type_configs", {}) or {}
+            type_config = type_configs.get(
+                drone_type,
+                type_configs.get(str(drone_type).lower(), {}),
+            ) or {}
+            in_drone_sensor = self._get_sensor(
+                type_config.get("sensor", drone_sensor)
+            )
             self.agents_list.append(
                 Drone(
                     drone_config=drone_config,
@@ -658,7 +667,7 @@ class HeMAC:
             # Initial visibility belongs to the initial state, not to any action.
             for agent in self.agents_list:
                 if isinstance(agent, Drone):
-                    agent.update_detected_area(agent.sensing_range)
+                    agent.update_sensor_detected_area()
                     self._update_detected_cache(
                         agent,
                         counted_sector_mask=self.drone_reward_sector_mask,
@@ -981,7 +990,7 @@ class HeMAC:
         )
 
     def _finalize_maximize_coverage_task(self):
-        """Record time-limit success after maximizing coverage for the full episode."""
+        """Record time-limit success without an additional terminal reward."""
         if (
             not self.is_drone_only_mode()
             or self.drone_only_task_mode != "maximize_coverage"
@@ -993,8 +1002,6 @@ class HeMAC:
 
         self.mission_success = True
         self.success_step = self.num_frames
-        self.global_reward += self.drone_only_success_reward
-        self.global_reward_all_agents = True
         return True
 
     def _check_observer_mission_success(self, active_agent=None, reward_dict=None):
@@ -1227,8 +1234,8 @@ class HeMAC:
         # Specific actions for UAVs
         if "drone" in active_agent:
             # Collision check and map limits
-            reward -= self.drone_step_penalty
-            reward_dict[active_agent].append(-self.drone_step_penalty)
+            # reward -= self.drone_step_penalty
+            # reward_dict[active_agent].append(-self.drone_step_penalty)
 
             if not self.world.point_in_search_area(agent.x, agent.y):  # 맵 밖으로 나간 경우
                 self.collided = True
@@ -1258,7 +1265,7 @@ class HeMAC:
                         drone_distance = dist(other_agent.x, other_agent.y, agent.x, agent.y)
                         if drone_distance < safe_radius:
                             normalized_gap = (safe_radius - drone_distance) / safe_radius
-                            drone_proximity_penalty += (
+                            drone_proximity_penalty += self.drone_hazard_penalty_scale * (
                                 self.drone_proximity_penalty_scale
                                 * (normalized_gap ** 2)
                             )
@@ -1268,11 +1275,18 @@ class HeMAC:
 
                 for goal in self.goals[:]:
                     goal_dist = dist(goal.x, goal.y, agent.x, agent.y)
-                    if goal_dist < agent.sensing_range and not self.found_goal:
+                    goal_visible = goal_dist < agent.sensing_range
+                    if isinstance(agent.sensor, sensors.ForwardFacingCamera):
+                        goal_visible = agent.sensor.is_point_detected(goal.rect.center)
+                    if goal_visible and not self.found_goal:
                         agent.found_goal = True
                         self.found_goal = True
-                        reward += self.drone_goal_found_reward
-                        reward_dict[active_agent].append(self.drone_goal_found_reward)
+                        self.global_reward += self.drone_goal_found_reward
+                        self.global_reward_all_agents = True
+                        for agent_name in self.agents:
+                            reward_dict[agent_name].append(
+                                self.drone_goal_found_reward
+                            )
 
                 coverage_ratio_before = self.current_drone_reward_coverage_ratio()
                 newly_detected_count = self._update_detected_cache(
@@ -1290,14 +1304,15 @@ class HeMAC:
                             newly_explored_ratio
                             * self.drone_exploration_reward_scale
                         )
-                        reward += total_detection_reward
                     else:
                         total_detection_reward = (
                             newly_detected_count
                             * self.drone_exploration_reward_per_pixel
                         )
-                        reward += total_detection_reward
-                    reward_dict[active_agent].append(total_detection_reward)
+                    self.global_reward += total_detection_reward
+                    self.global_reward_all_agents = True
+                    for agent_name in self.agents:
+                        reward_dict[agent_name].append(total_detection_reward)
 
                 self._check_drone_only_mission_success(
                     active_agent=active_agent,
@@ -1393,9 +1408,20 @@ class HeMAC:
                 if self.truncate:
                     self._finalize_maximize_coverage_task()
 
-        # if self.log_step_rewards:
-            # LOGGER.info(f"reward for {active_agent} at step {self.num_frames}: {reward_dict[active_agent]}")
         self.finalize_episode()
+        if self.log_step_rewards:
+            for agent_name in self.agents:
+                components = [
+                    float(value) for value in reward_dict[agent_name]
+                ]
+                # LOGGER.info(
+                #     "reward for %s at step %s: %s -> total=%.6f%s",
+                #     agent_name,
+                #     self.num_frames,
+                #     components,
+                #     float(self.rewards[agent_name]),
+                #     " (active)" if agent_name == active_agent else "",
+                # )
 
         if agent == self.agents_list[-1]:
             if self.collided and self.render_mode == "human":

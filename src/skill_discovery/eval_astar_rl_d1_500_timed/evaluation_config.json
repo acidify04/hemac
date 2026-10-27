@@ -1,0 +1,42 @@
+{
+  "rl_checkpoint": "/home/cau/Documents/hemac/src/train/hetero_drone_checkpoints/checkpoint_09100",
+  "difficulty": 1,
+  "episodes": 500,
+  "seed_base": 300000000,
+  "seed_formula": "seed_base+episode_index",
+  "max_cycles": 300,
+  "drone_types": [
+    "A",
+    "B",
+    "B"
+  ],
+  "coverage_threshold": 0.6,
+  "astar_config": {
+    "obstacle_threshold": 0.35,
+    "warning_threshold": 0.25,
+    "inflation_cells": 0,
+    "soft_warning_cost": 6.0,
+    "soft_obstacle_cost": 2.0,
+    "teammate_cost": 2.0,
+    "max_candidates": 6,
+    "progress_weight": 0.55,
+    "target_stickiness": 0.16,
+    "min_unexplored": 0.045,
+    "separation": 68.0,
+    "kp_position": 0.24,
+    "kd_velocity": 0.75,
+    "min_action_speed_fraction": 0.0
+  },
+  "astar_observation_access": "shared observed world maps + perfect self and teammate pose/velocity; NO hidden goal/true obstacles",
+  "evaluation": "same environment config, seed, 300-step max, independent online rollout; no early stopping at goal or coverage60",
+  "time_reached": "conditional on reaching; also report censored max_cycles+1",
+  "timing": {
+    "joint_step": "one complete A/B team action round; a partially completed terminal round counts as one",
+    "runtime_sec": "wall clock from start of env.reset through episode completion and final metric reads; excludes env construction, Ray/algorithm startup, plotting and file writes",
+    "runtime_ms_per_step": "1000 * sum(runtime_sec) / sum(episode_steps), not mean of episode ratios",
+    "decision_sec": "sum of RL action inference for all drones in a round, or A* planning for all drones in a round",
+    "decision_ms_per_step": "1000 * sum(decision_sec) / sum(episode_steps)",
+    "env_step_sec": "sum of env.step(...) wall times (excludes env.last and other bookkeeping)",
+    "sync_cuda_timing": false
+  }
+}

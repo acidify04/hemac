@@ -1,0 +1,23 @@
+{
+  "rl_checkpoint": "/home/cau/Documents/hemac/src/train/hetero_drone_checkpoints/checkpoint_09100",
+  "hissd_checkpoint": "/home/cau/Documents/hemac/src/skill_discovery/checkpoints/hissd-drone-ab-repository-d1/hissd_drone_ab_paper_best.pt",
+  "hissd_epoch": 116,
+  "difficulty": 1,
+  "episodes": 5,
+  "seed_base": 300000000,
+  "seed_formula": "seed_base + episode_index",
+  "drone_types": [
+    "A",
+    "B",
+    "B"
+  ],
+  "action_scales": [
+    10.0,
+    25.0
+  ],
+  "max_cycles": 300,
+  "coverage_threshold": 0.6,
+  "coverage60_definition": "drone_reward_coverage_ratio",
+  "same_environment_config": true,
+  "deterministic_inference": true
+}
