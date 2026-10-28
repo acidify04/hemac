@@ -67,7 +67,7 @@ class World(pygame.sprite.Sprite):
             obstacle_icon_size,
         )
         self.dynamic_obstacle_image = pygame.transform.smoothscale(
-            pygame.image.load(os.path.join(image_dir, "fighter-plane.png")),
+            pygame.image.load(os.path.join(image_dir, "tank.png")),
             obstacle_icon_size,
         )
         self.spawn_max_tries = 10000

@@ -8,6 +8,10 @@ from shapely import Point
 from hemac.helpers.helper import game_ref_to_world_ref, world_ref_to_game_ref
 
 
+GOAL_VISUAL_COLOR = (0, 255, 64)
+GOAL_VISUAL_SIZE = 20
+
+
 class PointOfInterest:
     """PointOfInterest class."""
 
@@ -155,6 +159,7 @@ class PointOfInterest:
         base_position=None,
         min_base_distance=0.0,
         max_base_distance=None,
+        position_validator=None,
     ) -> list:
         """Spawn POI randomly inside patrolling area."""
         pos = [0, 0]
@@ -165,6 +170,7 @@ class PointOfInterest:
         respects_boundary_margin = False
         outside_warning_zone = False
         respects_base_distance = False
+        respects_position_constraint = False
         boundary_margin = max(float(self.config.get("boundary_margin", 0)), 0.0)
         min_base_distance = max(float(min_base_distance), 0.0)
         max_base_distance = (
@@ -186,6 +192,7 @@ class PointOfInterest:
             and respects_boundary_margin
             and outside_warning_zone
             and respects_base_distance
+            and respects_position_constraint
         ) and attempts < max_attempts:
             attempts += 1
 
@@ -245,6 +252,11 @@ class PointOfInterest:
                 )
             else:
                 respects_base_distance = True
+            respects_position_constraint = (
+                True
+                if position_validator is None
+                else bool(position_validator(goal_pos))
+            )
 
             # print(f"inside area: {inside_area}")
 
@@ -254,6 +266,7 @@ class PointOfInterest:
             and respects_boundary_margin
             and outside_warning_zone
             and respects_base_distance
+            and respects_position_constraint
         ):
             print("POI could not be positioned after several attempts.")
 
@@ -325,9 +338,11 @@ class PointOfInterest:
 
     def draw(self, screen):
         """Draw the POI."""
-        pygame.draw.rect(screen, (0, 255, 0), self.rect)
+        visual_rect = pygame.Rect(0, 0, GOAL_VISUAL_SIZE, GOAL_VISUAL_SIZE)
+        visual_rect.center = self.rect.center
+        pygame.draw.rect(screen, GOAL_VISUAL_COLOR, visual_rect, border_radius=3)
+        pygame.draw.rect(screen, (220, 255, 230), visual_rect, width=2, border_radius=3)
         if self.detected:
-            pygame.draw.rect(screen, (128, 255, 255), self.rect)
             if self.config.get("draw_expected_position"):
                 # draw expected position
                 pygame.draw.rect(screen, (255, 200, 0), self.expected_rect)

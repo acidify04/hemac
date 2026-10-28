@@ -9,6 +9,10 @@ from shapely.geometry.polygon import Polygon
 from shapely.geometry import Point
 
 
+SENSOR_VISUAL_COLOR = (0, 255, 64)
+SENSOR_VISUAL_WIDTH = 2
+
+
 class Sensor:
     """Instanciate sensor."""
 
@@ -95,10 +99,34 @@ class DownwardFacingCamera(Sensor):
 
     def draw_sensor(self, screen):
         """Draw sensor on a screen."""
-        line(screen, (222, 200, 20), self.vertice_pos[0], self.vertice_pos[1])
-        line(screen, (222, 200, 20), self.vertice_pos[1], self.vertice_pos[2])
-        line(screen, (222, 200, 20), self.vertice_pos[2], self.vertice_pos[3])
-        line(screen, (222, 200, 20), self.vertice_pos[3], self.vertice_pos[0])
+        line(
+            screen,
+            SENSOR_VISUAL_COLOR,
+            self.vertice_pos[0],
+            self.vertice_pos[1],
+            SENSOR_VISUAL_WIDTH,
+        )
+        line(
+            screen,
+            SENSOR_VISUAL_COLOR,
+            self.vertice_pos[1],
+            self.vertice_pos[2],
+            SENSOR_VISUAL_WIDTH,
+        )
+        line(
+            screen,
+            SENSOR_VISUAL_COLOR,
+            self.vertice_pos[2],
+            self.vertice_pos[3],
+            SENSOR_VISUAL_WIDTH,
+        )
+        line(
+            screen,
+            SENSOR_VISUAL_COLOR,
+            self.vertice_pos[3],
+            self.vertice_pos[0],
+            SENSOR_VISUAL_WIDTH,
+        )
 
     def update_poly_points(self, pos: tuple[float], theta: float, distance_from_ground: float) -> tuple:
         """Return polygon points of the sensor.
@@ -212,12 +240,24 @@ class ForwardFacingCamera(Sensor):
 
     def draw_sensor(self, screen):
         """Draw sensor on a screen."""
-        line(screen, (222, 200, 20), self.vertices_pos[0], self.vertices_pos[1])
-        line(screen, (222, 200, 20), self.vertices_pos[0], self.vertices_pos[2])
+        line(
+            screen,
+            SENSOR_VISUAL_COLOR,
+            self.vertices_pos[0],
+            self.vertices_pos[1],
+            SENSOR_VISUAL_WIDTH,
+        )
+        line(
+            screen,
+            SENSOR_VISUAL_COLOR,
+            self.vertices_pos[0],
+            self.vertices_pos[2],
+            SENSOR_VISUAL_WIDTH,
+        )
 
         self._draw_arc(
             screen,
-            (222, 200, 0),
+            SENSOR_VISUAL_COLOR,
             self.vertices_pos[0],
             self.sensing_range,
             self.theta - self.hfov / 2.0,
@@ -228,7 +268,14 @@ class ForwardFacingCamera(Sensor):
         """Draw arc."""
         rect = Rect(0, 0, radius * 2, radius * 2)
         rect.center = center
-        arc(surface, color, rect, start_angle, end_angle)
+        arc(
+            surface,
+            color,
+            rect,
+            start_angle,
+            end_angle,
+            SENSOR_VISUAL_WIDTH,
+        )
 
 
 @dataclass
@@ -280,7 +327,13 @@ class RoundCamera(Sensor):
 
     def draw_sensor(self, screen):
         """Draw sensor on a screen."""
-        circle(screen, (0, 255, 0), (self.pos[0], self.pos[1]), self.sensing_range, width=1)
+        circle(
+            screen,
+            SENSOR_VISUAL_COLOR,
+            (self.pos[0], self.pos[1]),
+            self.sensing_range,
+            width=SENSOR_VISUAL_WIDTH,
+        )
 
 
 def dist(x1, y1, x2, y2):

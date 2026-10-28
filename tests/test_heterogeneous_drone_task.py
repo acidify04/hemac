@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import numpy as np
+import pygame
 
 from hemac import HeMAC_v0
 from hemac.environment.sensors import ForwardFacingCamera, RoundCamera
@@ -166,15 +167,95 @@ def test_goal_discovery_reward_is_shared_by_all_drones():
     try:
         raw_env = env.unwrapped.env
         active_drone = raw_env.agents_list[0]
+        first_goal = raw_env.goals[0]
         raw_env.drone_proximity_penalty_scale = 0.0
-        raw_env.goals[0].x = active_drone.x
-        raw_env.goals[0].y = active_drone.y
+        first_goal.x = active_drone.x
+        first_goal.y = active_drone.y
 
         raw_env.step(np.zeros(3, dtype=np.float32), "drone_0")
 
         assert raw_env.found_goal
+        assert first_goal.detected
+        assert first_goal in raw_env.completed_goals
         for reward in raw_env.rewards.values():
             assert reward >= raw_env.drone_goal_found_reward
+    finally:
+        env.close()
+
+
+def test_discovered_goal_route_detours_inside_explored_area_with_clearance():
+    env, _ = _make_env()
+    try:
+        raw_env = env.unwrapped.env
+        goal = raw_env.goals[0]
+        goal.detected = True
+        goal.rect.center = (800, 150)
+        raw_env.completed_goals = [goal]
+        raw_env.goals = []
+        raw_env.world.base.center = (150, 150)
+        raw_env.world.detected_search_mask.fill(True)
+        # A dark top-down barrier forces the route to travel through the
+        # explored opening below it instead of drawing a clipped straight line.
+        raw_env.world.detected_search_mask[600:, 450:550] = False
+        raw_env.world.observed_warning_pixel_mask[50:100, 50:100] = 1.0
+        exploration_before_render = raw_env.world.detected_search_mask.copy()
+
+        surface = pygame.Surface(raw_env.area.size, pygame.SRCALPHA)
+        raw_env.draw_discovered_goal_routes(surface)
+        np.testing.assert_array_equal(
+            raw_env.world.detected_search_mask,
+            exploration_before_render,
+        )
+        pixels = pygame.surfarray.array3d(surface)
+        alpha = pygame.surfarray.array_alpha(surface)
+        route_pixels = (
+            np.all(pixels == np.asarray([255, 35, 35]), axis=2)
+            & (alpha > 0)
+        )
+
+        assert np.any(route_pixels)
+        assert not np.any(route_pixels[435:565, :415])
+        crossing_y = np.flatnonzero(np.any(route_pixels[450:550], axis=0))
+        assert crossing_y.size > 0
+        assert int(crossing_y.min()) >= 420
+    finally:
+        env.close()
+
+
+def test_three_goals_spawn_sequentially_across_diagonal_regions():
+    env, _ = _make_env(max_cycles=20)
+    try:
+        raw_env = env.unwrapped.env
+        drone = raw_env.agents_list[0]
+        assert raw_env.sequential_goal_regions
+        assert raw_env.number_of_POIs == 1
+
+        for expected_region in range(3):
+            assert len(raw_env.goals) == 1
+            active_goal = raw_env.goals[0]
+            assert active_goal.sequential_region_index == expected_region
+            assert raw_env._position_in_diagonal_goal_region(
+                (active_goal.x, active_goal.y),
+                expected_region,
+            )
+
+            active_goal.x = drone.x
+            active_goal.y = drone.y
+            active_goal.rect.center = drone.rect.center
+            raw_env.step(np.zeros(3, dtype=np.float32), "drone_0")
+
+            assert active_goal in raw_env.completed_goals
+            assert raw_env.sequential_goals_found == expected_region + 1
+            assert env.observation_space("drone_0").contains(
+                env.observe("drone_0")
+            )
+
+        assert raw_env.goals == []
+        assert raw_env._required_goals_found()
+        info = raw_env.build_episode_info()
+        assert info["goal_found_count"] == 3
+        assert info["goal_required_count"] == 3
+        assert info["all_goals_found"]
     finally:
         env.close()
 
@@ -207,6 +288,7 @@ def test_goal_discovery_does_not_end_maximize_coverage_episode_early():
     try:
         raw_env = env.unwrapped.env
         raw_env.found_goal = True
+        raw_env.sequential_goals_found = raw_env.sequential_goal_count
         raw_env.world.coverage_map[...] = raw_env.world.search_mask
 
         assert not raw_env._check_drone_only_mission_success()

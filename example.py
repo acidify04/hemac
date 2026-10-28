@@ -1315,6 +1315,9 @@ def run_single_episode(
             {
                 "success": last_info.get("success"),
                 "goal_found": last_info.get("goal_found"),
+                "all_goals_found": last_info.get("all_goals_found"),
+                "goal_found_count": last_info.get("goal_found_count"),
+                "goal_required_count": last_info.get("goal_required_count"),
                 "fatal_crash": last_info.get("fatal_crash"),
                 "drone_crash": last_info.get("drone_crash"),
                 "observer_crash": last_info.get("observer_crash"),

@@ -326,12 +326,6 @@ class Drone(BaseAgent):
         pygame.draw.rect(shape_surf, (255, 0, 0, 255), shape_surf.get_rect())
         screen.blit(shape_surf, self.rect)
 
-        if self.goto_pos:
-            pygame.draw.circle(screen, self.drone_color, self.goto_pos, 6)
-            font = pygame.font.SysFont("Trebuchet MS", 16)
-            id_text = font.render("+", True, (255, 255, 255))
-            screen.blit(id_text, [self.goto_pos[0] - 5, self.goto_pos[1] - 10])
-
         # draw FOV
         self.sensor.draw_sensor(screen)
 

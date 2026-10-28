@@ -31,6 +31,7 @@ HeMAC_v0.env(max_cycles=900)
 """
 
 import copy
+import heapq
 import os
 import time
 
@@ -59,6 +60,10 @@ from .poi import PointOfInterest
 from .world import World
 
 FPS = 15
+GOAL_ROUTE_CELL_SIZE = 10
+GOAL_ROUTE_CLEARANCE = 15
+GOAL_ROUTE_COLOR = (255, 35, 35, 255)
+GOAL_ROUTE_WIDTH = 4
 
 __all__ = ["env", "RawEnv", "parallel_env"]
 
@@ -112,9 +117,22 @@ class HeMAC:
         obstacle_max_speed: int | None = None,
         goal_min_base_distance: float = 0.0,
         goal_max_base_distance: float | None = None,
+        sequential_goal_regions: bool = False,
+        sequential_goal_count: int = 3,
         log_step_rewards: bool = False,
     ):
         poi_configs = list(poi_config or [])
+        self.sequential_goal_regions = bool(sequential_goal_regions)
+        self.sequential_goal_count = max(int(sequential_goal_count), 1)
+        if self.sequential_goal_regions:
+            if n_observers > 0:
+                raise ValueError(
+                    "sequential_goal_regions currently supports drone-only tasks."
+                )
+            goal_template = copy.deepcopy((poi_configs or [{}])[0] or {})
+            # Diagonal-region rejection sampling replaces quadrant sampling.
+            goal_template["spawn_quadrant"] = None
+            poi_configs = [goal_template]
         if n_observers > 1:
             templates = poi_configs or [{}]
             poi_configs = [
@@ -124,6 +142,9 @@ class HeMAC:
         self.poi_configs = poi_configs
         self.number_of_POIs = len(self.poi_configs)
         self.goals = []
+        self.completed_goals = []
+        self.sequential_goal_index = 0
+        self.sequential_goals_found = 0
 
         """Overwrite constructor."""
         super().__init__()
@@ -498,15 +519,107 @@ class HeMAC:
 
     def _spawn_goal(self, goal, *, obstacles=None, warning_zone_checker=None):
         """Spawn one goal within the current curriculum distance from the base."""
+        position_validator = None
         base_position = game_ref_to_world_ref(self.world.base.center, self.area)
+        min_base_distance = self.goal_min_base_distance
+        max_base_distance = self.goal_max_base_distance
+        if self.sequential_goal_regions:
+            region_index = int(
+                getattr(goal, "sequential_region_index", self.sequential_goal_index)
+            )
+            position_validator = lambda position: self._position_in_diagonal_goal_region(
+                position,
+                region_index,
+            )
+            # Region progression defines difficulty; the legacy radial
+            # curriculum is incompatible with the upper-left first region.
+            base_position = None
+            min_base_distance = 0.0
+            max_base_distance = None
         return goal.spawn_poi(
             self.search_area,
             obstacles=obstacles,
             warning_zone_checker=warning_zone_checker,
             base_position=base_position,
-            min_base_distance=self.goal_min_base_distance,
-            max_base_distance=self.goal_max_base_distance,
+            min_base_distance=min_base_distance,
+            max_base_distance=max_base_distance,
+            position_validator=position_validator,
         )
+
+    def _position_in_diagonal_goal_region(self, position, region_index):
+        """Return whether a world point lies in one top-left-to-bottom-right band."""
+        min_x, min_y, max_x, max_y = self.search_area.bounds
+        width = max(float(max_x - min_x), 1e-6)
+        height = max(float(max_y - min_y), 1e-6)
+        normalized_x = (float(position[0]) - min_x) / width
+        normalized_screen_y = (max_y - float(position[1])) / height
+        diagonal_progress = 0.5 * (normalized_x + normalized_screen_y)
+        region_index = int(np.clip(region_index, 0, self.sequential_goal_count - 1))
+        lower = region_index / self.sequential_goal_count
+        upper = (region_index + 1) / self.sequential_goal_count
+        if region_index == self.sequential_goal_count - 1:
+            return lower <= diagonal_progress <= upper
+        return lower <= diagonal_progress < upper
+
+    def _make_sequential_goal(self, region_index):
+        """Create one active goal while preserving the one-goal observation space."""
+        goal_config = copy.deepcopy((self.poi_configs or [{}])[0] or {})
+        goal_config["spawn_quadrant"] = None
+        goal = PointOfInterest(
+            randomizer=self.randomizer,
+            poi_config=goal_config,
+            time_factor=self.time_factor,
+            area=self.area,
+            spawn_range=self.poi_spawn_range,
+        )
+        goal.sequential_region_index = int(region_index)
+        return goal
+
+    def _sync_world_goal_list(self):
+        """Expose active and completed goals to world collision bookkeeping."""
+        self.world.goals = [*self.completed_goals, *self.goals]
+
+    def _spawn_next_sequential_goal(self):
+        """Create the next region's goal after the current one is discovered."""
+        if self.sequential_goal_index >= self.sequential_goal_count:
+            self.goals = []
+            self._sync_goal_position()
+            self._sync_world_goal_list()
+            return None
+
+        goal = self._make_sequential_goal(self.sequential_goal_index)
+        occupied_rects = [*self.world.obstacles]
+        occupied_rects.extend(
+            completed.rect
+            for completed in self.completed_goals
+            if completed.rect is not None
+        )
+        self._spawn_goal(
+            goal,
+            obstacles=occupied_rects,
+            warning_zone_checker=self.world.game_rect_intersects_warning_zone,
+        )
+        self.goals = [goal]
+        self._sync_goal_position()
+        self._sync_world_goal_list()
+        return goal
+
+    def _complete_sequential_goal(self, goal):
+        """Archive a discovered goal and activate the next diagonal region."""
+        if not self.sequential_goal_regions or goal not in self.goals:
+            return False
+        self.completed_goals.append(goal)
+        self.sequential_goals_found = len(self.completed_goals)
+        self.sequential_goal_index = self.sequential_goals_found
+        self.goals = []
+        self._spawn_next_sequential_goal()
+        return True
+
+    def _required_goals_found(self):
+        """Return whether the goal requirement for this task is complete."""
+        if self.sequential_goal_regions:
+            return self.sequential_goals_found >= self.sequential_goal_count
+        return self.found_goal
 
     def _spawn_all_goals(self, *, obstacles=None, warning_zone_checker=None):
         """Spawn goals sequentially while preventing goal-goal overlap."""
@@ -551,8 +664,14 @@ class HeMAC:
         self.success_step = None
         self.mission_success = False
         self.observers_reached_goal = set()
-        for goal in self.goals:
-            goal.reset()
+        self.completed_goals = []
+        self.sequential_goal_index = 0
+        self.sequential_goals_found = 0
+        if self.sequential_goal_regions:
+            self.goals = [self._make_sequential_goal(region_index=0)]
+        else:
+            for goal in self.goals:
+                goal.reset()
         self.explored_grids = set()
         self.observer_explored_grids = set()
         self.world.explored_grids = self.explored_grids
@@ -586,6 +705,7 @@ class HeMAC:
                 warning_zone_checker=self.world.game_rect_intersects_warning_zone,
             )
             self._sync_goal_position()
+        self._sync_world_goal_list()
 
         # reset agents to initial state
         observer_spawned = False
@@ -862,6 +982,259 @@ class HeMAC:
             self.draw_exploration_legend(screen)
 
     @staticmethod
+    def _erode_route_grid(mask, radius):
+        """Apply a square clearance margin to a boolean navigation grid."""
+        mask = np.asarray(mask, dtype=bool)
+        radius = max(int(radius), 0)
+        if radius == 0:
+            return mask.copy()
+        height, width = mask.shape
+        padded = np.pad(mask, radius, mode="constant", constant_values=False)
+        eroded = np.ones_like(mask)
+        for dy in range(-radius, radius + 1):
+            for dx in range(-radius, radius + 1):
+                eroded &= padded[
+                    radius + dy : radius + dy + height,
+                    radius + dx : radius + dx + width,
+                ]
+        return eroded
+
+    @staticmethod
+    def _astar_goal_route(traversable, start, destination):
+        """Return an 8-connected route without diagonal corner cutting."""
+        height, width = traversable.shape
+        for row, column in (start, destination):
+            if not (0 <= row < height and 0 <= column < width):
+                return []
+            if not traversable[row, column]:
+                return []
+        if start == destination:
+            return [start]
+
+        diagonal_cost = math.sqrt(2.0)
+        neighbors = (
+            (-1, 0, 1.0),
+            (1, 0, 1.0),
+            (0, -1, 1.0),
+            (0, 1, 1.0),
+            (-1, -1, diagonal_cost),
+            (-1, 1, diagonal_cost),
+            (1, -1, diagonal_cost),
+            (1, 1, diagonal_cost),
+        )
+
+        def heuristic(node):
+            delta_y = abs(node[0] - destination[0])
+            delta_x = abs(node[1] - destination[1])
+            diagonal_steps = min(delta_y, delta_x)
+            return (
+                delta_y
+                + delta_x
+                + (diagonal_cost - 2.0) * diagonal_steps
+            )
+
+        frontier = [(heuristic(start), 0.0, start)]
+        best_cost = {start: 0.0}
+        parents = {}
+        closed = set()
+        while frontier:
+            _, current_cost, current = heapq.heappop(frontier)
+            if current in closed:
+                continue
+            if current == destination:
+                path = [destination]
+                while path[-1] != start:
+                    path.append(parents[path[-1]])
+                path.reverse()
+                return path
+            closed.add(current)
+
+            row, column = current
+            for delta_y, delta_x, step_cost in neighbors:
+                next_row = row + delta_y
+                next_column = column + delta_x
+                if not (0 <= next_row < height and 0 <= next_column < width):
+                    continue
+                neighbor = (next_row, next_column)
+                if neighbor in closed or not traversable[neighbor]:
+                    continue
+                if delta_y and delta_x and (
+                    not traversable[row + delta_y, column]
+                    or not traversable[row, column + delta_x]
+                ):
+                    continue
+                candidate_cost = current_cost + step_cost
+                if candidate_cost >= best_cost.get(neighbor, math.inf):
+                    continue
+                best_cost[neighbor] = candidate_cost
+                parents[neighbor] = current
+                heapq.heappush(
+                    frontier,
+                    (
+                        candidate_cost + heuristic(neighbor),
+                        candidate_cost,
+                        neighbor,
+                    ),
+                )
+        return []
+
+    def _goal_route_navigation_grid(self):
+        """Build a safe grid contained inside explored, hazard-free pixels."""
+        detected_pixel_mask = getattr(self.world, "detected_search_mask", None)
+        if not isinstance(detected_pixel_mask, np.ndarray):
+            return None
+        if detected_pixel_mask.shape != (self.area.height, self.area.width):
+            return None
+
+        # Convert bottom-up world masks into top-down screen coordinates.
+        # This must be an owned copy: route clearance must never erase the
+        # environment's persistent exploration state through a flipped view.
+        explored = np.flipud(detected_pixel_mask).astype(bool, copy=True)
+        warning_mask = getattr(self.world, "observed_warning_pixel_mask", None)
+        if isinstance(warning_mask, np.ndarray) and warning_mask.shape == detected_pixel_mask.shape:
+            explored &= np.flipud(warning_mask <= 0.25)
+        obstacle_mask = getattr(self.world, "observed_obstacle_pixel_mask", None)
+        if isinstance(obstacle_mask, np.ndarray) and obstacle_mask.shape == detected_pixel_mask.shape:
+            explored &= np.flipud(obstacle_mask <= 0.25)
+
+        cell_size = GOAL_ROUTE_CELL_SIZE
+        grid_height = math.ceil(self.area.height / cell_size)
+        grid_width = math.ceil(self.area.width / cell_size)
+        padded = np.zeros(
+            (grid_height * cell_size, grid_width * cell_size),
+            dtype=bool,
+        )
+        padded[: self.area.height, : self.area.width] = explored
+        traversable = padded.reshape(
+            grid_height,
+            cell_size,
+            grid_width,
+            cell_size,
+        ).all(axis=(1, 3))
+        clearance_cells = math.ceil(GOAL_ROUTE_CLEARANCE / cell_size)
+        traversable = self._erode_route_grid(traversable, clearance_cells)
+
+        # Agents observe obstacles as whole coverage-grid cells, so keep the
+        # route GOAL_ROUTE_CLEARANCE pixels away from every such cell.
+        observed_cells = getattr(self.world, "explored_obstacle_map", None)
+        cell_rects = getattr(self.world, "cell_game_rects", None)
+        if isinstance(observed_cells, np.ndarray) and cell_rects is not None:
+            blocked = np.zeros(padded.shape, dtype=bool)
+            for grid_y, grid_x in zip(*np.nonzero(observed_cells > 0.0)):
+                rect = cell_rects[grid_y][grid_x].inflate(
+                    2 * GOAL_ROUTE_CLEARANCE,
+                    2 * GOAL_ROUTE_CLEARANCE,
+                )
+                blocked[
+                    max(rect.top, 0) : max(rect.bottom, 0),
+                    max(rect.left, 0) : max(rect.right, 0),
+                ] = True
+            traversable &= ~blocked.reshape(
+                grid_height,
+                cell_size,
+                grid_width,
+                cell_size,
+            ).any(axis=(1, 3))
+        return traversable
+
+    @staticmethod
+    def _nearest_traversable_cell(traversable, cell):
+        """Snap a grid cell to the closest traversable cell, if any."""
+        row, column = cell
+        height, width = traversable.shape
+        if 0 <= row < height and 0 <= column < width and traversable[row, column]:
+            return cell
+        rows, columns = np.nonzero(traversable)
+        if rows.size == 0:
+            return None
+        index = int(np.argmin((rows - row) ** 2 + (columns - column) ** 2))
+        return int(rows[index]), int(columns[index])
+
+    def draw_discovered_goal_routes(self, screen=None):
+        """Draw safe A* routes through explored space from base to found goals."""
+        screen = self.render_scene if screen is None else screen
+        if self.sequential_goal_regions:
+            discovered_goals = list(self.completed_goals)
+        else:
+            discovered_goals = [
+                goal for goal in self.goals if bool(getattr(goal, "detected", False))
+            ]
+        if not discovered_goals:
+            return
+
+        traversable = self._goal_route_navigation_grid()
+        if traversable is None or not np.any(traversable):
+            return
+
+        cell_size = GOAL_ROUTE_CELL_SIZE
+
+        def grid_position(screen_position):
+            return (
+                int(screen_position[1]) // cell_size,
+                int(screen_position[0]) // cell_size,
+            )
+
+        route_layer = pygame.Surface(self.area.size, pygame.SRCALPHA)
+        route_segments = []
+        if self.sequential_goal_regions:
+            route_waypoints = [
+                self.world.base.center,
+                *(goal.rect.center for goal in discovered_goals),
+            ]
+            route_segments = list(zip(route_waypoints, route_waypoints[1:]))
+        else:
+            route_segments = [
+                (self.world.base.center, goal.rect.center)
+                for goal in discovered_goals
+            ]
+
+        for segment_start, segment_end in route_segments:
+            # Base/goals may sit next to an observed obstacle cell; route from
+            # the nearest safe cell instead of dropping the route entirely.
+            start = self._nearest_traversable_cell(traversable, grid_position(segment_start))
+            destination = self._nearest_traversable_cell(traversable, grid_position(segment_end))
+            if start is None or destination is None:
+                continue
+            route = self._astar_goal_route(traversable, start, destination)
+            if not route:
+                continue
+            route_points = [
+                (
+                    min(column * cell_size + cell_size // 2, self.area.width - 1),
+                    min(row * cell_size + cell_size // 2, self.area.height - 1),
+                )
+                for row, column in route
+            ]
+            route_points[0] = segment_start
+            route_points[-1] = segment_end
+            if len(route_points) == 1:
+                pygame.draw.circle(
+                    route_layer,
+                    GOAL_ROUTE_COLOR,
+                    route_points[0],
+                    GOAL_ROUTE_WIDTH,
+                )
+            else:
+                pygame.draw.lines(
+                    route_layer,
+                    GOAL_ROUTE_COLOR,
+                    False,
+                    route_points,
+                    width=GOAL_ROUTE_WIDTH,
+                )
+
+        # Keep anti-aliased/line-width pixels inside the same cleared cells.
+        safe_screen_mask = np.repeat(
+            np.repeat(traversable, cell_size, axis=0),
+            cell_size,
+            axis=1,
+        )[: self.area.height, : self.area.width].T
+        route_alpha = pygame.surfarray.pixels_alpha(route_layer)
+        route_alpha[~safe_screen_mask] = 0
+        del route_alpha
+        screen.blit(route_layer, (0, 0))
+
+    @staticmethod
     def draw_exploration_legend(screen):
         """Draw exploration colors in screen coordinates after camera scaling."""
         unexplored_color = (5, 8, 12)
@@ -903,10 +1276,11 @@ class HeMAC:
             draw_timestamp=False,
         )
         self.draw_exploration_overlay(self.render_scene, draw_legend=False)
+        self.draw_discovered_goal_routes(self.render_scene)
         self.world.draw_obstacles(self.render_scene)
         for agent in self.agents_list:
             agent.draw(self.render_scene)
-        for goal in self.goals:
+        for goal in [*self.completed_goals, *self.goals]:
             goal.draw(self.render_scene)
 
         viewport = self.search_render_rect()
@@ -976,7 +1350,7 @@ class HeMAC:
             return False
         if self.drone_only_task_mode != "threshold":
             return False
-        if self.terminate or self.mission_success or not self.found_goal:
+        if self.terminate or self.mission_success or not self._required_goals_found():
             return False
 
         coverage_ratio = self.current_drone_reward_coverage_ratio()
@@ -996,7 +1370,7 @@ class HeMAC:
             or self.drone_only_task_mode != "maximize_coverage"
             or self.mission_success
             or self.collided
-            or not self.found_goal
+            or not self._required_goals_found()
         ):
             return False
 
@@ -1069,6 +1443,13 @@ class HeMAC:
         return {
             "success": bool(self.mission_success),
             "goal_found": bool(self.found_goal),
+            "all_goals_found": bool(self._required_goals_found()),
+            "goal_found_count": int(
+                self.sequential_goals_found if self.sequential_goal_regions else self.found_goal
+            ),
+            "goal_required_count": int(
+                self.sequential_goal_count if self.sequential_goal_regions else max(len(self.goals), 1)
+            ),
             # "goal_known": bool(self.world.goal_known),
             "fatal_crash": bool(self.collided),
             "timeout": bool(
@@ -1278,7 +1659,8 @@ class HeMAC:
                     goal_visible = goal_dist < agent.sensing_range
                     if isinstance(agent.sensor, sensors.ForwardFacingCamera):
                         goal_visible = agent.sensor.is_point_detected(goal.rect.center)
-                    if goal_visible and not self.found_goal:
+                    if goal_visible and not goal.detected:
+                        goal.detected = True
                         agent.found_goal = True
                         self.found_goal = True
                         self.global_reward += self.drone_goal_found_reward
@@ -1287,6 +1669,8 @@ class HeMAC:
                             reward_dict[agent_name].append(
                                 self.drone_goal_found_reward
                             )
+                        if self.sequential_goal_regions:
+                            self._complete_sequential_goal(goal)
 
                 coverage_ratio_before = self.current_drone_reward_coverage_ratio()
                 newly_detected_count = self._update_detected_cache(
@@ -1365,6 +1749,7 @@ class HeMAC:
                         and active_agent not in self.observers_reached_goal
                     ):
                         agent.found_goal = True
+                        assigned_goal.detected = True
                         self.found_goal = True
                         self.observers_reached_goal.add(active_agent)
                         goal_reward = 300.0 / max(self.n_observers, 1)

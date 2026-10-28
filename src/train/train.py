@@ -711,6 +711,8 @@ def build_env_config(
         "goal_min_base_distance": obstacle_difficulty["goal_min_base_distance"],
         "goal_max_base_distance": obstacle_difficulty["goal_max_base_distance"],
         "poi_config": [GOAL_CONFIG],
+        "sequential_goal_regions": bool(drone_only),
+        "sequential_goal_count": 3,
         "drone_only_success_min_coverage_ratio": float(drone_success_coverage_ratio),
         "drone_only_success_reward": 0.0,
         "drone_only_task_mode": (
